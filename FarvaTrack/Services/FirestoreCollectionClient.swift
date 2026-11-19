@@ -1,4 +1,4 @@
-struct içine ekleyin:
+
 
     /// Tek bir belgeyi okur (yoksa `nil`).
     func fetchDocument<T: Decodable>(_ type: T.Type, id: String, userID: String) async throws -> T? {
