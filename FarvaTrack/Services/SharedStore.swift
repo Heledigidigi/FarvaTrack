@@ -1,4 +1,4 @@
-enum SharedStore içine (ana gövdeye) ekleyin:
+
 
     static func clearSteps() {
         defaults?.removeObject(forKey: stepsKey)
