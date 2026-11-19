@@ -234,4 +234,3 @@ private struct EntryEditor: View {
             .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
-Not: EntryEditor içindeki jenerik numberField<T> taslağı gereksiz kalmış. Derleme sırasında overload belirsizliği çıkarabilir. O jenerik fonksiyonu (private func numberField<T>... { EmptyView() } bloğunu) silin, yalnızca Int ve Double için olan iki fonksiyon kalsın.
