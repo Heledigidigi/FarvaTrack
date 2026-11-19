@@ -1,0 +1,46 @@
+name: Build FarvaTrack IPA
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Kodlari Cek
+        uses: actions/checkout@v4
+
+      - name: Xcode Sec
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: XcodeGen Kur
+        run: brew install xcodegen
+
+      - name: FarvaTrack Projesini Uret
+        run: xcodegen generate
+
+      - name: Uygulamayi Derle (Release)
+        run: |
+          xcodebuild clean build \
+            -project FarvaTrack.xcodeproj \
+            -scheme FarvaTrack \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: IPA Paketini Olustur
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/FarvaTrack.app Payload/
+          zip -r FarvaTrack.ipa Payload
+
+      - name: IPA Dosyasini Artifact Olarak Yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: FarvaTrack-IPA
+          path: FarvaTrack.ipa
