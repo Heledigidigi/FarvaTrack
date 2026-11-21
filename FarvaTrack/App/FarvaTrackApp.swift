@@ -1,4 +1,5 @@
 import SwiftUI
+import WidgetKit
 import SwiftData
 
 @main
@@ -56,6 +57,8 @@ struct FarvaTrackApp: App {
             }
             .preferredColorScheme(.dark)
             .tint(Color.ftAccentLight)
+            // Uygulama güncellenince ana ekrandaki widget'lar yeni tasarımla yeniden çizilsin.
+            .task { WidgetCenter.shared.reloadAllTimelines() }
         }
         .modelContainer(modelContainer)
     }
