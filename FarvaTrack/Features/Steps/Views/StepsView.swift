@@ -3,9 +3,11 @@ import SwiftUI
 struct StepsView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.modelContext) private var modelContext
 
     @State private var viewModel = StepsViewModel()
     @State private var showGoalSheet = false
+    @State private var showManualSheet = false
 
     private var periodBinding: Binding<StepPeriod> {
         Binding(
@@ -25,18 +27,9 @@ struct StepsView: View {
 
     var body: some View {
         Group {
-            switch viewModel.access {
-            case .loading:
+            if viewModel.access == .loading {
                 ProgressView()
-            case .unavailable:
-                ContentUnavailableView(
-                    "Sağlık verisi kullanılamıyor",
-                    systemImage: "heart.slash",
-                    description: Text("Bu cihazda Apple Sağlık desteklenmiyor.")
-                )
-            case .needsPermission:
-                permissionView
-            case .ready:
+            } else {
                 content
             }
         }
@@ -44,7 +37,24 @@ struct StepsView: View {
         .background(Color.ftBackground.ignoresSafeArea())
         .navigationTitle("Adımlar")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await viewModel.start() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showManualSheet = true
+                } label: {
+                    Image(systemName: "square.and.pencil")
+                }
+                .accessibilityLabel("Adımı elle gir")
+            }
+        }
+        .sheet(isPresented: $showManualSheet) {
+            ManualStepSheet(viewModel: viewModel)
+        }
+        .task {
+            if let user = auth.currentUser { viewModel.attach(context: modelContext, userID: user.id) }
+            await viewModel.start()
+            await viewModel.syncManual()
+        }
         .onChange(of: auth.currentUser, initial: true) { _, user in
             if let user { viewModel.configure(user: user) }
         }
@@ -71,30 +81,46 @@ struct StepsView: View {
         }
     }
 
-    // MARK: - İzin ekranı
-    private var permissionView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "heart.text.square.fill")
-                .font(.system(size: 64))
-                .foregroundStyle(Color.ftAccentLight)
-                .accessibilityHidden(true)
-
-            Text("Adımlarını takip edelim")
-                .font(.title2.bold())
-
-            Text("FarvaTrack; adım, yürüme mesafesi ve aktif enerji verilerini Apple Sağlık'tan okur. Veriler yalnızca cihazında gösterilir. İzni istediğin zaman Sağlık uygulamasından değiştirebilirsin.")
-                .font(.subheadline)
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.ftTextSecondary)
-
-            Button {
-                Task { await viewModel.requestAccess() }
-            } label: {
-                Text("Sağlık'a Bağlan")
+    // MARK: - Sağlık durumu kartı
+    @ViewBuilder
+    private var healthBanner: some View {
+        switch viewModel.access {
+        case .needsPermission:
+            banner(
+                icon: "heart.text.square.fill",
+                title: "Adımlarını otomatik takip edelim",
+                text: "FarvaTrack; adım, yürüme mesafesi ve aktif enerji verilerini Apple Sağlık'tan okur. Veriler yalnızca cihazında gösterilir. İstersen adımlarını elle de girebilirsin."
+            ) {
+                Button("Sağlık'a Bağlan") { Task { await viewModel.requestAccess() } }
+                    .buttonStyle(PrimaryButtonStyle())
             }
-            .buttonStyle(PrimaryButtonStyle())
+        case .unavailable:
+            banner(icon: "heart.slash", title: "Apple Sağlık kullanılamıyor", text: "Bu cihazda Apple Sağlık desteklenmiyor. Adımlarını sağ üstteki kalem simgesiyle elle girebilirsin.") {
+                EmptyView()
+            }
+        case .ready, .loading:
+            if let issue = viewModel.healthIssue {
+                banner(icon: "exclamationmark.triangle.fill", title: "Sağlık verisi okunamadı", text: issue) {
+                    Button("Bugünün adımını gir") { showManualSheet = true }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.ftAccentLight)
+                }
+            }
         }
-        .padding(Constants.Layout.screenPadding)
+    }
+
+    private func banner<Actions: View>(icon: String, title: String, text: String, @ViewBuilder actions: () -> Actions) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: icon)
+                .font(.headline)
+                .foregroundStyle(Color.ftAccentLight)
+            Text(text)
+                .font(.footnote)
+                .foregroundStyle(Color.ftTextSecondary)
+            actions()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardStyle(padding: 20)
     }
 
     // MARK: - Ana içerik
@@ -108,6 +134,7 @@ struct StepsView: View {
                 }
                 .pickerStyle(.segmented)
 
+                healthBanner
                 hero(stats)
                 metrics(stats)
                 chartCard
@@ -153,6 +180,12 @@ struct StepsView: View {
             Text(reached ? "Hedefe ulaştın, harika iş!" : "Hedefe \(stats.remaining.formatted()) adım kaldı")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(reached ? Color.ftSuccess : Color.ftTextSecondary)
+
+            if viewModel.period == .day && viewModel.isTodayManual {
+                Label("Elle girildi", systemImage: "square.and.pencil")
+                    .font(.caption)
+                    .foregroundStyle(Color.ftTextSecondary)
+            }
         }
         .frame(maxWidth: .infinity)
         .cardStyle(padding: 24)
@@ -333,6 +366,75 @@ private struct StepGoalSheet: View {
                     .fontWeight(.semibold)
                 }
             }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+// MARK: - Elle adım girişi
+private struct ManualStepSheet: View {
+    let viewModel: StepsViewModel
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var day = Date.now
+    @State private var steps: Int?
+    @State private var error: String?
+
+    private var existing: Int? { viewModel.manualValue(for: day) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    DatePicker("Gün", selection: $day, in: ...Date.now, displayedComponents: .date)
+                    HStack {
+                        TextField("Adım sayısı", value: $steps, format: .number)
+                            .keyboardType(.numberPad)
+                            .font(.title2.bold().monospacedDigit())
+                            .accessibilityLabel("Adım sayısı")
+                        Text("adım").foregroundStyle(Color.ftTextSecondary)
+                    }
+                } footer: {
+                    Text("Telefonundaki Sağlık uygulamasında veya saatinde gördüğün sayıyı yazabilirsin. Elle girilen değer o günün Sağlık verisinin yerine geçer.")
+                }
+
+                if existing != nil {
+                    Section {
+                        Button("Elle girilen değeri sil", role: .destructive) {
+                            viewModel.deleteManual(for: day)
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Color.ftBackground.ignoresSafeArea())
+            .navigationTitle("Adımı Elle Gir")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Vazgeç") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Kaydet") {
+                        do {
+                            try viewModel.saveManual(steps: steps ?? 0, for: day)
+                            dismiss()
+                        } catch {
+                            self.error = AppError.map(error).errorDescription
+                            Haptics.error()
+                        }
+                    }
+                    .disabled(steps == nil)
+                }
+            }
+            .alert("Kaydedilemedi", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+                Button("Tamam", role: .cancel) {}
+            } message: {
+                Text(error ?? "")
+            }
+            .onAppear { steps = existing }
+            .onChange(of: day) { _, _ in steps = existing }
         }
         .presentationDetents([.medium])
     }

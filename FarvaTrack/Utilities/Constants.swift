@@ -12,9 +12,12 @@ enum Constants {
         static let waste = "waste"
         static let wasteDaily = "wasteDaily"
         static let library = "library"
+        static let templates = "templates"
+        static let programs = "programs"
+        static let manualSteps = "manualSteps"
 
         /// Hesap silinirken temizlenen `users/{uid}` alt koleksiyonları.
-        static let userSubcollections = [workouts, meals, water, sleep, weight, measurements, waste, wasteDaily, library]
+        static let userSubcollections = [workouts, meals, water, sleep, weight, measurements, waste, wasteDaily, library, templates, programs, manualSteps]
     }
 
     enum StoragePath {

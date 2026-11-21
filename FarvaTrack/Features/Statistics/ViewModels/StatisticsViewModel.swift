@@ -110,10 +110,13 @@ final class StatisticsViewModel {
         let start = calendar.date(byAdding: .day, value: -730, to: calendar.startOfDay(for: end)) ?? .distantPast
 
         var data = StatisticsSamples()
+        var activity: [DailyActivity] = []
         if health.isHealthDataAvailable {
-            let activity = (try? await health.activity(from: start, to: end)) ?? []
-            data.steps = activity.map { ($0.date, Double($0.steps)) }
+            activity = (try? await health.activity(from: start, to: end)) ?? []
         }
+        let manual = StepMerger.manualMap(context: context, ownerID: owner, since: start)
+        activity = StepMerger.merge(health: activity, manual: manual, heightCm: user.heightCm, calendar: calendar)
+        data.steps = activity.map { ($0.date, Double($0.steps)) }
 
         let meals = (try? context.fetch(FetchDescriptor<MealEntry>(predicate: #Predicate { $0.ownerID == owner && $0.date >= start }))) ?? []
         data.calories = meals.map { ($0.date, $0.calories) }

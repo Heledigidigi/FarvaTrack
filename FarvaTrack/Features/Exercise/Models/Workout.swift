@@ -83,6 +83,9 @@ final class Workout {
     var needsSync: Bool
     var createdAt: Date
     var updatedAt: Date
+    /// Şablondan başlatıldıysa şablonun kimliği (program takibi ve "geçen sefer" için).
+    var templateID: String?
+    var programID: String?
 
     @Relationship(deleteRule: .cascade, inverse: \WorkoutEntry.workout)
     var entries: [WorkoutEntry] = []
@@ -149,6 +152,8 @@ struct WorkoutDTO: Codable, Equatable {
     var entries: [EntryDTO]
     var createdAt: Date
     var updatedAt: Date
+    var templateID: String?
+    var programID: String?
 
     struct EntryDTO: Codable, Equatable {
         var id: String
@@ -186,7 +191,9 @@ extension Workout {
                 )
             },
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            templateID: templateID,
+            programID: programID
         )
     }
 
@@ -199,6 +206,8 @@ extension Workout {
         caloriesBurned = dto.caloriesBurned
         createdAt = dto.createdAt
         updatedAt = dto.updatedAt
+        templateID = dto.templateID
+        programID = dto.programID
         needsSync = false
 
         for entry in entries { context.delete(entry) }

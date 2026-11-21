@@ -63,6 +63,12 @@ protocol WeighInReminderScheduling {
     func cancelWeighInReminder() async
 }
 
+/// Canlı antrenmanda dinlenme bitince (uygulama arka plandayken de) haber verir.
+protocol RestTimerScheduling {
+    func scheduleRestEnd(after seconds: TimeInterval, exerciseName: String) async
+    func cancelRestEnd() async
+}
+
 extension UNAuthorizationStatus {
     var allowsNotifications: Bool {
         self == .authorized || self == .provisional || self == .ephemeral
@@ -70,7 +76,7 @@ extension UNAuthorizationStatus {
 }
 
 // MARK: - Yerel bildirimler
-final class NotificationManager: NotificationScheduling, SleepReminderScheduling, WeighInReminderScheduling {
+final class NotificationManager: NotificationScheduling, SleepReminderScheduling, WeighInReminderScheduling, RestTimerScheduling {
     static let shared = NotificationManager()
     private init() {}
 
@@ -78,6 +84,7 @@ final class NotificationManager: NotificationScheduling, SleepReminderScheduling
     private static let waterPrefix = "water.reminder."
     private static let sleepReminderID = "sleep.reminder"
     private static let weighInReminderID = "weighin.reminder"
+    private static let restTimerID = "workout.rest"
 
     private static let waterMessages = [
         "Bir bardak su içmeye ne dersin?",
@@ -170,5 +177,24 @@ final class NotificationManager: NotificationScheduling, SleepReminderScheduling
 
     func cancelWeighInReminder() async {
         center.removePendingNotificationRequests(withIdentifiers: [Self.weighInReminderID])
+    }
+
+    // MARK: Dinlenme sayacı
+    /// İzin yoksa sessizce atlanır; uygulama öndeyse titreşim zaten ViewModel'den gelir.
+    func scheduleRestEnd(after seconds: TimeInterval, exerciseName: String) async {
+        center.removePendingNotificationRequests(withIdentifiers: [Self.restTimerID])
+        guard seconds >= 1, await authorizationStatus().allowsNotifications else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Dinlenme bitti"
+        content.body = "Sıradaki set: \(exerciseName)"
+        content.sound = .default
+        content.interruptionLevel = .active
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: seconds, repeats: false)
+        try? await center.add(UNNotificationRequest(identifier: Self.restTimerID, content: content, trigger: trigger))
+    }
+
+    func cancelRestEnd() async {
+        center.removePendingNotificationRequests(withIdentifiers: [Self.restTimerID])
+        center.removeDeliveredNotifications(withIdentifiers: [Self.restTimerID])
     }
 }

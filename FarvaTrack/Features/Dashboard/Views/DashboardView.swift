@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(AppRouter.self) private var router
+    @Environment(LiveWorkoutViewModel.self) private var live
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = DashboardViewModel()
 
@@ -25,6 +26,11 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     header
+                    if let user = auth.currentUser {
+                        DashboardTrainingRow(ownerID: user.id, isLive: live.isActive) {
+                            router.selectedTab = .exercise
+                        }
+                    }
                     dailyRingsCard
                     statGrid
                     weeklyStepsCard

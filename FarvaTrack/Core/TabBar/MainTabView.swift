@@ -12,6 +12,8 @@ struct MainTabView: View {
     @State private var wasteViewModel = WasteViewModel()
     /// Özel yiyecek/egzersiz ve favorilerin cihazlar arası eşitlenmesi.
     @State private var librarySync = LibrarySynchronizer()
+    /// Salonda yarım kalan antrenman sekmeler arası ve uygulama yeniden açılınca korunur.
+    @State private var liveWorkout = LiveWorkoutViewModel()
 
     init() {
         // Koyu, opak sekme çubuğu
@@ -49,6 +51,7 @@ struct MainTabView: View {
         .environment(router)
         .environment(waterViewModel)
         .environment(wasteViewModel)
+        .environment(liveWorkout)
         .tint(Color.ftAccentLight)
         .sensoryFeedback(.selection, trigger: router.selectedTab)
         .onOpenURL { router.handle($0) }
@@ -63,6 +66,7 @@ struct MainTabView: View {
             if let user {
                 waterViewModel.configure(context: modelContext, user: user)
                 wasteViewModel.configure(context: modelContext, user: user)
+                liveWorkout.configure(userID: user.id)
             }
         }
         .task(id: auth.currentUser?.id) {

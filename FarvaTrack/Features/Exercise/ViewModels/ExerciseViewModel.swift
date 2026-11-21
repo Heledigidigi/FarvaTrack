@@ -46,6 +46,8 @@ struct WorkoutDraft: Equatable {
     var date = Date.now
     var notes = ""
     var entries: [DraftEntry] = []
+    var templateID: String?
+    var programID: String?
 
     init() {}
 
@@ -54,6 +56,8 @@ struct WorkoutDraft: Equatable {
         date = workout.date
         notes = workout.notes
         entries = workout.sortedEntries.map(DraftEntry.init(entry:))
+        templateID = workout.templateID
+        programID = workout.programID
     }
 
     var isValid: Bool {
@@ -134,6 +138,8 @@ final class ExerciseViewModel {
         workout.title = draft.resolvedTitle
         workout.date = draft.date
         workout.notes = draft.notes.trimmed
+        workout.templateID = draft.templateID
+        workout.programID = draft.programID
 
         for (index, item) in draft.entries.enumerated() {
             let entry = WorkoutEntry(
@@ -181,6 +187,8 @@ final class ExerciseViewModel {
     func duplicate(_ workout: Workout) {
         var draft = WorkoutDraft(workout: workout)
         draft.date = .now
+        draft.templateID = nil
+        draft.programID = nil
         do {
             try save(draft)
         } catch {

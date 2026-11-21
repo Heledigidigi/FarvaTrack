@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Özet ekranının gerçek veri kaynağı: bugünün antrenman, beslenme, su, uyku ve kilo kayıtları (SwiftData)
-/// ile adım/mesafe/kalori (HealthKit).
+/// ile adım/mesafe/kalori (HealthKit + elle girilen adımlar).
 struct LiveDashboardDataSource: DashboardDataSource {
     let context: ModelContext
     let ownerID: String
@@ -54,10 +54,13 @@ struct LiveDashboardDataSource: DashboardDataSource {
 
         // 3) HealthKit (izin yoksa boş döner, hata değil)
         var activity: [DailyActivity] = []
+        let weekAgo = Calendar.current.date(byAdding: .day, value: -6, to: today) ?? today
         if health.isHealthDataAvailable {
-            let weekAgo = Calendar.current.date(byAdding: .day, value: -6, to: today) ?? today
             activity = (try? await health.activity(from: weekAgo, to: end)) ?? []
         }
+        // Elle girilen adımlar o günün Sağlık verisinin yerine geçer.
+        let manual = StepMerger.manualMap(context: context, ownerID: owner, since: weekAgo)
+        activity = StepMerger.merge(health: activity, manual: manual, heightCm: heightCm)
         if !activity.isEmpty {
             summary.weeklySteps = activity.map { DailyValue(date: $0.date, value: Double($0.steps)) }
         }
@@ -86,7 +89,7 @@ struct LiveDashboardDataSource: DashboardDataSource {
         summary.caloriesBurned = Int(burned.rounded())
 
         // 5) Widget özeti
-        if health.isHealthDataAvailable {
+        if health.isHealthDataAvailable || !manual.isEmpty {
             SharedStore.save(StepsSnapshot(steps: steps, goal: stepGoal, distanceKm: distanceKm, updatedAt: .now))
         }
         return summary

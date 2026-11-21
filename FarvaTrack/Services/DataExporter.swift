@@ -24,6 +24,9 @@ struct DataExport: Codable {
     var weight: [WeightDTO]
     var measurements: [MeasurementDTO]
     var biologicalWaste: [WasteDTO]
+    var workoutTemplates: [WorkoutTemplateDTO]
+    var trainingPrograms: [TrainingProgramDTO]
+    var manualSteps: [ManualStepDTO]
 }
 
 @MainActor
@@ -46,7 +49,10 @@ enum DataExporter {
             sleep: try fetch(FetchDescriptor<SleepEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.day)])).map(\.dto),
             weight: try fetch(FetchDescriptor<WeightEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.date)])).map(\.dto),
             measurements: try fetch(FetchDescriptor<MeasurementEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.date)])).map(\.dto),
-            biologicalWaste: try fetch(FetchDescriptor<WasteEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.date)])).map(\.dto)
+            biologicalWaste: try fetch(FetchDescriptor<WasteEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.date)])).map(\.dto),
+            workoutTemplates: try fetch(FetchDescriptor<WorkoutTemplate>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.name)])).map(\.dto),
+            trainingPrograms: try fetch(FetchDescriptor<TrainingProgram>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(\.dto),
+            manualSteps: try fetch(FetchDescriptor<ManualStepEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.day)])).map(\.dto)
         )
     }
 

@@ -116,6 +116,11 @@ enum ExerciseLibrary {
         make("lunge", "Lunge", .strength, .sets, 4.5),
         make("crunch", "Mekik", .strength, .sets, 3.8),
         make("plank", "Plank", .strength, .duration, 3.5),
+        make("romanian-deadlift", "Romen Deadlift", .strength, .sets, 5.0),
+        make("lateral-raise", "Yana Açış", .strength, .sets, 3.5),
+        make("cable-row", "Kablolu Row", .strength, .sets, 4.5),
+        make("leg-curl", "Leg Curl", .strength, .sets, 4.0),
+        make("calf-raise", "Baldır Kaldırma", .strength, .sets, 3.5),
         // Kardiyo
         make("running", "Koşu", .cardio, .duration, 9.8),
         make("walking", "Yürüyüş", .cardio, .duration, 3.5),

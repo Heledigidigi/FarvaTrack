@@ -26,7 +26,10 @@ struct FarvaTrackApp: App {
                 SleepEntry.self,
                 WeightEntry.self,
                 MeasurementEntry.self,
-                WasteEntry.self
+                WasteEntry.self,
+                WorkoutTemplate.self,
+                TrainingProgram.self,
+                ManualStepEntry.self
             )
         } catch {
             fatalError("SwiftData ModelContainer oluşturulamadı: \(error)")

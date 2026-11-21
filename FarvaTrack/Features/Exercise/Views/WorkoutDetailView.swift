@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkoutDetailView: View {
     let workout: Workout
     let viewModel: ExerciseViewModel
+    var onSaveAsTemplate: ((Workout) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var showEditor = false
@@ -73,6 +74,9 @@ struct WorkoutDetailView: View {
                 Menu {
                     Button { showEditor = true } label: { Label("Düzenle", systemImage: "pencil") }
                     Button { viewModel.duplicate(workout) } label: { Label("Bugüne tekrarla", systemImage: "doc.on.doc") }
+                    if let onSaveAsTemplate {
+                        Button { onSaveAsTemplate(workout) } label: { Label("Şablon olarak kaydet", systemImage: "square.on.square") }
+                    }
                     Button(role: .destructive) { showDeleteConfirmation = true } label: { Label("Sil", systemImage: "trash") }
                 } label: {
                     Image(systemName: "ellipsis.circle")

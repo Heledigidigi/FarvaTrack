@@ -5,7 +5,7 @@ import SwiftData
 @MainActor
 enum LocalDataCleaner {
     /// Bekleyen silme / gün kuyruklarının kapsamları (`pending<Scope>Deletes.<uid>`).
-    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library"]
+    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library", "Template", "Program", "ManualStep"]
 
     static func purge(ownerID: String, context: ModelContext, defaults: UserDefaults = .standard) throws {
         try delete(Workout.self, context: context) { $0.ownerID == ownerID }
@@ -18,12 +18,16 @@ enum LocalDataCleaner {
         try delete(WeightEntry.self, context: context) { $0.ownerID == ownerID }
         try delete(MeasurementEntry.self, context: context) { $0.ownerID == ownerID }
         try delete(WasteEntry.self, context: context) { $0.ownerID == ownerID }
+        try delete(WorkoutTemplate.self, context: context) { $0.ownerID == ownerID }
+        try delete(TrainingProgram.self, context: context) { $0.ownerID == ownerID }
+        try delete(ManualStepEntry.self, context: context) { $0.ownerID == ownerID }
         try delete(LocalUserProfile.self, context: context) { $0.uid == ownerID }
         try context.save()
 
         for scope in pendingScopes {
             defaults.removeObject(forKey: "pending\(scope)Deletes.\(ownerID)")
         }
+        UserDefaultsLiveSessionStore(defaults: defaults).clear(userID: ownerID)
     }
 
     /// Nesneleri tek tek siler; böylece ilişkilerdeki `cascade` kuralı (antrenman → egzersizler) uygulanır.

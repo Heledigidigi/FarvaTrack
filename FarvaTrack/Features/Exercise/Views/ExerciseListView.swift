@@ -15,6 +15,11 @@ struct ExerciseListView: View {
     @State private var selectedCategory: ExerciseCategory?
     @State private var composerTarget: WorkoutComposerTarget?
     @State private var workoutToDelete: Workout?
+    @State private var training = TrainingViewModel()
+    @State private var showPrograms = false
+    @State private var showLive = false
+    @State private var templateFromWorkout: Workout?
+    @Environment(LiveWorkoutViewModel.self) private var live
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
@@ -29,6 +34,17 @@ struct ExerciseListView: View {
             Group {
                 if let user = auth.currentUser {
                     VStack(spacing: 0) {
+                        TodayTrainingCard(
+                            ownerID: user.id,
+                            liveTitle: live.session?.title,
+                            onStart: { template, programID in start(template, programID: programID, userID: user.id) },
+                            onQuickComplete: { template, programID in quickComplete(template, programID: programID, userID: user.id) },
+                            onResume: { showLive = true },
+                            onOpenPrograms: { showPrograms = true }
+                        )
+                        .padding(.horizontal, Constants.Layout.screenPadding)
+                        .padding(.top, 8)
+
                         CategoryChips(selected: $selectedCategory)
                             .padding(.vertical, 8)
 
@@ -50,6 +66,14 @@ struct ExerciseListView: View {
             .navigationTitle("Egzersiz")
             .searchable(text: $searchText, prompt: "Antrenman veya egzersiz ara")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showPrograms = true
+                    } label: {
+                        Label("Programlar", systemImage: "calendar")
+                    }
+                    .accessibilityLabel("Programlar ve şablonlar")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Haptics.impact(.light)
@@ -61,7 +85,22 @@ struct ExerciseListView: View {
                 }
             }
             .navigationDestination(for: Workout.self) { workout in
-                WorkoutDetailView(workout: workout, viewModel: viewModel)
+                WorkoutDetailView(workout: workout, viewModel: viewModel) { templateFromWorkout = $0 }
+            }
+            .navigationDestination(isPresented: $showPrograms) {
+                ProgramsView(training: training, exerciseViewModel: viewModel)
+            }
+            .sheet(item: $templateFromWorkout) { workout in
+                TemplateEditorView(
+                    training: training,
+                    exerciseViewModel: viewModel,
+                    template: nil,
+                    initialName: workout.title,
+                    initialExercises: TrainingViewModel.templateExercises(from: workout)
+                )
+            }
+            .fullScreenCover(isPresented: $showLive) {
+                LiveWorkoutView(exerciseViewModel: viewModel)
             }
             .sheet(item: $composerTarget) { target in
                 CreateWorkoutView(viewModel: viewModel, workout: target.workout)
@@ -86,9 +125,45 @@ struct ExerciseListView: View {
         .onChange(of: auth.currentUser, initial: true) { _, user in
             if let user { viewModel.configure(context: modelContext, user: user) }
         }
+        .onChange(of: auth.currentUser, initial: true) { _, user in
+            if let user { training.configure(context: modelContext, user: user) }
+        }
         .task(id: auth.currentUser?.id) {
-            if let user = auth.currentUser { viewModel.configure(context: modelContext, user: user) }
+            if let user = auth.currentUser {
+                viewModel.configure(context: modelContext, user: user)
+                training.configure(context: modelContext, user: user)
+            }
             await viewModel.syncAll()
+            await training.syncAll()
+        }
+    }
+
+    // MARK: - Program aksiyonları
+    private func recentWorkouts(userID: String) -> [Workout] {
+        let since = Calendar.current.date(byAdding: .day, value: -180, to: .now) ?? .distantPast
+        return (try? modelContext.fetch(FetchDescriptor<Workout>(
+            predicate: #Predicate { $0.ownerID == userID && $0.date >= since },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        ))) ?? []
+    }
+
+    private func start(_ template: WorkoutTemplate, programID: String?, userID: String) {
+        // Yarım kalan bir oturum varsa yenisini açmak yerine ona dön.
+        if !live.isActive {
+            live.start(template: template, programID: programID, workouts: recentWorkouts(userID: userID))
+        }
+        showLive = true
+    }
+
+    /// Şablonu plandaki değerlerle (ağırlıklar geçen seferden) tek dokunuşla kaydeder.
+    private func quickComplete(_ template: WorkoutTemplate, programID: String?, userID: String) {
+        let session = LiveSession.make(from: template, programID: programID, previous: { key in
+            ProgramPlanner.lastPerformance(of: key, in: recentWorkouts(userID: userID))
+        })
+        do {
+            try viewModel.save(session.draft(asPlanned: true))
+        } catch {
+            viewModel.errorMessage = AppError.map(error).errorDescription
         }
     }
 }
