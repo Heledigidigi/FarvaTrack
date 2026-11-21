@@ -22,8 +22,9 @@ struct StickerLibraryView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
 
     /// Sohbetteki sticker paneliyle aynı kütüphane modeli paylaşılabilir.
-    init(library: StickerLibraryViewModel = StickerLibraryViewModel()) {
-        _library = State(initialValue: library)
+    @MainActor
+    init(library: StickerLibraryViewModel? = nil) {
+        _library = State(initialValue: library ?? StickerLibraryViewModel())
     }
 
     var body: some View {
