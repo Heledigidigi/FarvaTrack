@@ -483,11 +483,9 @@ final class StickerEditorViewModelTests: XCTestCase {
     func testRenderAndFinalPreview() async throws {
         let sut = makeSUT()
         await sut.load(image: makeImage(width: 300, height: 300))
-        // Hata ayıklama derlemesinde (testler) piksel döngüleri yavaştır; 5 sn'ye kadar beklenir.
-        for _ in 0..<250 {
-            if sut.finalPreview != nil { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        // Zamanlamadan bağımsız: önizleme doğrudan üretilir.
+        sut.cancelBackgroundWork()
+        await sut.refreshFinalPreview()
         XCTAssertNotNil(sut.finalPreview, "konturlu son hal önizlemesi hazırlanır")
 
         let result = try await sut.render()

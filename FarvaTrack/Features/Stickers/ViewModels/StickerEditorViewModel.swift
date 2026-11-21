@@ -254,12 +254,23 @@ final class StickerEditorViewModel {
         finalPreviewTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled else { return }
-            let image = await Task.detached(priority: .utility) {
-                try? StickerRenderer.render(source: source, mask: mask, overlays: overlays, options: options).image
-            }.value
+            let image = await Self.renderPreview(source: source, mask: mask, overlays: overlays, options: options)
             guard !Task.isCancelled else { return }
             self?.finalPreview = image
         }
+    }
+
+    /// Son hal önizlemesini hemen üretir (bekleme yok).
+    func refreshFinalPreview() async {
+        guard let source else { return }
+        finalPreview = await Self.renderPreview(source: source, mask: mask, overlays: overlays, options: options)
+    }
+
+    private nonisolated static func renderPreview(source: CGImage, mask: StickerMask, overlays: [StickerOverlay],
+                                                  options: StickerRenderOptions) async -> CGImage? {
+        await Task.detached(priority: .utility) {
+            try? StickerRenderer.render(source: source, mask: mask, overlays: overlays, options: options).image
+        }.value
     }
 
     /// Kaydetmek için şeffaf PNG (en fazla 512×512).
