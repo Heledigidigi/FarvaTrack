@@ -135,6 +135,12 @@ final class SleepViewModelTests: XCTestCase {
         sut.configure(context: context, user: user)
     }
 
+    /// Arka plan görevleri bitmeden bellek içi veritabanı bırakılmaz (sonraki testlerde çökmeyi önler).
+    override func tearDown() async throws {
+        await settleTasks()
+        try await super.tearDown()
+    }
+
     private var lastNight: (Date, Date) {
         let wake = Calendar.current.date(byAdding: .hour, value: -1, to: .now)!
         return (wake.addingTimeInterval(-7.5 * 3_600), wake)

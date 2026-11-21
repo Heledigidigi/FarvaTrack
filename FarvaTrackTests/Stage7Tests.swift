@@ -135,6 +135,12 @@ final class WorkoutReminderTests: XCTestCase {
         sut.configure(context: container.mainContext, user: AppUser.makeNew(id: "u1", email: "a@b.com", displayName: "Test"))
     }
 
+    /// Arka plan görevleri bitmeden bellek içi veritabanı bırakılmaz (sonraki testlerde çökmeyi önler).
+    override func tearDown() async throws {
+        await settleTasks()
+        try await super.tearDown()
+    }
+
     func testCalendarWeekdayMapping() {
         XCTAssertEqual(TrainingViewModel.calendarWeekday(fromIndex: 0), 2)   // Pazartesi
         XCTAssertEqual(TrainingViewModel.calendarWeekday(fromIndex: 5), 7)   // Cumartesi

@@ -112,6 +112,12 @@ final class AccountManagementTests: XCTestCase {
         XCTAssertEqual(sut.authState, .authenticated)
     }
 
+    /// Arka plan görevleri bitmeden bellek içi veritabanı bırakılmaz (sonraki testlerde çökmeyi önler).
+    override func tearDown() async throws {
+        await settleTasks()
+        try await super.tearDown()
+    }
+
     func testDeleteAccountRequiresPassword() async {
         let ok = await sut.deleteAccount(password: "")
         XCTAssertFalse(ok)
@@ -229,6 +235,12 @@ final class LibrarySyncTests: XCTestCase {
         sync = MockLibrarySync()
         defaults = makeTestDefaults("library")
         sut = LibrarySynchronizer(sync: sync, defaults: defaults)
+    }
+
+    /// Arka plan görevleri bitmeden bellek içi veritabanı bırakılmaz (sonraki testlerde çökmeyi önler).
+    override func tearDown() async throws {
+        await settleTasks()
+        try await super.tearDown()
     }
 
     func testUploadsLocalAndDownloadsRemote() async throws {

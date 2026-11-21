@@ -146,6 +146,17 @@ final class TrainingViewModelTests: XCTestCase {
         sut.configure(context: context, user: AppUser.makeNew(id: "u1", email: "a@b.com", displayName: "Test"))
     }
 
+    /// Arka plandaki yükleme / hatırlatıcı görevleri bitmeden bellek içi veritabanı bırakılmaz
+    /// (aksi halde sonraki testlerde kapanmış veritabanına erişilip çökme olabiliyordu).
+    override func tearDown() async throws {
+        await settleTasks()
+        sut = nil
+        sync = nil
+        context = nil
+        container = nil
+        try await super.tearDown()
+    }
+
     func testTemplateValidation() {
         XCTAssertThrowsError(try sut.saveTemplate(name: "A", exercises: [TemplateExercise(template: bench)]))
         XCTAssertThrowsError(try sut.saveTemplate(name: "İtiş", exercises: []))
@@ -291,6 +302,12 @@ final class LiveWorkoutTests: XCTestCase {
         clock = Date(timeIntervalSince1970: 1_795_000_000)
         sut = LiveWorkoutViewModel(store: store, restScheduler: rest, now: { [unowned self] in self.clock })
         sut.configure(userID: "u1")
+    }
+
+    /// Arka plan görevleri bitmeden bellek içi veritabanı bırakılmaz (sonraki testlerde çökmeyi önler).
+    override func tearDown() async throws {
+        await settleTasks()
+        try await super.tearDown()
     }
 
     private func makeTemplate() -> WorkoutTemplate {
@@ -442,6 +459,12 @@ final class ManualStepTests: XCTestCase {
         sut.configure(user: user)
         sut.attach(context: container.mainContext, userID: "u1")
         await sut.start()
+    }
+
+    /// Arka plan görevleri bitmeden bellek içi veritabanı bırakılmaz (sonraki testlerde çökmeyi önler).
+    override func tearDown() async throws {
+        await settleTasks()
+        try await super.tearDown()
     }
 
     func testManualStepsWorkWithoutHealth() async throws {

@@ -92,6 +92,12 @@ final class WasteViewModelTests: XCTestCase {
         sut.configure(context: context, user: AppUser.makeNew(id: "uid-1", email: "a@b.com", displayName: "Test"))
     }
 
+    /// Arka plan görevleri bitmeden bellek içi veritabanı bırakılmaz (sonraki testlerde çökmeyi önler).
+    override func tearDown() async throws {
+        await settleTasks()
+        try await super.tearDown()
+    }
+
     private func entries() throws -> [WasteEntry] { try context.fetch(FetchDescriptor<WasteEntry>()) }
 
     func testAddUploadsEntryAndDailyTotalOnly() async throws {
