@@ -36,7 +36,27 @@ final class MockFirebaseService: FirebaseServicing {
     }
 
     func uploadProfileImage(_ data: Data, uid: String) async throws -> URL {
-        URL(string: "https://example.com/\(uid).jpg")!
+        uploadedImages += 1
+        if let uploadError { throw uploadError }
+        return URL(string: "https://example.com/\(uid).jpg")!
+    }
+
+    var usesPasswordSignIn = true
+    var reauthError: Error?
+    var deleteError: Error?
+    var uploadError: Error?
+    private(set) var uploadedImages = 0
+    private(set) var reauthenticated = false
+    private(set) var deletedAccounts: [String] = []
+
+    func reauthenticate(email: String, password: String) async throws {
+        if let reauthError { throw reauthError }
+        reauthenticated = true
+    }
+
+    func deleteAccount(uid: String) async throws {
+        if let deleteError { throw deleteError }
+        deletedAccounts.append(uid)
     }
 }
 

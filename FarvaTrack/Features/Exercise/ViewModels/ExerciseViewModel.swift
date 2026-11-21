@@ -224,6 +224,7 @@ final class ExerciseViewModel {
 
     func deleteCustomExercise(_ exercise: Exercise) {
         guard let context else { return }
+        if let userID { LibrarySynchronizer.recordDeletion(LibraryID.customExercise(exercise.id), userID: userID) }
         context.delete(exercise)
         do {
             try context.save()

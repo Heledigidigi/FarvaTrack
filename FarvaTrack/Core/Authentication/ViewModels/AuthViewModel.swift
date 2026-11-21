@@ -247,6 +247,75 @@ final class AuthViewModel {
         }
     }
 
+    // MARK: - Profil fotoğrafı
+    /// Fotoğrafı yükler ve profile bağlar. Storage kurulmamışsa anlaşılır bir hata gösterir.
+    @discardableResult
+    func updateProfilePhoto(_ jpegData: Data) async -> Bool {
+        guard var user = currentUser else { return false }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            let url = try await service.uploadProfileImage(jpegData, uid: user.id)
+            user.photoURL = url.absoluteString
+            await persist(user)
+            return true
+        } catch {
+            errorMessage = "Fotoğraf yüklenemedi. Firebase Storage kurulu olmayabilir. (\(AppError.map(error).errorDescription ?? ""))"
+            Haptics.error()
+            return false
+        }
+    }
+
+    func removeProfilePhoto() async {
+        guard var user = currentUser, user.photoURL != nil else { return }
+        user.photoURL = nil
+        await persist(user)
+    }
+
+    // MARK: - Hesap silme
+    var usesPasswordSignIn: Bool { service.usesPasswordSignIn }
+
+    /// Sunucudaki tüm verileri ve hesabı, ardından cihazdaki verileri siler. Başarılıysa `true`.
+    @discardableResult
+    func deleteAccount(password: String) async -> Bool {
+        guard let user = currentUser else { return false }
+        if service.usesPasswordSignIn && password.isEmpty {
+            present(AppError.invalidInput("Hesabını silmek için şifreni gir."))
+            return false
+        }
+
+        isWorking = true
+        isPerformingAuthAction = true
+        defer { isWorking = false; isPerformingAuthAction = false }
+
+        do {
+            if service.usesPasswordSignIn {
+                try await service.reauthenticate(email: user.email, password: password)
+            }
+            try await service.deleteAccount(uid: user.id)
+        } catch {
+            let mapped = AppError.map(error)
+            if case .requiresRecentLogin = mapped {
+                errorMessage = "Güvenlik nedeniyle yakın zamanda giriş yapmış olman gerekiyor. Çıkış yapıp tekrar giriş yaptıktan sonra yeniden dene."
+                Haptics.error()
+            } else {
+                present(mapped)
+            }
+            return false
+        }
+
+        if let modelContext {
+            try? LocalDataCleaner.purge(ownerID: user.id, context: modelContext)
+        }
+        SharedStore.clearAll()
+        resetForm()
+        currentUser = nil
+        authState = .unauthenticated
+        infoMessage = "Hesabın ve tüm verilerin silindi."
+        Haptics.success()
+        return true
+    }
+
     // MARK: - Profil yükleme
     private func bootstrapProfile(uid: String, displayName: String? = nil, email: String? = nil) async {
         do {

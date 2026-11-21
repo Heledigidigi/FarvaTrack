@@ -10,6 +10,8 @@ struct MainTabView: View {
     @State private var waterViewModel = WaterViewModel()
     /// Biyolojik atık sayacı da widget'tan beslendiği için burada yaşar.
     @State private var wasteViewModel = WasteViewModel()
+    /// Özel yiyecek/egzersiz ve favorilerin cihazlar arası eşitlenmesi.
+    @State private var librarySync = LibrarySynchronizer()
 
     init() {
         // Koyu, opak sekme çubuğu
@@ -69,13 +71,15 @@ struct MainTabView: View {
                 wasteViewModel.configure(context: modelContext, user: user)
                 await waterViewModel.handleForeground()
                 await wasteViewModel.handleForeground()
+                await librarySync.syncAll(context: modelContext, userID: user.id)
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active, auth.currentUser != nil else { return }
+            guard phase == .active, let userID = auth.currentUser?.id else { return }
             Task {
                 await waterViewModel.handleForeground()
                 await wasteViewModel.handleForeground()
+                await librarySync.syncAll(context: modelContext, userID: userID)
             }
         }
     }

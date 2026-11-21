@@ -12,6 +12,9 @@ enum Constants {
         static let waste = "waste"
         static let wasteDaily = "wasteDaily"
         static let library = "library"
+
+        /// Hesap silinirken temizlenen `users/{uid}` alt koleksiyonları.
+        static let userSubcollections = [workouts, meals, water, sleep, weight, measurements, waste, wasteDaily, library]
     }
 
     enum StoragePath {
@@ -40,11 +43,5 @@ enum Constants {
     enum Training {
         static let minutesPerSet = 2.5        // set + dinlenme tahmini süre (dk)
         static let fallbackWeightKg = 70.0    // profilde kilo yoksa kullanılır
-    }
-
-    enum Links {
-        // TODO: Yayından önce kendi adreslerinle değiştir.
-        static let privacyPolicy = "https://example.com/gizlilik"
-        static let termsOfUse = "https://example.com/kosullar"
     }
 }

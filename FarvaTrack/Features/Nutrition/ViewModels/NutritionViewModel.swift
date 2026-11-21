@@ -110,6 +110,7 @@ final class NutritionViewModel {
         ).first
         if let existing {
             context.delete(existing)
+            LibrarySynchronizer.recordDeletion(LibraryID.favorite(template.key), userID: userID)
         } else {
             context.insert(FavoriteFood(ownerID: userID, template: template))
         }
@@ -154,6 +155,7 @@ final class NutritionViewModel {
 
     func deleteCustomFood(_ food: CustomFood) {
         guard let context else { return }
+        if let userID { LibrarySynchronizer.recordDeletion(LibraryID.customFood(food.id), userID: userID) }
         context.delete(food)
         try? context.save()
     }

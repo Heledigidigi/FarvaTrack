@@ -10,9 +10,7 @@ SwiftUI ile yazılmış fitness ve sağlık takip uygulaması (iOS 17+, MVVM, Sw
 | 2 | Egzersiz, adım (HealthKit) ve adım widget'ı | Tamam |
 | 3 | Beslenme, su, uyku, kilo | Tamam |
 | 4 | Atık sayacı, istatistikler, rozetler, hatırlatıcılar | Tamam |
-| 5 | Profil, ayarlar, hesap silme, imzalama | Sırada |
-
-Henüz eklenmeyen modüller uygulamada "bir sonraki aşamada ekleniyor" ekranıyla görünür.
+| 5 | Profil, ayarlar, hesap silme, kütüphane senkronu, TestFlight | Tamam |
 
 ## Derleme (Mac gerekmez)
 
@@ -47,6 +45,20 @@ Biyolojik atık sayacını her kullanıcı kendisi için kullanır. `role: "admi
 ## IPA'yı telefona kurma
 
 Actions'ın ürettiği IPA ad-hoc imzalıdır (yetkiler gömülü, sertifika yok); telefona kurulurken yeniden imzalanması gerekir. Ücretsiz Apple ID ile Windows veya Mac'ten [Sideloadly](https://sideloadly.io) kullanarak kurabilirsin; ücretsiz hesapla imzalanan uygulama 7 gün çalışır ve Apple ile giriş, App Groups gibi bazı yetenekler çalışmayabilir. Kalıcı dağıtım (TestFlight) için ücretli Apple Developer Program üyeliği ve imzalama ayarı gerekir.
+
+## TestFlight (ücretli Apple Developer hesabı gerekir)
+
+Ücretsiz Apple ID ile yalnızca Sideloadly ile 7 günlük kurulum yapılabilir. Uygulamayı TestFlight üzerinden kalıcı dağıtmak için:
+
+1. [Apple Developer Program](https://developer.apple.com/programs/)'a katıl (yıllık ücretli).
+2. [App Store Connect](https://appstoreconnect.apple.com) → **Uygulamalar → +** ile yeni uygulama oluştur; Bundle ID: `com.farvatrack.FarvaTrack`.
+3. **Kullanıcılar ve Erişim → Entegrasyonlar → App Store Connect API** bölümünden **Admin** rolüyle bir anahtar oluştur ve `.p8` dosyasını indir (yalnızca bir kez indirilebilir).
+4. GitHub'da şu secret'ları ekle:
+   - `APPLE_TEAM_ID`: Developer hesabındaki 10 karakterlik Team ID
+   - `ASC_KEY_ID`: API anahtarının Key ID'si
+   - `ASC_ISSUER_ID`: API sayfasındaki Issuer ID
+   - `ASC_KEY_P8`: `.p8` dosyasının tüm içeriği
+5. **Actions → TestFlight → Run workflow**. İş akışı sertifika ve profilleri otomatik oluşturur, derlemeyi imzalar ve TestFlight'a yükler. Her çalıştırmanın derleme numarası artar.
 
 ## Proje rehberi
 

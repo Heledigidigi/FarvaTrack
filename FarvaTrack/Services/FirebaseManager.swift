@@ -47,6 +47,27 @@ protocol FirebaseServicing: AnyObject {
     func fetchUser(uid: String) async throws -> AppUser?
     func saveUser(_ user: AppUser) async throws
     func uploadProfileImage(_ data: Data, uid: String) async throws -> URL
+
+    // Hesap yönetimi
+    /// Oturumdaki hesabın e-posta/şifre ile mi açıldığı (yeniden doğrulamada şifre istenir).
+    var usesPasswordSignIn: Bool { get }
+    func reauthenticate(email: String, password: String) async throws
+    /// Firestore'daki tüm kullanıcı verilerini, profil fotoğrafını ve Auth hesabını siler.
+    func deleteAccount(uid: String) async throws
+}
+
+/// `saveUser` için Firestore alanları. Boş (nil) isteğe bağlı alanlar silinir; `role` istemciden asla yazılmaz.
+enum UserDocumentEncoder {
+    static let optionalKeys = ["birthDate", "heightCm", "weightKg", "gender", "photoURL", "targetWeightKg", "startWeightKg"]
+
+    static func fields(for user: AppUser, deleteMarker: Any) throws -> [String: Any] {
+        var data = try Firestore.Encoder().encode(user)
+        data.removeValue(forKey: "role")
+        for key in optionalKeys where data[key] == nil || data[key] is NSNull {
+            data[key] = deleteMarker
+        }
+        return data
+    }
 }
 
 // MARK: - Firebase uygulaması
@@ -143,9 +164,10 @@ final class FirebaseManager: FirebaseServicing {
         do {
             // Senkron `setData` bilerek kullanılıyor: yazma önce yerel önbelleğe gider,
             // internet yokken bloklamaz ve bağlantı gelince otomatik eşitlenir.
-            try db.collection(Constants.Collection.users)
+            let fields = try UserDocumentEncoder.fields(for: user, deleteMarker: FieldValue.delete())
+            db.collection(Constants.Collection.users)
                 .document(user.id)
-                .setData(from: user, merge: true)
+                .setData(fields, merge: true)
         } catch {
             throw AppError.map(error)
         }
@@ -162,6 +184,53 @@ final class FirebaseManager: FirebaseServicing {
             return try await ref.downloadURL()
         } catch {
             throw AppError.storage(error.localizedDescription)
+        }
+    }
+
+    // MARK: Hesap yönetimi
+    var usesPasswordSignIn: Bool {
+        guard FirebaseBootstrap.isConfigured, let user = auth.currentUser else { return false }
+        return user.providerData.contains { $0.providerID == "password" }
+    }
+
+    func reauthenticate(email: String, password: String) async throws {
+        try ensureConfigured()
+        guard let user = auth.currentUser else { throw AppError.notAuthenticated }
+        try await perform {
+            let credential = EmailAuthProvider.credential(withEmail: email, password: password)
+            _ = try await user.reauthenticate(with: credential)
+        }
+    }
+
+    /// Sıra önemli: önce veriler (kurallar oturum ister), en son Auth hesabı.
+    func deleteAccount(uid: String) async throws {
+        try ensureConfigured()
+        guard let user = auth.currentUser, user.uid == uid else { throw AppError.notAuthenticated }
+
+        let userDocument = db.collection(Constants.Collection.users).document(uid)
+        try await perform {
+            for name in Constants.Collection.userSubcollections {
+                try await self.deleteAllDocuments(in: userDocument.collection(name))
+            }
+        }
+
+        // Profil fotoğrafı yoksa ya da Storage kurulmadıysa hata yok sayılır.
+        try? await storage.reference().child("\(Constants.StoragePath.profileImages)/\(uid).jpg").delete()
+
+        try await perform {
+            try await userDocument.delete()
+            try await user.delete()
+        }
+    }
+
+    /// Koleksiyonu 400'lük gruplar halinde siler (Firestore toplu yazma sınırı 500).
+    private func deleteAllDocuments(in collection: CollectionReference) async throws {
+        while true {
+            let snapshot = try await collection.limit(to: 400).getDocuments()
+            guard !snapshot.documents.isEmpty else { return }
+            let batch = db.batch()
+            snapshot.documents.forEach { batch.deleteDocument($0.reference) }
+            try await batch.commit()
         }
     }
 
