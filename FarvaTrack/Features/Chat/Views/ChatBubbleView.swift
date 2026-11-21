@@ -299,6 +299,7 @@ struct ChatComposer: View {
     var focused: FocusState<Bool>.Binding
     var onGallery: () -> Void = {}
     var onCamera: () -> Void = {}
+    var onStickers: () -> Void = {}
     var recorder: ChatVoiceRecorderModel?
     var onVoice: (RecordedVoice) -> Void = { _ in }
 
@@ -327,6 +328,15 @@ struct ChatComposer: View {
                     }
                     .foregroundStyle(Color.ftAccentLight)
                     .accessibilityLabel("Galeriden fotoğraf veya video seç")
+
+                    Button(action: onStickers) {
+                        Image(systemName: "face.smiling")
+                            .font(.system(size: 22))
+                            .frame(width: 32, height: 40)
+                    }
+                    .foregroundStyle(Color.ftAccentLight)
+                    .accessibilityLabel("Sticker'larım")
+                    .accessibilityHint("Fotoğraftan sticker oluştur")
                 }
 
                 TextField("Mesaj", text: $viewModel.draft, axis: .vertical)

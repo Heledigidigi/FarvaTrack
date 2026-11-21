@@ -32,7 +32,8 @@ struct FarvaTrackApp: App {
                 TrainingProgram.self,
                 ManualStepEntry.self,
                 ChatMessageRecord.self,
-                ChatPendingOperation.self
+                ChatPendingOperation.self,
+                StickerRecord.self
             )
         } catch {
             fatalError("SwiftData ModelContainer oluşturulamadı: \(error)")

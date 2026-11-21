@@ -11,6 +11,17 @@ service firebase.storage {
         && fileName == request.auth.uid + '.jpg';
     }
 
+    // MARK: Sticker kütüphanesi (Aşama 8D)
+    // users/{uid}/stickers/{id}.png: yalnızca sahibi; şeffaf PNG, en fazla 2 MB (512×512 çıktı).
+    match /users/{userId}/stickers/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null && request.auth.uid == userId
+        && fileName.matches('[A-Za-z0-9-]+[.]png')
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType == 'image/png';
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
     // MARK: Sohbet medyası (Aşama 8B)
     // chats/{chatId}/media/{messageId}/thumb.jpg, original.<uzantı> ve voice.m4a (8C)
     // Üyelik Firestore'daki sohbet belgesinden okunur (konsol, Storage'ın Firestore'a erişim iznini ister).

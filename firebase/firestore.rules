@@ -38,6 +38,8 @@ service cloud.firestore {
       match /templates/{id}    { allow read, write: if isOwner(userId); }
       match /programs/{id}     { allow read, write: if isOwner(userId); }
       match /manualSteps/{id}  { allow read, write: if isOwner(userId); }
+      // Kişisel sticker kütüphanesi (8D): yalnızca sahibi.
+      match /stickers/{id}     { allow read, write: if isOwner(userId); }
 
       // Biyolojik atık: tek tek kayıtlar (saatleriyle) yalnızca sahibine açıktır.
       match /waste/{id}        { allow read, write: if isOwner(userId); }

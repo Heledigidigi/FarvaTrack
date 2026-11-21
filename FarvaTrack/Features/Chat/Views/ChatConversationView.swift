@@ -11,6 +11,7 @@ struct ChatConversationView: View {
     /// Galeriden seçilenler; gönderim sayfası (Orijinal / Hızlı) bunlar için açılır.
     @State private var pickedMedia: [PickedMedia] = []
     @State private var viewerItem: ChatMessageItem?
+    @State private var showStickers = false
     /// Sesli mesaj kaydı ve oynatma (8C).
     @State private var recorder = ChatVoiceRecorderModel()
     @State private var audioPlayer = ChatAudioPlayer()
@@ -64,6 +65,7 @@ struct ChatConversationView: View {
                     focused: $composerFocused,
                     onGallery: { showPicker = true },
                     onCamera: { showCamera = true },
+                    onStickers: { showStickers = true },
                     recorder: recorder,
                     onVoice: { viewModel.sendVoice($0) }
                 )
@@ -88,6 +90,9 @@ struct ChatConversationView: View {
             ChatCameraView { media, quality in
                 Task { await viewModel.sendMedia([media], quality: quality) }
             }
+        }
+        .sheet(isPresented: $showStickers) {
+            StickerLibraryView()
         }
         .fullScreenCover(item: $viewerItem) { item in
             ChatMediaViewer(item: item, viewModel: viewModel)

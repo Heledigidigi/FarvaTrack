@@ -5,7 +5,7 @@ import SwiftData
 @MainActor
 enum LocalDataCleaner {
     /// Bekleyen silme / gün kuyruklarının kapsamları (`pending<Scope>Deletes.<uid>`).
-    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library", "Template", "Program", "ManualStep"]
+    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library", "Template", "Program", "ManualStep", StickerLibraryViewModel.deletionScope]
 
     static func purge(ownerID: String, context: ModelContext, defaults: UserDefaults = .standard) throws {
         try delete(Workout.self, context: context) { $0.ownerID == ownerID }
@@ -23,6 +23,10 @@ enum LocalDataCleaner {
         try delete(ManualStepEntry.self, context: context) { $0.ownerID == ownerID }
         try delete(ChatMessageRecord.self, context: context) { $0.ownerID == ownerID }
         try delete(ChatPendingOperation.self, context: context) { $0.ownerID == ownerID }
+        for sticker in try context.fetch(FetchDescriptor<StickerRecord>()) where sticker.ownerID == ownerID {
+            StickerFiles.live.remove(sticker.id)
+            context.delete(sticker)
+        }
         try delete(LocalUserProfile.self, context: context) { $0.uid == ownerID }
         try context.save()
 
