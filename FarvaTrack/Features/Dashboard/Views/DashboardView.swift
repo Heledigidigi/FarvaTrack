@@ -13,9 +13,9 @@ struct DashboardView: View {
         Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
     }
 
-    /// Biyolojik atık modülü yalnızca yetkili (admin) hesaplarda görünür.
+    /// Biyolojik atık ayrı bir küçük satırda gösterildiği için modül kutularında yer almaz.
     private var visibleRoutes: [AppRoute] {
-        AppRoute.allCases.filter { $0 != .biologicalWaste || auth.currentUser?.isAdmin == true }
+        AppRoute.allCases.filter { $0 != .biologicalWaste }
     }
 
     var body: some View {
@@ -29,6 +29,7 @@ struct DashboardView: View {
                     statGrid
                     weeklyStepsCard
                     modulesSection
+                    wasteRow
                 }
                 .redacted(reason: viewModel.hasLoaded ? [] : .placeholder)
                 .padding(.horizontal, Constants.Layout.screenPadding)
@@ -316,6 +317,35 @@ struct DashboardView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+// MARK: - Biyolojik atık satırı
+private extension DashboardView {
+    var wasteRow: some View {
+        NavigationLink(value: AppRoute.biologicalWaste) {
+            HStack(spacing: 12) {
+                Image(systemName: AppRoute.biologicalWaste.systemImage)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.ftWaste)
+                    .frame(width: 32, height: 32)
+                    .background(Color.ftWaste.opacity(0.18), in: Circle())
+                Text(AppRoute.biologicalWaste.title)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("Bugün \(viewModel.summary.wasteCount)")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(Color.ftTextSecondary)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.ftTextSecondary.opacity(0.6))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.ftCard, in: RoundedRectangle(cornerRadius: Constants.Layout.cornerRadius, style: .continuous))
+            .accessibilityElement(children: .combine)
+        }
+        .buttonStyle(.plain)
     }
 }
 

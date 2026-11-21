@@ -64,7 +64,6 @@ enum AppRoute: Hashable, CaseIterable, Identifiable {
 }
 
 extension AppRoute {
-    /// Modüller eklendikçe ilgili case gerçek ekrana bağlanacak.
     @ViewBuilder
     var destination: some View {
         switch self {
@@ -74,8 +73,10 @@ extension AppRoute {
             SleepView()
         case .weight:
             WeightView()
-        default:
-            ComingSoonView(title: title, systemImage: systemImage)
+        case .biologicalWaste:
+            WasteView()
+        case .statistics:
+            StatisticsView()
         }
     }
 }

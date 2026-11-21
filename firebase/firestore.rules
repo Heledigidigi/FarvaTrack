@@ -16,7 +16,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      // Yönetici, biyolojik atık özetinde kullanıcı adlarını listeleyebilsin diye profilleri okuyabilir.
+      allow read: if isOwner(userId) || isAdmin();
 
       // Profil ilk oluşurken role alanı bulunamaz.
       allow create: if isOwner(userId) && !('role' in request.resource.data);
@@ -35,8 +36,14 @@ service cloud.firestore {
       match /measurements/{id} { allow read, write: if isOwner(userId); }
       match /library/{id}      { allow read, write: if isOwner(userId); }
 
-      // Yalnızca kendi verisine erişen admin hesap.
-      match /waste/{id}        { allow read, write: if isOwner(userId) && isAdmin(); }
+      // Biyolojik atık: tek tek kayıtlar (saatleriyle) yalnızca sahibine açıktır.
+      match /waste/{id}        { allow read, write: if isOwner(userId); }
+
+      // Günlük toplamlar: sahibi yazar, yönetici yalnızca okur.
+      match /wasteDaily/{day}  {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId);
+      }
     }
   }
 }

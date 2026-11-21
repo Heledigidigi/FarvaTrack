@@ -12,6 +12,7 @@ struct DashboardSummary: Equatable {
     var sleepHours: Double?
     var latestWeightKg: Double?
     var workoutMinutes = 0
+    var wasteCount = 0
     var weeklySteps: [DailyValue] = []
 }
 

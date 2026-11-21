@@ -28,20 +28,38 @@ struct PendingWaterAdd: Codable, Equatable, Identifiable {
     let date: Date
 }
 
+struct WasteSnapshot: Codable, Equatable {
+    var count: Int
+    var updatedAt: Date
+
+    static let empty = WasteSnapshot(count: 0, updatedAt: .distantPast)
+}
+
+/// Widget'tan yapılmış ama henüz uygulamaya aktarılmamış sayaç dokunuşu.
+struct PendingWasteTap: Codable, Equatable, Identifiable {
+    let id: UUID
+    let date: Date
+}
+
 /// Uygulama ile widget arasındaki paylaşılan depo (App Group).
 enum SharedStore {
     /// Config/*.entitlements içindeki App Group kimliğiyle aynı olmalı.
     static let appGroupID = "group.com.farvatrack.shared"
     static let stepsWidgetKind = "StepsWidget"
     static let waterWidgetKind = "WaterWidget"
+    static let wasteWidgetKind = "WasteWidget"
 
     /// Yanlış dokunmalara karşı su sınırları (uygulama ve widget aynı değerleri kullanır).
     static let maxSingleWaterMl = 2_000
     static let maxDailyWaterMl = 6_000
+    /// Yanlış dokunmalara karşı günlük sayaç sınırı.
+    static let maxDailyWasteCount = 40
 
     private static let stepsKey = "stepsSnapshot"
     private static let waterKey = "waterSnapshot"
     private static let pendingWaterKey = "pendingWaterAdds"
+    private static let wasteKey = "wasteSnapshot"
+    private static let pendingWasteKey = "pendingWasteTaps"
 
     /// App Group yoksa (ör. imzasız test derlemesi) standart depoya düşer; uygulama çalışmaya devam eder.
     static var defaults: UserDefaults {
@@ -121,9 +139,55 @@ enum SharedStore {
         WidgetCenter.shared.reloadTimelines(ofKind: waterWidgetKind)
     }
 
+    // MARK: Biyolojik atık sayacı
+    static func loadWaste() -> WasteSnapshot? {
+        guard let data = defaults.data(forKey: wasteKey) else { return nil }
+        return try? JSONDecoder().decode(WasteSnapshot.self, from: data)
+    }
+
+    static func saveWaste(_ snapshot: WasteSnapshot) {
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        defaults.set(data, forKey: wasteKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: wasteWidgetKind)
+    }
+
+    static func pendingWasteTaps() -> [PendingWasteTap] {
+        guard let data = defaults.data(forKey: pendingWasteKey) else { return [] }
+        return (try? JSONDecoder().decode([PendingWasteTap].self, from: data)) ?? []
+    }
+
+    static func removePendingWaste(ids: [UUID]) {
+        let remaining = pendingWasteTaps().filter { !ids.contains($0.id) }
+        defaults.set(try? JSONEncoder().encode(remaining), forKey: pendingWasteKey)
+    }
+
+    /// Widget butonu çağırır: kuyruğa ekler ve widget'taki sayıyı hemen artırır.
+    static func addWasteFromWidget(now: Date = .now) {
+        var snapshot = loadWaste() ?? .empty
+        if !Calendar.current.isDate(snapshot.updatedAt, inSameDayAs: now) {
+            snapshot.count = 0
+        }
+        guard snapshot.count < maxDailyWasteCount else { return }
+
+        var pending = pendingWasteTaps()
+        pending.append(PendingWasteTap(id: UUID(), date: now))
+        defaults.set(try? JSONEncoder().encode(pending), forKey: pendingWasteKey)
+
+        snapshot.count += 1
+        snapshot.updatedAt = now
+        saveWaste(snapshot)
+    }
+
+    static func clearWaste() {
+        defaults.removeObject(forKey: wasteKey)
+        defaults.removeObject(forKey: pendingWasteKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: wasteWidgetKind)
+    }
+
     /// Çıkışta veya hesap silmede tüm widget verilerini temizler.
     static func clearAll() {
         clearSteps()
         clearWater()
+        clearWaste()
     }
 }

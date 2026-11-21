@@ -8,6 +8,8 @@ struct MainTabView: View {
     @State private var router = AppRouter()
     /// Su modülü hem sekmede hem widget içe aktarımında kullanıldığından burada yaşar.
     @State private var waterViewModel = WaterViewModel()
+    /// Biyolojik atık sayacı da widget'tan beslendiği için burada yaşar.
+    @State private var wasteViewModel = WasteViewModel()
 
     init() {
         // Koyu, opak sekme çubuğu
@@ -44,6 +46,7 @@ struct MainTabView: View {
         }
         .environment(router)
         .environment(waterViewModel)
+        .environment(wasteViewModel)
         .tint(Color.ftAccentLight)
         .sensoryFeedback(.selection, trigger: router.selectedTab)
         .onOpenURL { router.handle($0) }
@@ -55,17 +58,25 @@ struct MainTabView: View {
             if let url = DeepLinkCenter.consumePending() { router.handle(url) }
         }
         .onChange(of: auth.currentUser, initial: true) { _, user in
-            if let user { waterViewModel.configure(context: modelContext, user: user) }
+            if let user {
+                waterViewModel.configure(context: modelContext, user: user)
+                wasteViewModel.configure(context: modelContext, user: user)
+            }
         }
         .task(id: auth.currentUser?.id) {
             if let user = auth.currentUser {
                 waterViewModel.configure(context: modelContext, user: user)
+                wasteViewModel.configure(context: modelContext, user: user)
                 await waterViewModel.handleForeground()
+                await wasteViewModel.handleForeground()
             }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, auth.currentUser != nil else { return }
-            Task { await waterViewModel.handleForeground() }
+            Task {
+                await waterViewModel.handleForeground()
+                await wasteViewModel.handleForeground()
+            }
         }
     }
 }

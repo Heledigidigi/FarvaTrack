@@ -48,6 +48,10 @@ struct LiveDashboardDataSource: DashboardDataSource {
         weightDescriptor.fetchLimit = 1
         summary.latestWeightKg = try context.fetch(weightDescriptor).first?.weightKg
 
+        summary.wasteCount = try context.fetchCount(FetchDescriptor<WasteEntry>(
+            predicate: #Predicate { $0.ownerID == owner && $0.date >= today && $0.date <= end }
+        ))
+
         // 3) HealthKit (izin yoksa boş döner, hata değil)
         var activity: [DailyActivity] = []
         if health.isHealthDataAvailable {

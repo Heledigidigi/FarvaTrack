@@ -10,6 +10,7 @@ enum Constants {
         static let weight = "weight"
         static let measurements = "measurements"
         static let waste = "waste"
+        static let wasteDaily = "wasteDaily"
         static let library = "library"
     }
 

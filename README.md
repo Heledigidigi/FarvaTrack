@@ -9,7 +9,7 @@ SwiftUI ile yazılmış fitness ve sağlık takip uygulaması (iOS 17+, MVVM, Sw
 | 1 | Giriş / kayıt (e-posta, Apple), onboarding, sekmeler, Özet ekranı | Tamam |
 | 2 | Egzersiz, adım (HealthKit) ve adım widget'ı | Tamam |
 | 3 | Beslenme, su, uyku, kilo | Tamam |
-| 4 | Atık sayacı, istatistikler, rozetler, hatırlatıcılar | Sırada |
+| 4 | Atık sayacı, istatistikler, rozetler, hatırlatıcılar | Tamam |
 | 5 | Profil, ayarlar, hesap silme, imzalama | Sırada |
 
 Henüz eklenmeyen modüller uygulamada "bir sonraki aşamada ekleniyor" ekranıyla görünür.
@@ -40,7 +40,9 @@ Secret yoksa uygulama çökmez; "Firebase yapılandırılmadı" ekranıyla açı
 
 ### Yönetici (admin) rolü
 
-Biyolojik atık modülü yalnızca `role: "admin"` alanı olan hesaplarda görünür. Rolü Firebase konsolundan verirsin: **Firestore → users → (kullanıcının uid'si) → alan ekle:** `role` (string) = `admin`. Kurallar, uygulamanın bu alanı değiştirmesine izin vermez.
+Biyolojik atık sayacını her kullanıcı kendisi için kullanır. `role: "admin"` alanı olan hesap, sayaç ekranındaki kişiler simgesinden tüm kullanıcıların **yalnızca günlük toplamlarını** görür; kayıtların saatleri kullanıcıya özeldir ve Firestore kuralları yöneticinin bunları okumasını engeller. Rolü Firebase konsolundan verirsin: **Firestore → users → (kullanıcının uid'si) → alan ekle:** `role` (string) = `admin`. Kurallar, uygulamanın bu alanı değiştirmesine izin vermez.
+
+> Kurallar değiştiğinde `firebase/firestore.rules` içeriğini Firebase konsolundaki **Rules** sekmesine yeniden yapıştırıp yayınla.
 
 ## IPA'yı telefona kurma
 

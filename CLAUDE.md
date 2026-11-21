@@ -27,7 +27,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 1 | Giriş/kayıt, onboarding, sekmeler, Özet | Tamam |
 | 2 | Egzersiz (CRUD), adım + HealthKit, adım widget'ı | Tamam |
 | 3 | Beslenme, su (animasyonlu + etkileşimli widget, hatırlatıcı), uyku, kilo ve ölçüler | Tamam |
-| 4 | Biyolojik atık sayacı (yalnızca `role: admin`), istatistikler, rozetler, hatırlatıcı merkezi | Sırada |
+| 4 | Biyolojik atık sayacı (herkese açık; yönetici yalnızca günlük toplamları görür), istatistikler, rozetler, hatırlatıcı merkezi | Tamam |
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Sırada |
 
 Henüz eklenmeyen modüller `ComingSoonView` ile görünür; `AppRoute.destination` ve sekme görünümleri modül geldikçe bağlanır.

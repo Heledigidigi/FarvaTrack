@@ -36,6 +36,20 @@ struct ProfileView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        RemindersView()
+                    } label: {
+                        Label("Hatırlatıcılar", systemImage: "bell.badge.fill")
+                    }
+                    NavigationLink {
+                        StatisticsView()
+                    } label: {
+                        Label("İstatistikler ve Rozetler", systemImage: "chart.xyaxis.line")
+                    }
+                }
+                .listRowBackground(Color.ftCard)
+
+                Section {
                     Button(role: .destructive) {
                         showSignOutConfirmation = true
                     } label: {
