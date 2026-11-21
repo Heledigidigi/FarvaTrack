@@ -1,0 +1,400 @@
+7204:2026-11-21 17:28:56.966787+0000 FarvaTrack[14362:47124] [error] CoreData: error: Failed to stat path '/Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application Support/default.store', errno 2 / No such file or directory.
+7205:CoreData: error: Failed to stat path '/Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application Support/default.store', errno 2 / No such file or directory.
+7206:2026-11-21 17:28:56.967114+0000 FarvaTrack[14362:47124] [error] CoreData: error: Executing as effective user 501
+7207:CoreData: error: Executing as effective user 501
+7208:2026-11-21 17:28:56.967219+0000 FarvaTrack[14362:47124] [error] CoreData: error: Failed to statfs file; errno 2 / No such file or directory.
+7209:CoreData: error: Failed to statfs file; errno 2 / No such file or directory.
+7210:2026-11-21 17:28:56.967344+0000 FarvaTrack[14362:47124] [error] CoreData: error: Logging status information for directory path: /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application Support
+7211:CoreData: error: Logging status information for directory path: /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application Support
+7212:2026-11-21 17:28:57.031090+0000 FarvaTrack[14362:47124] [error] CoreData: error: Executing as effective user 501
+7213:CoreData: error: Executing as effective user 501
+7214:2026-11-21 17:28:57.031211+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /
+7215:CoreData: error: Information for /
+7216:2026-11-21 17:28:57.031280+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7217:CoreData: error:   File Device ID: 	0
+7218:2026-11-21 17:28:57.031339+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7219:CoreData: error:   Device ID: 		16777226
+7220:2026-11-21 17:28:57.031551+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		704 bytes
+7221:CoreData: error:   File Size: 		704 bytes
+7222:2026-11-21 17:28:57.031609+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		2
+7223:CoreData: error:   File inode: 		2
+7224:2026-11-21 17:28:57.031682+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		0
+7225:CoreData: error:   File user ID: 		0
+7226:2026-11-21 17:28:57.031864+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		0
+7227:CoreData: error:   File group ID: 		0
+7228:2026-11-21 17:28:57.032032+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7229:CoreData: error:   File Permissions: 	
+7230:2026-11-21 17:28:57.032164+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7231:CoreData: error: d
+7232:2026-11-21 17:28:57.032292+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7233:CoreData: error:   755
+7234:2026-11-21 17:28:57.032479+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7235:CoreData: error:   component is not a symbolic link
+7236:2026-11-21 17:28:57.032716+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7237:CoreData: error:   component is readable
+7238:2026-11-21 17:28:57.032982+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not writeable with errno 30
+7239:CoreData: error:   component is not writeable with errno 30
+7240:2026-11-21 17:28:57.033131+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users
+7241:CoreData: error: Information for /Users
+7242:2026-11-21 17:28:57.168900+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7243:CoreData: error:   File Device ID: 	0
+7244:2026-11-21 17:28:57.169049+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7245:CoreData: error:   Device ID: 		16777226
+7246:2026-11-21 17:28:57.169122+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		160 bytes
+7247:CoreData: error:   File Size: 		160 bytes
+7248:2026-11-21 17:28:57.169171+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		17196
+7249:CoreData: error:   File inode: 		17196
+7250:2026-11-21 17:28:57.169211+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		0
+7251:CoreData: error:   File user ID: 		0
+7252:2026-11-21 17:28:57.169257+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		80
+7253:CoreData: error:   File group ID: 		80
+7254:2026-11-21 17:28:57.169295+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7255:CoreData: error:   File Permissions: 	
+7256:2026-11-21 17:28:57.169357+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7257:CoreData: error: d
+7258:2026-11-21 17:28:57.170197+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7259:CoreData: error:   755
+7260:2026-11-21 17:28:57.170245+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7261:CoreData: error:   component is not a symbolic link
+7262:2026-11-21 17:28:57.170311+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7263:CoreData: error:   component is readable
+7264:2026-11-21 17:28:57.170360+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not writeable with errno 13
+7265:CoreData: error:   component is not writeable with errno 13
+7266:2026-11-21 17:28:57.170421+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner
+7267:CoreData: error: Information for /Users/runner
+7268:2026-11-21 17:28:57.170460+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7269:CoreData: error:   File Device ID: 	0
+7270:2026-11-21 17:28:57.170518+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7271:CoreData: error:   Device ID: 		16777226
+7272:2026-11-21 17:28:57.172345+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		1280 bytes
+7273:CoreData: error:   File Size: 		1280 bytes
+7274:2026-11-21 17:28:57.172419+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		28138
+7275:CoreData: error:   File inode: 		28138
+7276:2026-11-21 17:28:57.172471+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7277:CoreData: error:   File user ID: 		501
+7278:2026-11-21 17:28:57.172513+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7279:CoreData: error:   File group ID: 		20
+7280:2026-11-21 17:28:57.172553+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7281:CoreData: error:   File Permissions: 	
+7282:2026-11-21 17:28:57.172593+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7283:CoreData: error: d
+7284:2026-11-21 17:28:57.172638+0000 FarvaTrack[14362:47124] [error] CoreData: error:   750
+7285:CoreData: error:   750
+7286:2026-11-21 17:28:57.176569+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7287:CoreData: error:   component is not a symbolic link
+7288:2026-11-21 17:28:57.176725+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7289:CoreData: error:   component is readable
+7290:2026-11-21 17:28:57.176782+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7291:CoreData: error:   component is writeable
+7292:2026-11-21 17:28:57.176844+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library
+7293:CoreData: error: Information for /Users/runner/Library
+7294:2026-11-21 17:28:57.176882+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7295:CoreData: error:   File Device ID: 	0
+7296:2026-11-21 17:28:57.176920+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7297:CoreData: error:   Device ID: 		16777226
+7298:2026-11-21 17:28:57.176955+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		2688 bytes
+7299:CoreData: error:   File Size: 		2688 bytes
+7300:2026-11-21 17:28:57.181081+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		28145
+7301:CoreData: error:   File inode: 		28145
+7302:2026-11-21 17:28:57.181158+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7303:CoreData: error:   File user ID: 		501
+7304:2026-11-21 17:28:57.181207+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7305:CoreData: error:   File group ID: 		20
+7306:2026-11-21 17:28:57.181249+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7307:CoreData: error:   File Permissions: 	
+7308:2026-11-21 17:28:57.181286+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7309:CoreData: error: d
+7310:2026-11-21 17:28:57.181327+0000 FarvaTrack[14362:47124] [error] CoreData: error:   700
+7311:CoreData: error:   700
+7312:2026-11-21 17:28:57.181397+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7313:CoreData: error:   component is not a symbolic link
+7314:2026-11-21 17:28:57.181526+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7315:CoreData: error:   component is readable
+7316:2026-11-21 17:28:57.182688+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7317:CoreData: error:   component is writeable
+7318:2026-11-21 17:28:57.182763+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer
+7319:CoreData: error: Information for /Users/runner/Library/Developer
+7320:2026-11-21 17:28:57.182807+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7321:CoreData: error:   File Device ID: 	0
+7322:2026-11-21 17:28:57.182844+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7323:CoreData: error:   Device ID: 		16777226
+7324:2026-11-21 17:28:57.182879+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		160 bytes
+7325:CoreData: error:   File Size: 		160 bytes
+7326:2026-11-21 17:28:57.182914+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		2775162
+7327:CoreData: error:   File inode: 		2775162
+7328:2026-11-21 17:28:57.186899+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7329:CoreData: error:   File user ID: 		501
+7330:2026-11-21 17:28:57.186981+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7331:CoreData: error:   File group ID: 		20
+7332:2026-11-21 17:28:57.187024+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7333:CoreData: error:   File Permissions: 	
+7334:2026-11-21 17:28:57.187060+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7335:CoreData: error: d
+7336:2026-11-21 17:28:57.187096+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7337:CoreData: error:   755
+7338:2026-11-21 17:28:57.187132+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7339:CoreData: error:   component is not a symbolic link
+7340:2026-11-21 17:28:57.187185+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7341:CoreData: error:   component is readable
+7342:2026-11-21 17:28:57.187254+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7343:CoreData: error:   component is writeable
+7344:2026-11-21 17:28:57.191339+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator
+7345:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator
+7346:2026-11-21 17:28:57.191401+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7347:CoreData: error:   File Device ID: 	0
+7348:2026-11-21 17:28:57.191445+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7349:CoreData: error:   Device ID: 		16777226
+7350:2026-11-21 17:28:57.191481+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		160 bytes
+7351:CoreData: error:   File Size: 		160 bytes
+7352:2026-11-21 17:28:57.191517+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		2775169
+7353:CoreData: error:   File inode: 		2775169
+7354:2026-11-21 17:28:57.191552+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7355:CoreData: error:   File user ID: 		501
+7356:2026-11-21 17:28:57.192799+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7357:CoreData: error:   File group ID: 		20
+7358:2026-11-21 17:28:57.192875+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7359:CoreData: error:   File Permissions: 	
+7360:2026-11-21 17:28:57.192921+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7361:CoreData: error: d
+7362:2026-11-21 17:28:57.192961+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7363:CoreData: error:   755
+7364:2026-11-21 17:28:57.193012+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7365:CoreData: error:   component is not a symbolic link
+7366:2026-11-21 17:28:57.193080+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7367:CoreData: error:   component is readable
+7368:2026-11-21 17:28:57.193126+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7369:CoreData: error:   component is writeable
+7370:2026-11-21 17:28:57.193239+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices
+7371:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices
+7372:2026-11-21 17:28:57.194638+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7373:CoreData: error:   File Device ID: 	0
+7374:2026-11-21 17:28:57.194692+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7375:CoreData: error:   Device ID: 		16777226
+7376:2026-11-21 17:28:57.194735+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		4320 bytes
+7377:CoreData: error:   File Size: 		4320 bytes
+7378:2026-11-21 17:28:57.194772+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		2775201
+7379:CoreData: error:   File inode: 		2775201
+7380:2026-11-21 17:28:57.194807+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7381:CoreData: error:   File user ID: 		501
+7382:2026-11-21 17:28:57.194842+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7383:CoreData: error:   File group ID: 		20
+7384:2026-11-21 17:28:57.195692+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7385:CoreData: error:   File Permissions: 	
+7386:2026-11-21 17:28:57.195741+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7387:CoreData: error: d
+7388:2026-11-21 17:28:57.195778+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7389:CoreData: error:   755
+7390:2026-11-21 17:28:57.195815+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7391:CoreData: error:   component is not a symbolic link
+7392:2026-11-21 17:28:57.195879+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7393:CoreData: error:   component is readable
+7394:2026-11-21 17:28:57.195923+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7395:CoreData: error:   component is writeable
+7396:2026-11-21 17:28:57.195970+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C
+7397:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C
+7398:2026-11-21 17:28:57.198912+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7399:CoreData: error:   File Device ID: 	0
+7400:2026-11-21 17:28:57.198981+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7401:CoreData: error:   Device ID: 		16777226
+7402:2026-11-21 17:28:57.199030+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		160 bytes
+7403:CoreData: error:   File Size: 		160 bytes
+7404:2026-11-21 17:28:57.199075+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		2796464
+7405:CoreData: error:   File inode: 		2796464
+7406:2026-11-21 17:28:57.199114+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7407:CoreData: error:   File user ID: 		501
+7408:2026-11-21 17:28:57.199150+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7409:CoreData: error:   File group ID: 		20
+7410:2026-11-21 17:28:57.199206+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7411:CoreData: error:   File Permissions: 	
+7412:2026-11-21 17:28:57.200242+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7413:CoreData: error: d
+7414:2026-11-21 17:28:57.200293+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7415:CoreData: error:   755
+7416:2026-11-21 17:28:57.200335+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7417:CoreData: error:   component is not a symbolic link
+7418:2026-11-21 17:28:57.200395+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7419:CoreData: error:   component is readable
+7420:2026-11-21 17:28:57.200441+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7421:CoreData: error:   component is writeable
+7422:2026-11-21 17:28:57.200490+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data
+7423:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data
+7424:2026-11-21 17:28:57.204584+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7425:CoreData: error:   File Device ID: 	0
+7426:2026-11-21 17:28:57.204684+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7427:CoreData: error:   Device ID: 		16777226
+7428:2026-11-21 17:28:57.204729+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		384 bytes
+7429:CoreData: error:   File Size: 		384 bytes
+7430:2026-11-21 17:28:57.204766+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		2796465
+7431:CoreData: error:   File inode: 		2796465
+7432:2026-11-21 17:28:57.204803+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7433:CoreData: error:   File user ID: 		501
+7434:2026-11-21 17:28:57.204839+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7435:CoreData: error:   File group ID: 		20
+7436:2026-11-21 17:28:57.204874+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7437:CoreData: error:   File Permissions: 	
+7438:2026-11-21 17:28:57.208733+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7439:CoreData: error: d
+7440:2026-11-21 17:28:57.208807+0000 FarvaTrack[14362:47124] [error] CoreData: error:   775
+7441:CoreData: error:   775
+7442:2026-11-21 17:28:57.208856+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7443:CoreData: error:   component is not a symbolic link
+7444:2026-11-21 17:28:57.208922+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7445:CoreData: error:   component is readable
+7446:2026-11-21 17:28:57.208969+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7447:CoreData: error:   component is writeable
+7448:2026-11-21 17:28:57.209023+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers
+7449:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers
+7450:2026-11-21 17:28:57.210100+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7451:CoreData: error:   File Device ID: 	0
+7452:2026-11-21 17:28:57.210162+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7453:CoreData: error:   Device ID: 		16777226
+7454:2026-11-21 17:28:57.210205+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		224 bytes
+7455:CoreData: error:   File Size: 		224 bytes
+7456:2026-11-21 17:28:57.210240+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		3666224
+7457:CoreData: error:   File inode: 		3666224
+7458:2026-11-21 17:28:57.210282+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7459:CoreData: error:   File user ID: 		501
+7460:2026-11-21 17:28:57.210318+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7461:CoreData: error:   File group ID: 		20
+7462:2026-11-21 17:28:57.210355+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7463:CoreData: error:   File Permissions: 	
+7464:2026-11-21 17:28:57.211975+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7465:CoreData: error: d
+7466:2026-11-21 17:28:57.212033+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7467:CoreData: error:   755
+7468:2026-11-21 17:28:57.212076+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7469:CoreData: error:   component is not a symbolic link
+7470:2026-11-21 17:28:57.212139+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7471:CoreData: error:   component is readable
+7472:2026-11-21 17:28:57.212186+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7473:CoreData: error:   component is writeable
+7474:2026-11-21 17:28:57.212238+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data
+7475:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data
+7476:2026-11-21 17:28:57.212958+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7477:CoreData: error:   File Device ID: 	0
+7478:2026-11-21 17:28:57.213010+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7479:CoreData: error:   Device ID: 		16777226
+7480:2026-11-21 17:28:57.213072+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		192 bytes
+7481:CoreData: error:   File Size: 		192 bytes
+7482:2026-11-21 17:28:57.213140+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		3666241
+7483:CoreData: error:   File inode: 		3666241
+7484:2026-11-21 17:28:57.213184+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7485:CoreData: error:   File user ID: 		501
+7486:2026-11-21 17:28:57.213238+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7487:CoreData: error:   File group ID: 		20
+7488:2026-11-21 17:28:57.213279+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7489:CoreData: error:   File Permissions: 	
+7490:2026-11-21 17:28:57.214823+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7491:CoreData: error: d
+7492:2026-11-21 17:28:57.214887+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7493:CoreData: error:   755
+7494:2026-11-21 17:28:57.214932+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7495:CoreData: error:   component is not a symbolic link
+7496:2026-11-21 17:28:57.214995+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7497:CoreData: error:   component is readable
+7498:2026-11-21 17:28:57.215045+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7499:CoreData: error:   component is writeable
+7500:2026-11-21 17:28:57.215097+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application
+7501:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application
+7502:2026-11-21 17:28:57.221254+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7503:CoreData: error:   File Device ID: 	0
+7504:2026-11-21 17:28:57.221392+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7505:CoreData: error:   Device ID: 		16777226
+7506:2026-11-21 17:28:57.221442+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		4640 bytes
+7507:CoreData: error:   File Size: 		4640 bytes
+7508:2026-11-21 17:28:57.221482+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		3666426
+7509:CoreData: error:   File inode: 		3666426
+7510:2026-11-21 17:28:57.221520+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7511:CoreData: error:   File user ID: 		501
+7512:2026-11-21 17:28:57.221556+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7513:CoreData: error:   File group ID: 		20
+7514:2026-11-21 17:28:57.221592+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7515:CoreData: error:   File Permissions: 	
+7516:2026-11-21 17:28:57.223026+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7517:CoreData: error: d
+7518:2026-11-21 17:28:57.223090+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7519:CoreData: error:   755
+7520:2026-11-21 17:28:57.223133+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7521:CoreData: error:   component is not a symbolic link
+7522:2026-11-21 17:28:57.223204+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7523:CoreData: error:   component is readable
+7524:2026-11-21 17:28:57.223253+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7525:CoreData: error:   component is writeable
+7526:2026-11-21 17:28:57.223304+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1
+7527:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1
+7528:2026-11-21 17:28:57.224231+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7529:CoreData: error:   File Device ID: 	0
+7530:2026-11-21 17:28:57.224293+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7531:CoreData: error:   Device ID: 		16777226
+7532:2026-11-21 17:28:57.224334+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		224 bytes
+7533:CoreData: error:   File Size: 		224 bytes
+7534:2026-11-21 17:28:57.224372+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		3675068
+7535:CoreData: error:   File inode: 		3675068
+7536:2026-11-21 17:28:57.224414+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7537:CoreData: error:   File user ID: 		501
+7538:2026-11-21 17:28:57.224450+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7539:CoreData: error:   File group ID: 		20
+7540:2026-11-21 17:28:57.224485+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7541:CoreData: error:   File Permissions: 	
+7542:2026-11-21 17:28:57.228186+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7543:CoreData: error: d
+7544:2026-11-21 17:28:57.228248+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7545:CoreData: error:   755
+7546:2026-11-21 17:28:57.228293+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7547:CoreData: error:   component is not a symbolic link
+7548:2026-11-21 17:28:57.228354+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7549:CoreData: error:   component is readable
+7550:2026-11-21 17:28:57.228402+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7551:CoreData: error:   component is writeable
+7552:2026-11-21 17:28:57.228453+0000 FarvaTrack[14362:47124] [error] CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library
+7553:CoreData: error: Information for /Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library
+7554:2026-11-21 17:28:57.229117+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Device ID: 	0
+7555:CoreData: error:   File Device ID: 	0
+7556:2026-11-21 17:28:57.229166+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Device ID: 		16777226
+7557:CoreData: error:   Device ID: 		16777226
+7558:2026-11-21 17:28:57.229206+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Size: 		160 bytes
+7559:CoreData: error:   File Size: 		160 bytes
+7560:2026-11-21 17:28:57.229242+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File inode: 		3675070
+7561:CoreData: error:   File inode: 		3675070
+7562:2026-11-21 17:28:57.229277+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File user ID: 		501
+7563:CoreData: error:   File user ID: 		501
+7564:2026-11-21 17:28:57.229312+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File group ID: 		20
+7565:CoreData: error:   File group ID: 		20
+7566:2026-11-21 17:28:57.229989+0000 FarvaTrack[14362:47124] [error] CoreData: error:   File Permissions:
+7567:CoreData: error:   File Permissions: 	
+7568:2026-11-21 17:28:57.230033+0000 FarvaTrack[14362:47124] [error] CoreData: error: d
+7569:CoreData: error: d
+7570:2026-11-21 17:28:57.230070+0000 FarvaTrack[14362:47124] [error] CoreData: error:   755
+7571:CoreData: error:   755
+7572:2026-11-21 17:28:57.230107+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is not a symbolic link
+7573:CoreData: error:   component is not a symbolic link
+7574:2026-11-21 17:28:57.230168+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is readable
+7575:CoreData: error:   component is readable
+7576:2026-11-21 17:28:57.230218+0000 FarvaTrack[14362:47124] [error] CoreData: error:   component is writeable
+7577:CoreData: error:   component is writeable
+7578:2026-11-21 17:28:57.230288+0000 FarvaTrack[14362:47124] [error] CoreData: error: Failed to stat path '/Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application Support', errno 2 / No such file or directory.
+7579:CoreData: error: Failed to stat path '/Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application Support', errno 2 / No such file or directory.
+7580:2026-11-21 17:28:57.231596+0000 FarvaTrack[14362:47124] [error] CoreData: error:   Sandbox access to file-write-create denied
+7581:CoreData: error:   Sandbox access to file-write-create denied
+7582:2026-11-21 17:28:57.231946+0000 FarvaTrack[14362:47124] [error] CoreData: error: addPersistentStoreWithType:configuration:URL:options:error: returned error NSCocoaErrorDomain (512)
+7583:CoreData: error: addPersistentStoreWithType:configuration:URL:options:error: returned error NSCocoaErrorDomain (512)
+7584:2026-11-21 17:28:57.232015+0000 FarvaTrack[14362:47124] [error] CoreData: error: userInfo:
+7585:CoreData: error: userInfo:
+7586:2026-11-21 17:28:57.232530+0000 FarvaTrack[14362:47124] [error] CoreData: error: 	reason : Failed to create file; code = 2
+7587:CoreData: error: 	reason : Failed to create file; code = 2
+7588:2026-11-21 17:28:57.232589+0000 FarvaTrack[14362:47124] [error] CoreData: error: storeType: SQLite
+7589:CoreData: error: storeType: SQLite
+7590:2026-11-21 17:28:57.232636+0000 FarvaTrack[14362:47124] [error] CoreData: error: configuration: default
+7591:CoreData: error: configuration: default
+7592:2026-11-21 17:28:57.232728+0000 FarvaTrack[14362:47124] [error] CoreData: error: URL: file:///Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application%20Support/default.store
+7593:CoreData: error: URL: file:///Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application%20Support/default.store
+7599:2026-11-21 17:28:57.234756+0000 FarvaTrack[14362:47124] [error] CoreData: error: <NSPersistentStoreCoordinator: 0x600002c14180>: Attempting recovery from error encountered during addPersistentStore: 0x600000c0cdb0 Error Domain=NSCocoaErrorDomain Code=512 "The file couldn’t be saved." UserInfo={reason=Failed to create file; code = 2}
+7600:CoreData: error: <NSPersistentStoreCoordinator: 0x600002c14180>: Attempting recovery from error encountered during addPersistentStore: 0x600000c0cdb0 Error Domain=NSCocoaErrorDomain Code=512 "The file couldn’t be saved." UserInfo={reason=Failed to create file; code = 2}
+7601:2026-11-21 17:28:57.234903+0000 FarvaTrack[14362:47124] [error] CoreData: error: During recovery, parent directory path reported as missing
+7602:CoreData: error: During recovery, parent directory path reported as missing
+7603:2026-11-21 17:28:57.249018+0000 FarvaTrack[14362:47124] [error] CoreData: error: Recovery attempt while adding <NSPersistentStoreDescription: 0x600000c0cdb0> (type: SQLite, url: file:///Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application%20Support/default.store) was successful!
+7604:CoreData: error: Recovery attempt while adding <NSPersistentStoreDescription: 0x600000c0cdb0> (type: SQLite, url: file:///Users/runner/Library/Developer/CoreSimulator/Devices/B290E327-433A-4878-BC55-828A994DCA6C/data/Containers/Data/Application/5A35502E-4C8C-455C-B8EC-C32D29E95AF1/Library/Application%20Support/default.store) was successful!
+7620:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.341 (0.601) seconds
+7629:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.070 (0.071) seconds
+7640:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.084) seconds
+7659:	 Executed 8 tests, with 0 failures (0 unexpected) in 0.041 (0.171) seconds
