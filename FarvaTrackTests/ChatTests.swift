@@ -104,7 +104,7 @@ final class ChatModelTests: XCTestCase {
         XCTAssertEqual(ChatMessageType(rawOrUnknown: "text"), .text)
         XCTAssertEqual(ChatMessageType(rawOrUnknown: "sticker"), .sticker)
         XCTAssertEqual(ChatMessageType(rawOrUnknown: "hologram"), .unknown, "ileride eklenecek türler eski sürümü çökertmez")
-        XCTAssertEqual(ChatMessageType.sendable, [.text])
+        XCTAssertEqual(ChatMessageType.sendable, [.text, .image, .video])
     }
 
     func testChatIDIsSymmetricAndSorted() {

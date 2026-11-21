@@ -110,6 +110,9 @@ final class ChatViewModel {
     private var typingTask: Task<Void, Never>?
     private var uploadTasks: [String: Task<Void, Never>] = [:]
     private var thumbnailLoads: Set<String> = []
+    /// Ağ hatasından sonra orijinal yüklemesi bu zamana kadar kendiliğinden yeniden denenmez.
+    private var uploadBackoff: [String: Date] = [:]
+    static let uploadRetryDelay: TimeInterval = 20
 
     init(
         sync: ChatSyncing = ChatService(),
@@ -189,6 +192,7 @@ final class ChatViewModel {
         uploadTasks.values.forEach { $0.cancel() }
         uploadTasks = [:]
         uploadProgress = [:]
+        uploadBackoff = [:]
         downloadProgress = [:]
         thumbnailLoads = []
         roomSubscription?.cancel()
@@ -226,6 +230,8 @@ final class ChatViewModel {
     func handleForeground() async {
         tick()
         markVisibleAsRead()
+        // Öne gelince bekleme süresi beklenmez: bağlantı büyük olasılıkla değişti.
+        uploadBackoff = [:]
         await flushOutbox()
     }
 
@@ -538,6 +544,7 @@ final class ChatViewModel {
     func retry(_ item: ChatMessageItem) {
         guard item.status == .failed, let record = cachedRecord(for: item.id) else { return }
         record.sendState = .pending
+        uploadBackoff[item.id] = nil
         let operations = pendingOperations().filter { $0.messageID == item.id }
         if let stage = record.uploadStage, stage >= .original, record.media != nil {
             // Mesaj belgesi sunucuda; yalnızca orijinal dosya yeniden yüklenir.
@@ -927,8 +934,10 @@ final class ChatViewModel {
     /// Önizlemesi yüklenmiş, belgesi sunucuda olan mesajların orijinallerini paralel yükler.
     func startMediaUploads() {
         guard userID != nil else { return }
+        let current = clock()
         for operation in pendingOperations() where operation.kind == .uploadOriginal && uploadTasks[operation.messageID] == nil {
             let messageID = operation.messageID
+            if let retryAt = uploadBackoff[messageID], retryAt > current { continue }
             guard let record = cachedRecord(for: messageID), record.sendState != .failed,
                   let stage = record.uploadStage, stage >= .original, !hasPendingCreate(messageID) else { continue }
             let chatID = operation.chatID
@@ -967,6 +976,7 @@ final class ChatViewModel {
             moveOutgoingToCache(current)
             removeOperations(for: messageID, kinds: [.uploadOriginal])
             uploadProgress[messageID] = nil
+            uploadBackoff[messageID] = nil
             save()
             reloadMessages()
         } catch is CancellationError {
@@ -975,8 +985,13 @@ final class ChatViewModel {
             uploadProgress[messageID] = nil
             switch AppError.map(error) {
             case .network, .firebaseNotConfigured, .notAuthenticated:
-                // Bağlantı gelince (uygulama öne gelince) kaldığı aşamadan sürer.
-                break
+                // Bağlantı gelince (uygulama öne gelince ya da kısa bir beklemeden sonra) kaldığı aşamadan sürer.
+                uploadBackoff[messageID] = clock().addingTimeInterval(Self.uploadRetryDelay)
+                let delay = Self.uploadRetryDelay
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(delay))
+                    self?.startMediaUploads()
+                }
             default:
                 if let operation = pendingOperations().first(where: { $0.messageID == messageID && $0.kind == .uploadOriginal }) {
                     operation.attempts += 1
