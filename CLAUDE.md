@@ -32,7 +32,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A tamam; 8B–8H planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8B tamam; 8C–8H planlandı |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -47,7 +47,10 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Mesaj silme (benden/herkesten), yanıtlama (alıntı) ve kopyalama.
 - Hesap silme ve veri dışa aktarmaya sohbet verisinin eklenmesi.
 
-**8B: Medya + kamera**
+**8B: Medya + kamera** (Tamamlandı)
+- Uygulandığı haliyle: PHPicker (`preferredAssetRepresentationMode = .current`) ve AVFoundation kamera (HEIC/HEVC); gönderirken Orijinal (varsayılan, bayt bayt kopya) / Hızlı (2048 px JPEG, 720p MP4). Storage yolu `chats/{chatId}/media/{messageId}/thumb.jpg` + `original.<uzantı>`; kurallar `firebase/storage.rules` (üyelik `firestore.get` ile), `firebase.json` ikisini de gösterir.
+- Akış: `ChatMediaProcessor` önizlemeyi cihazda üretir → `.create` işlemi önce önizlemeyi yükler, sonra `media.status = uploading` ile mesajı yazar → `.uploadOriginal` işlemi sıralı kuyruğu bekletmeden `putFile` (resumable) ile orijinali yükler → `status = ready`. Aşama `ChatMessageRecord.uploadStage`'de; ağ hatasında 20 sn bekleyip ya da uygulama öne gelince kaldığı aşamadan sürer. Gönderilecek dosyalar Application Support'ta, indirilenler Caches'ta (`ChatMediaFiles`).
+- Servisler: `ChatMediaStoring`/`ChatMediaStorage`, `ChatMediaProcessing`/`ChatMediaProcessor`; görüntüleyici `ChatMediaViewer` (yakınlaştırma, video, Fotoğraflar'a orijinal kaydetme).
 - Fotoğraf ve videoyu kalite kaybı olmadan gönderme (orijinal dosya Firebase Storage'a; sohbette önizleme küçük resmi).
 - WhatsApp benzeri anlık kamera: sohbetten tek dokunuşla foto çek / basılı tutarak video kaydet.
 - Yükleme ilerlemesi, iptal ve yeniden deneme; büyük dosyalar için arka planda yükleme.
