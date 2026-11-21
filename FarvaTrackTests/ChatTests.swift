@@ -284,8 +284,12 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // Arka plandaki gönderim / "yazıyor" görevleri bitmeden bellek içi veritabanı bırakılmaz.
+        await settleTasks()
         sut.reset()
+        await settleTasks()
         sut = nil
+        sync = nil
         container = nil
         try await super.tearDown()
     }
