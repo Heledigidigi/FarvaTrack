@@ -303,7 +303,7 @@ final class ChatViewModelTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
         container = try ModelContainer(
-            for: ChatMessageRecord.self, ChatPendingOperation.self,
+            for: ChatMessageRecord.self, ChatPendingOperation.self, ChatPlacementRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         sync = MockChatSync()
