@@ -32,14 +32,15 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | Planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A tamam; 8B–8H planlandı |
 
 
 ### Aşama 8: Sohbet (plan)
 
 İki kişilik özel sohbet modülü (`Features/Chat`). Ücretli Apple Developer hesabı alınacakmış gibi tasarlanır: APNs, CallKit ve PushKit kodda hazır olur; hesap gelene kadar bu yetenekler kapalı/uyarılı çalışır, ücretsiz imzalı kurulumda uygulama çökmez.
 
-**8A: Temel sohbet**
+**8A: Temel sohbet** (Tamamlandı)
+- Uygulandığı haliyle: `Sohbet` sekmesi (sekme çubuğu 5'te kalsın diye Su, Özet'ten açılan `AppRoute.water` oldu); eşleşme `chatInvites/{kod}` (6 karakter, 24 saat, tek kullanım) ile; oda kimliği `<küçük uid>_<büyük uid>`; `ChatSyncing`/`ChatService`, `ChatViewModel`, SwiftData `ChatMessageRecord` + `ChatPendingOperation` (çevrimdışı kuyruk); tepki, düzenleme (15 dk), mesaj arama da eklendi.
 - İki kullanıcı arasında tek bir sohbet odası; Firestore `chats/{chatId}/messages` ve yalnızca iki katılımcının okuyup yazabildiği kurallar.
 - Metin mesajı gönderme/alma, anlık dinleyici (snapshot listener), SwiftData'da çevrimdışı önbellek ve gönderilemeyenler için kuyruk.
 - Mesaj durumları: gönderiliyor, iletildi, okundu; "yazıyor…" göstergesi.
