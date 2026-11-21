@@ -12,14 +12,20 @@ struct FarvaTrackApp: App {
         // Plist yoksa başlatılmaz; uygulama kurulum ekranıyla açılır (çökmez).
         FirebaseBootstrap.configureIfPossible()
 
-        // Yeni SwiftData modelleri sonraki aşamalarda bu şemaya eklenecek.
         let container: ModelContainer
         do {
             container = try ModelContainer(
                 for: LocalUserProfile.self,
                 Workout.self,
                 WorkoutEntry.self,
-                Exercise.self
+                Exercise.self,
+                MealEntry.self,
+                CustomFood.self,
+                FavoriteFood.self,
+                WaterEntry.self,
+                SleepEntry.self,
+                WeightEntry.self,
+                MeasurementEntry.self
             )
         } catch {
             fatalError("SwiftData ModelContainer oluşturulamadı: \(error)")

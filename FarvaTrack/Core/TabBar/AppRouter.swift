@@ -70,6 +70,10 @@ extension AppRoute {
         switch self {
         case .steps:
             StepsView()
+        case .sleep:
+            SleepView()
+        case .weight:
+            WeightView()
         default:
             ComingSoonView(title: title, systemImage: systemImage)
         }

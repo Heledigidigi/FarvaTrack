@@ -8,7 +8,7 @@ SwiftUI ile yazılmış fitness ve sağlık takip uygulaması (iOS 17+, MVVM, Sw
 |---|---|---|
 | 1 | Giriş / kayıt (e-posta, Apple), onboarding, sekmeler, Özet ekranı | Tamam |
 | 2 | Egzersiz, adım (HealthKit) ve adım widget'ı | Tamam |
-| 3 | Beslenme, su, uyku, kilo | Sırada |
+| 3 | Beslenme, su, uyku, kilo | Tamam |
 | 4 | Atık sayacı, istatistikler, rozetler, hatırlatıcılar | Sırada |
 | 5 | Profil, ayarlar, hesap silme, imzalama | Sırada |
 

@@ -8,6 +8,7 @@ enum Palette {
     static let background = Color(red: 0.055, green: 0.055, blue: 0.07)  // #0E0E12
     static let track = Color.white.opacity(0.1)
     static let secondary = Color.white.opacity(0.65)
+    static let water = Color(red: 0.30, green: 0.64, blue: 1.0)          // #4DA3FF
 }
 
 // MARK: - Adım widget'ı
@@ -117,8 +118,8 @@ struct StepsWidget: Widget {
 
 @main
 struct FarvaTrackWidgetBundle: WidgetBundle {
-    // Sonraki aşamalarda etkileşimli su ve sayaç widget'ları eklenecek.
     var body: some Widget {
         StepsWidget()
+        WaterWidget()
     }
 }

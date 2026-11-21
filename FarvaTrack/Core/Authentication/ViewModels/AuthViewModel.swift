@@ -214,6 +214,7 @@ final class AuthViewModel {
         do {
             try service.signOut()
             clearCache()
+            SharedStore.clearAll()      // widget'lar önceki hesabın verisini göstermesin
             resetForm()
             currentUser = nil
             authState = .unauthenticated

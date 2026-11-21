@@ -1,8 +1,8 @@
 import Foundation
 import SwiftData
 
-/// Özet ekranının gerçek veri kaynağı: bugünün antrenmanları (SwiftData) ve adım/mesafe/kalori (HealthKit).
-/// Beslenme, su, uyku ve kilo modülleri eklendikçe genişleyecek.
+/// Özet ekranının gerçek veri kaynağı: bugünün antrenman, beslenme, su, uyku ve kilo kayıtları (SwiftData)
+/// ile adım/mesafe/kalori (HealthKit).
 struct LiveDashboardDataSource: DashboardDataSource {
     let context: ModelContext
     let ownerID: String
@@ -25,7 +25,30 @@ struct LiveDashboardDataSource: DashboardDataSource {
         let workoutKcal = workouts.reduce(0) { $0 + $1.caloriesBurned }
         summary.workoutMinutes = Int(workouts.reduce(0) { $0 + $1.durationMinutes }.rounded())
 
-        // 2) HealthKit (izin yoksa boş döner, hata değil)
+        // 2) Beslenme, su, uyku, kilo
+        let meals = try context.fetch(FetchDescriptor<MealEntry>(
+            predicate: #Predicate { $0.ownerID == owner && $0.date >= today && $0.date <= end }
+        ))
+        summary.caloriesConsumed = Int(meals.reduce(0) { $0 + $1.calories }.rounded())
+
+        let water = try context.fetch(FetchDescriptor<WaterEntry>(
+            predicate: #Predicate { $0.ownerID == owner && $0.date >= today && $0.date <= end }
+        ))
+        summary.waterMl = water.reduce(0) { $0 + $1.amountMl }
+
+        let sleep = try context.fetch(FetchDescriptor<SleepEntry>(
+            predicate: #Predicate { $0.ownerID == owner && $0.day == today }
+        ))
+        summary.sleepHours = sleep.first?.durationHours
+
+        var weightDescriptor = FetchDescriptor<WeightEntry>(
+            predicate: #Predicate { $0.ownerID == owner },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        weightDescriptor.fetchLimit = 1
+        summary.latestWeightKg = try context.fetch(weightDescriptor).first?.weightKg
+
+        // 3) HealthKit (izin yoksa boş döner, hata değil)
         var activity: [DailyActivity] = []
         if health.isHealthDataAvailable {
             let weekAgo = Calendar.current.date(byAdding: .day, value: -6, to: today) ?? today
@@ -44,7 +67,7 @@ struct LiveDashboardDataSource: DashboardDataSource {
         summary.steps = steps
         summary.distanceKm = distanceKm
 
-        // 3) Yakılan kalori (çifte sayımı önleyen kural)
+        // 4) Yakılan kalori (çifte sayımı önleyen kural)
         let healthKcal = todayActivity?.activeEnergyKcal ?? 0
         let burned: Double
         if healthKcal > 0 {
@@ -52,13 +75,13 @@ struct LiveDashboardDataSource: DashboardDataSource {
         } else {
             let walking = CalorieCalculator.walkingCalories(
                 distanceKm: distanceKm,
-                weightKg: weightKg ?? Constants.Training.fallbackWeightKg
+                weightKg: summary.latestWeightKg ?? weightKg ?? Constants.Training.fallbackWeightKg
             )
             burned = walking + workoutKcal
         }
         summary.caloriesBurned = Int(burned.rounded())
 
-        // 4) Widget özeti
+        // 5) Widget özeti
         if health.isHealthDataAvailable {
             SharedStore.save(StepsSnapshot(steps: steps, goal: stepGoal, distanceKm: distanceKm, updatedAt: .now))
         }

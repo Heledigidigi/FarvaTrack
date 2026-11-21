@@ -13,13 +13,35 @@ struct StepsSnapshot: Codable, Equatable {
     static let empty = StepsSnapshot(steps: 0, goal: 8_000, distanceKm: 0, updatedAt: .distantPast)
 }
 
+struct WaterSnapshot: Codable, Equatable {
+    var totalMl: Int
+    var goalMl: Int
+    var updatedAt: Date
+
+    static let empty = WaterSnapshot(totalMl: 0, goalMl: 2_500, updatedAt: .distantPast)
+}
+
+/// Widget'tan eklenmiş ama henüz uygulamaya aktarılmamış su kaydı.
+struct PendingWaterAdd: Codable, Equatable, Identifiable {
+    let id: UUID
+    let amountMl: Int
+    let date: Date
+}
+
 /// Uygulama ile widget arasındaki paylaşılan depo (App Group).
 enum SharedStore {
     /// Config/*.entitlements içindeki App Group kimliğiyle aynı olmalı.
     static let appGroupID = "group.com.farvatrack.shared"
     static let stepsWidgetKind = "StepsWidget"
+    static let waterWidgetKind = "WaterWidget"
+
+    /// Yanlış dokunmalara karşı su sınırları (uygulama ve widget aynı değerleri kullanır).
+    static let maxSingleWaterMl = 2_000
+    static let maxDailyWaterMl = 6_000
 
     private static let stepsKey = "stepsSnapshot"
+    private static let waterKey = "waterSnapshot"
+    private static let pendingWaterKey = "pendingWaterAdds"
 
     /// App Group yoksa (ör. imzasız test derlemesi) standart depoya düşer; uygulama çalışmaya devam eder.
     static var defaults: UserDefaults {
@@ -50,8 +72,58 @@ enum SharedStore {
         WidgetCenter.shared.reloadTimelines(ofKind: stepsWidgetKind)
     }
 
+    // MARK: Su
+    static func loadWater() -> WaterSnapshot? {
+        guard let data = defaults.data(forKey: waterKey) else { return nil }
+        return try? JSONDecoder().decode(WaterSnapshot.self, from: data)
+    }
+
+    static func saveWater(_ snapshot: WaterSnapshot) {
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        defaults.set(data, forKey: waterKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: waterWidgetKind)
+    }
+
+    static func pendingWaterAdds() -> [PendingWaterAdd] {
+        guard let data = defaults.data(forKey: pendingWaterKey) else { return [] }
+        return (try? JSONDecoder().decode([PendingWaterAdd].self, from: data)) ?? []
+    }
+
+    /// Yalnızca verilen kayıtları kuyruktan siler (aradan widget yeni kayıt eklemiş olabilir).
+    static func removePendingWater(ids: [UUID]) {
+        let remaining = pendingWaterAdds().filter { !ids.contains($0.id) }
+        defaults.set(try? JSONEncoder().encode(remaining), forKey: pendingWaterKey)
+    }
+
+    /// Widget butonu çağırır: kuyruğa ekler ve widget'ın gösterdiği toplamı hemen günceller.
+    static func addWaterFromWidget(amountMl: Int, now: Date = .now) {
+        guard (1...maxSingleWaterMl).contains(amountMl) else { return }
+
+        var snapshot = loadWater() ?? .empty
+        if !Calendar.current.isDate(snapshot.updatedAt, inSameDayAs: now) {
+            snapshot.totalMl = 0
+        }
+        guard snapshot.totalMl + amountMl <= maxDailyWaterMl else { return }
+
+        var pending = pendingWaterAdds()
+        pending.append(PendingWaterAdd(id: UUID(), amountMl: amountMl, date: now))
+        defaults.set(try? JSONEncoder().encode(pending), forKey: pendingWaterKey)
+
+        snapshot.totalMl += amountMl
+        snapshot.updatedAt = now
+        saveWater(snapshot)
+    }
+
+    /// Çıkışta: bekleyen su kuyruğu başka bir hesaba aktarılmasın.
+    static func clearWater() {
+        defaults.removeObject(forKey: waterKey)
+        defaults.removeObject(forKey: pendingWaterKey)
+        WidgetCenter.shared.reloadTimelines(ofKind: waterWidgetKind)
+    }
+
     /// Çıkışta veya hesap silmede tüm widget verilerini temizler.
     static func clearAll() {
         clearSteps()
+        clearWater()
     }
 }
