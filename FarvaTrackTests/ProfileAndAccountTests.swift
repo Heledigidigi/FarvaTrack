@@ -98,6 +98,7 @@ final class AccountManagementTests: XCTestCase {
             MealEntry.self, CustomFood.self, FavoriteFood.self, WaterEntry.self,
             SleepEntry.self, WeightEntry.self, MeasurementEntry.self, WasteEntry.self,
             WorkoutTemplate.self, TrainingProgram.self, ManualStepEntry.self,
+            ChatMessageRecord.self, ChatPendingOperation.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         sut = AuthViewModel(service: service, modelContext: container.mainContext)
@@ -124,8 +125,13 @@ final class AccountManagementTests: XCTestCase {
         context.insert(WaterEntry(ownerID: "someone-else", amountMl: 300))
         context.insert(WasteEntry(ownerID: "uid-1"))
         context.insert(WeightEntry(ownerID: "uid-1", date: .now, weightKg: 70))
+        let chatMessage = ChatMessageDTO(id: "m1", senderID: "uid-1", text: "selam", createdAt: .now)
+        context.insert(ChatMessageRecord(dto: chatMessage, ownerID: "uid-1", chatID: "c", sendState: .sent))
+        context.insert(ChatMessageRecord(dto: chatMessage, ownerID: "someone-else", chatID: "c", sendState: .sent))
+        context.insert(ChatPendingOperation(ownerID: "uid-1", chatID: "c", messageID: "m1", kind: .markRead, createdAt: .now))
         try context.save()
         UserDefaults.standard.set(["x"], forKey: "pendingWaterDeletes.uid-1")
+        ChatRoomCache(defaults: .standard).save(ChatRoomDTO(id: "c", members: ["a", "uid-1"], createdAt: .now), userID: "uid-1")
 
         let ok = await sut.deleteAccount(password: "Sifre1234!")
         XCTAssertTrue(ok)
@@ -139,6 +145,9 @@ final class AccountManagementTests: XCTestCase {
         XCTAssertTrue(try context.fetch(FetchDescriptor<WeightEntry>()).isEmpty)
         XCTAssertTrue(try context.fetch(FetchDescriptor<LocalUserProfile>()).isEmpty)
         XCTAssertNil(UserDefaults.standard.array(forKey: "pendingWaterDeletes.uid-1"))
+        XCTAssertEqual(try context.fetch(FetchDescriptor<ChatMessageRecord>()).map(\.ownerID), ["someone-else"])
+        XCTAssertTrue(try context.fetch(FetchDescriptor<ChatPendingOperation>()).isEmpty)
+        XCTAssertNil(ChatRoomCache(defaults: .standard).load(userID: "uid-1"))
     }
 
     func testDeleteAccountRecentLoginMessage() async {
@@ -168,12 +177,19 @@ final class AccountManagementTests: XCTestCase {
         context.insert(WaterEntry(ownerID: "uid-1", amountMl: 250))
         context.insert(WaterEntry(ownerID: "other", amountMl: 300))
         context.insert(SleepEntry(ownerID: "uid-1", bedtime: .now.addingTimeInterval(-8 * 3_600), wakeTime: .now, quality: 4))
+        let visible = ChatMessageRecord(dto: ChatMessageDTO(id: "m1", senderID: "uid-1", text: "merhaba", createdAt: .now), ownerID: "uid-1", chatID: "c", sendState: .sent)
+        let hidden = ChatMessageRecord(dto: ChatMessageDTO(id: "m2", senderID: "x", text: "gizli", createdAt: .now), ownerID: "uid-1", chatID: "c", sendState: .sent)
+        hidden.hiddenForMe = true
+        context.insert(visible)
+        context.insert(hidden)
+        context.insert(ChatMessageRecord(dto: ChatMessageDTO(id: "m3", senderID: "x", text: "başkası", createdAt: .now), ownerID: "other", chatID: "c", sendState: .sent))
         try context.save()
 
         let export = try DataExporter.makeExport(user: sut.currentUser!, context: context)
         XCTAssertEqual(export.water.map(\.amountMl), [250])
         XCTAssertEqual(export.sleep.count, 1)
         XCTAssertEqual(export.profile.email, "a@b.com")
+        XCTAssertEqual(export.chatMessages.map(\.text), ["merhaba"], "yalnızca kendi önbelleği, 'benden sil' ile gizlenenler hariç")
 
         let url = try DataExporter.writeFile(user: sut.currentUser!, context: context)
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))

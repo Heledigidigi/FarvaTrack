@@ -16,6 +16,12 @@ enum Constants {
         static let programs = "programs"
         static let manualSteps = "manualSteps"
 
+        /// Sohbet: `chats/{chatId}/messages/{id}` ve `chatInvites/{code}` (kullanıcı altında değil, iki kişiye ortak).
+        /// Hesap silinirken `ChatSyncing.purgeUserData` ile temizlenir.
+        static let chats = "chats"
+        static let chatMessages = "messages"
+        static let chatInvites = "chatInvites"
+
         /// Hesap silinirken temizlenen `users/{uid}` alt koleksiyonları.
         static let userSubcollections = [workouts, meals, water, sleep, weight, measurements, waste, wasteDaily, library, templates, programs, manualSteps]
     }

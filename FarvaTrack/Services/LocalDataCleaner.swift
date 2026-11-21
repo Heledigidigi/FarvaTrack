@@ -21,6 +21,8 @@ enum LocalDataCleaner {
         try delete(WorkoutTemplate.self, context: context) { $0.ownerID == ownerID }
         try delete(TrainingProgram.self, context: context) { $0.ownerID == ownerID }
         try delete(ManualStepEntry.self, context: context) { $0.ownerID == ownerID }
+        try delete(ChatMessageRecord.self, context: context) { $0.ownerID == ownerID }
+        try delete(ChatPendingOperation.self, context: context) { $0.ownerID == ownerID }
         try delete(LocalUserProfile.self, context: context) { $0.uid == ownerID }
         try context.save()
 
@@ -28,6 +30,7 @@ enum LocalDataCleaner {
             defaults.removeObject(forKey: "pending\(scope)Deletes.\(ownerID)")
         }
         UserDefaultsLiveSessionStore(defaults: defaults).clear(userID: ownerID)
+        ChatRoomCache(defaults: defaults).clear(userID: ownerID)
     }
 
     /// Nesneleri tek tek siler; böylece ilişkilerdeki `cascade` kuralı (antrenman → egzersizler) uygulanır.

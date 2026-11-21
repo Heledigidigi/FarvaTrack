@@ -214,6 +214,11 @@ final class FirebaseManager: FirebaseServicing {
             }
         }
 
+        // Sohbet iki kişiye ortaktır: hesap silinince oda, mesajlar ve davet kodları da kaldırılır.
+        try await perform {
+            try await ChatService().purgeUserData(userID: uid)
+        }
+
         // Profil fotoğrafı yoksa ya da Storage kurulmadıysa hata yok sayılır.
         try? await storage.reference().child("\(Constants.StoragePath.profileImages)/\(uid).jpg").delete()
 

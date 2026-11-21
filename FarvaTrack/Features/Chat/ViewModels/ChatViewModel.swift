@@ -1,0 +1,797 @@
+import Foundation
+import SwiftData
+import Observation
+
+/// Ekranda gösterilen tek mesaj.
+struct ChatMessageItem: Identifiable, Equatable {
+    let message: ChatMessageDTO
+    let isMine: Bool
+    /// Yalnızca kendi mesajlarımızda.
+    let status: ChatMessageStatus?
+    let myReaction: String?
+    let canEdit: Bool
+
+    var id: String { message.id }
+
+    /// Bubble altında gösterilecek tepkiler (aynı emoji bir kez, sayısıyla).
+    var reactionSummary: [(emoji: String, count: Int)] {
+        guard !message.deleted else { return [] }
+        var counts: [String: Int] = [:]
+        for emoji in message.reactions.values { counts[emoji, default: 0] += 1 }
+        return counts.sorted { $0.key < $1.key }.map { ($0.key, $0.value) }
+    }
+
+    var displayText: String {
+        if message.deleted { return "Bu mesaj silindi" }
+        return message.type == .text ? message.text : message.type.placeholder
+    }
+
+    static func == (lhs: ChatMessageItem, rhs: ChatMessageItem) -> Bool {
+        lhs.message == rhs.message && lhs.isMine == rhs.isMine && lhs.status == rhs.status
+            && lhs.myReaction == rhs.myReaction && lhs.canEdit == rhs.canEdit
+    }
+}
+
+@MainActor
+@Observable
+final class ChatViewModel {
+    enum Phase: Equatable {
+        /// Henüz bir kullanıcıyla yapılandırılmadı.
+        case idle
+        /// Sunucudan oda bilgisi bekleniyor.
+        case loading
+        /// Eşleşme yok: davet kodu oluştur / gir.
+        case unpaired
+        case ready
+    }
+
+    // MARK: Durum
+    private(set) var phase: Phase = .idle
+    private(set) var room: ChatRoomDTO?
+    private(set) var messages: [ChatMessageItem] = []
+    private(set) var invite: ChatInvite?
+    private(set) var replyingTo: ChatMessageItem?
+    private(set) var editing: ChatMessageItem?
+    private(set) var searchResults: [ChatMessageItem] = []
+    private(set) var isLoadingOlder = false
+    private(set) var hasMoreOlder = false
+    private(set) var isWorking = false
+    private(set) var unreadCount = 0
+    private(set) var now: Date
+
+    var draft = ""
+    var inviteCodeInput = ""
+    var searchQuery = "" {
+        didSet { if searchQuery != oldValue { updateSearch() } }
+    }
+    var errorMessage: String?
+
+    var hasError: Bool {
+        get { errorMessage != nil }
+        set { if !newValue { errorMessage = nil } }
+    }
+
+    // MARK: Bağımlılıklar
+    private let sync: ChatSyncing
+    private let roomCache: ChatRoomCache
+    private let clock: () -> Date
+    private let makeID: () -> String
+
+    private var context: ModelContext?
+    private(set) var userID: String?
+    private var userName = ""
+    private var roomSubscription: ChatSubscription?
+    private var messagesSubscription: ChatSubscription?
+    private var displayLimit = ChatLimits.pageSize
+    private var remoteExhausted = false
+    private var isVisible = false
+    private var isFlushing = false
+    private var flushRequested = false
+    private var lastTypingSentAt: Date?
+
+    init(
+        sync: ChatSyncing = ChatService(),
+        defaults: UserDefaults = .standard,
+        clock: @escaping () -> Date = { .now },
+        makeID: @escaping () -> String = { UUID().uuidString }
+    ) {
+        self.sync = sync
+        self.roomCache = ChatRoomCache(defaults: defaults)
+        self.clock = clock
+        self.makeID = makeID
+        self.now = clock()
+    }
+
+    // MARK: Türetilen değerler
+
+    var otherMemberID: String? {
+        guard let userID else { return nil }
+        return room?.otherMember(of: userID)
+    }
+
+    var partnerName: String {
+        guard let room, let other = otherMemberID else { return "Sohbet" }
+        return room.displayName(of: other)
+    }
+
+    var isPartnerTyping: Bool {
+        guard let room, let other = otherMemberID else { return false }
+        return room.isTyping(other, now: now)
+    }
+
+    var canSend: Bool {
+        ChatText.sanitizedOutgoing(draft) != nil && room != nil
+    }
+
+    var draftIsTooLong: Bool {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines).count > ChatLimits.maxTextLength
+    }
+
+    // MARK: Yaşam döngüsü
+
+    func configure(context: ModelContext, user: AppUser) {
+        if userID == user.id, self.context != nil {
+            userName = user.displayName
+            return
+        }
+        reset()
+        self.context = context
+        self.userID = user.id
+        self.userName = user.displayName
+
+        if let cached = roomCache.load(userID: user.id) {
+            room = cached
+            phase = .ready
+            reloadMessages()
+            startMessagesListener(chatID: cached.id)
+        } else {
+            phase = .loading
+        }
+
+        roomSubscription = sync.observeRoom(
+            userID: user.id,
+            onChange: { [weak self] room, fromCache in self?.handleRoom(room, isFromCache: fromCache) },
+            onError: { [weak self] error in self?.handleListenerError(error) }
+        )
+        scheduleFlush()
+    }
+
+    /// Çıkış yapıldığında ya da kullanıcı değiştiğinde.
+    func reset() {
+        roomSubscription?.cancel()
+        messagesSubscription?.cancel()
+        roomSubscription = nil
+        messagesSubscription = nil
+        context = nil
+        userID = nil
+        room = nil
+        messages = []
+        invite = nil
+        replyingTo = nil
+        editing = nil
+        searchResults = []
+        draft = ""
+        unreadCount = 0
+        displayLimit = ChatLimits.pageSize
+        remoteExhausted = false
+        hasMoreOlder = false
+        lastTypingSentAt = nil
+        phase = .idle
+    }
+
+    /// Sohbet ekranı görünür/gizli olunca; okundu bilgisi yalnızca ekran açıkken gönderilir.
+    func setVisible(_ visible: Bool) {
+        isVisible = visible
+        if visible {
+            markVisibleAsRead()
+        } else {
+            stopTyping()
+        }
+    }
+
+    /// Uygulama öne gelince bekleyenleri yeniden dener.
+    func handleForeground() async {
+        tick()
+        markVisibleAsRead()
+        await flushOutbox()
+    }
+
+    /// Ekrandaki zamana bağlı bilgiler ("yazıyor…", düzenleme süresi) için periyodik yenileme.
+    func tick() {
+        now = clock()
+        if editing != nil || messages.contains(where: \.canEdit) {
+            reloadMessages()
+        }
+    }
+
+    // MARK: Oda
+
+    func handleRoom(_ newRoom: ChatRoomDTO?, isFromCache: Bool) {
+        guard let userID else { return }
+        if let newRoom {
+            guard newRoom.members.contains(userID) else { return }
+            let changed = room?.id != newRoom.id
+            room = newRoom
+            roomCache.save(newRoom, userID: userID)
+            invite = nil
+            phase = .ready
+            now = clock()
+            if changed {
+                displayLimit = ChatLimits.pageSize
+                remoteExhausted = false
+                reloadMessages()
+                startMessagesListener(chatID: newRoom.id)
+                scheduleFlush()
+            }
+            return
+        }
+
+        // Yerel önbellek boş dönebilir; kesin bilgi sunucudan gelir.
+        if isFromCache {
+            if room == nil { phase = .unpaired }
+            return
+        }
+        if let old = room {
+            // Oda sunucudan kaldırıldı (karşı taraf hesabını sildi).
+            messagesSubscription?.cancel()
+            messagesSubscription = nil
+            purgeLocal(chatID: old.id)
+            roomCache.clear(userID: userID)
+            room = nil
+            messages = []
+        }
+        phase = .unpaired
+    }
+
+    private func handleListenerError(_ error: AppError) {
+        if phase == .loading { phase = room == nil ? .unpaired : .ready }
+        if case .firebaseNotConfigured = error {
+            errorMessage = "Sohbet için Firebase kurulumu gerekli."
+        } else if case .network = error {
+            // Çevrimdışı: önbellek gösterilmeye devam eder.
+        } else {
+            errorMessage = error.errorDescription
+        }
+    }
+
+    // MARK: Eşleşme
+
+    func createInvite() async {
+        guard let userID, !isWorking else { return }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            invite = try await sync.createInvite(ownerID: userID, ownerName: userName, now: clock())
+        } catch {
+            errorMessage = AppError.map(error).errorDescription
+        }
+    }
+
+    @discardableResult
+    func redeemInvite() async -> Bool {
+        guard let userID, !isWorking else { return false }
+        let code = ChatInviteCode.normalize(inviteCodeInput)
+        guard ChatInviteCode.isValid(code) else {
+            errorMessage = "Davet kodu \(ChatInviteCode.length) karakterden oluşur (harf ve rakam)."
+            return false
+        }
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            let newRoom = try await sync.redeemInvite(code: code, userID: userID, userName: userName, now: clock())
+            inviteCodeInput = ""
+            handleRoom(newRoom, isFromCache: false)
+            return true
+        } catch {
+            errorMessage = AppError.map(error).errorDescription
+            return false
+        }
+    }
+
+    // MARK: Mesajlar: uzak değişiklikler
+
+    private func startMessagesListener(chatID: String) {
+        messagesSubscription?.cancel()
+        messagesSubscription = sync.observeRecentMessages(
+            chatID: chatID,
+            limit: ChatLimits.pageSize,
+            onChange: { [weak self] items in self?.handleRemoteMessages(items, chatID: chatID) },
+            onError: { [weak self] error in self?.handleListenerError(error) }
+        )
+    }
+
+    func handleRemoteMessages(_ items: [ChatMessageDTO], chatID: String) {
+        guard room?.id == chatID else { return }
+        // Son sayfa bir sayfadan azsa sunucuda daha eski mesaj yoktur (sayfalama başlamadan önce geçerli).
+        if displayLimit == ChatLimits.pageSize { remoteExhausted = items.count < ChatLimits.pageSize }
+        upsert(items, chatID: chatID)
+        reloadMessages()
+        markVisibleAsRead()
+    }
+
+    /// Sunucudan gelenleri önbelleğe yazar. Kuyrukta bekleyen yerel değişiklik varsa yerel hal kazanır;
+    /// yalnızca karşı tarafın alanları (okundu, onun tepkisi) alınır.
+    private func upsert(_ items: [ChatMessageDTO], chatID: String) {
+        guard let context, let userID, !items.isEmpty else { return }
+        let pending = Set(pendingOperations().map(\.messageID))
+
+        for dto in items {
+            if let record = cachedRecord(for: dto.id) {
+                if pending.contains(dto.id) {
+                    if let readAt = dto.readAt { record.readAt = readAt }
+                    var merged = dto.reactions
+                    merged[userID] = record.reactions[userID]
+                    record.reactions = merged
+                } else {
+                    record.apply(remote: dto)
+                    if dto.senderID == userID {
+                        record.sendState = dto.hasPendingWrites ? .pending : .sent
+                    }
+                }
+            } else {
+                let state: ChatSendState = (dto.senderID == userID && dto.hasPendingWrites) ? .pending : .sent
+                context.insert(ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: state))
+            }
+        }
+        save()
+    }
+
+    // MARK: Gösterim
+
+    func reloadMessages() {
+        guard let context, let userID, let chatID = room?.id else {
+            messages = []
+            unreadCount = 0
+            return
+        }
+        var descriptor = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate { $0.ownerID == userID && $0.chatID == chatID && !$0.hiddenForMe },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = displayLimit + 1
+        let records = (try? context.fetch(descriptor)) ?? []
+        let localHasMore = records.count > displayLimit
+        let pendingCreates = Set(pendingOperations().filter { $0.kind == .create }.map(\.messageID))
+
+        messages = records.prefix(displayLimit).reversed().map { makeItem($0, pendingCreates: pendingCreates) }
+        hasMoreOlder = localHasMore || !remoteExhausted
+
+        let unread = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate {
+                $0.ownerID == userID && $0.chatID == chatID && $0.senderID != userID
+                    && $0.readAt == nil && !$0.hiddenForMe && !$0.deletedForEveryone
+            }
+        )
+        unreadCount = (try? context.fetchCount(unread)) ?? 0
+
+        if !searchQuery.isEmpty { updateSearch() }
+    }
+
+    private func makeItem(_ record: ChatMessageRecord, pendingCreates: Set<String>) -> ChatMessageItem {
+        let dto = record.dto
+        let mine = dto.senderID == userID
+        var status: ChatMessageStatus?
+        if mine {
+            if record.sendState == .failed {
+                status = .failed
+            } else if record.sendState == .pending || pendingCreates.contains(dto.id) {
+                status = .sending
+            } else if dto.readAt != nil {
+                status = .read
+            } else {
+                status = .delivered
+            }
+        }
+        let canEdit = mine && dto.type == .text && !dto.deleted && status != .failed
+            && now.timeIntervalSince(dto.createdAt) < ChatLimits.editWindow
+        return ChatMessageItem(
+            message: dto,
+            isMine: mine,
+            status: status,
+            myReaction: userID.flatMap { dto.reactions[$0] },
+            canEdit: canEdit
+        )
+    }
+
+    /// Yukarı kaydırınca bir önceki sayfa: önce sunucudan (boşluk kalmasın diye), çevrimdışıysa önbellekten.
+    func loadOlder() async {
+        guard !isLoadingOlder, hasMoreOlder, let chatID = room?.id else { return }
+        isLoadingOlder = true
+        defer { isLoadingOlder = false }
+
+        let oldest = messages.first?.message.createdAt ?? clock()
+        if !remoteExhausted {
+            do {
+                let older = try await sync.fetchMessages(chatID: chatID, before: oldest, limit: ChatLimits.pageSize)
+                if older.count < ChatLimits.pageSize { remoteExhausted = true }
+                upsert(older, chatID: chatID)
+            } catch {
+                // Çevrimdışı: önbellekteki eski mesajlarla devam edilir.
+            }
+        }
+        displayLimit += ChatLimits.pageSize
+        reloadMessages()
+    }
+
+    // MARK: Gönderme ve düzenleme
+
+    func send() {
+        if editing != nil {
+            commitEdit()
+            return
+        }
+        guard let context, let userID, let chatID = room?.id else { return }
+        guard let text = ChatText.sanitizedOutgoing(draft) else {
+            if draftIsTooLong { errorMessage = "Mesaj en fazla \(ChatLimits.maxTextLength) karakter olabilir." }
+            return
+        }
+        let dto = ChatMessageDTO(
+            id: makeID(),
+            senderID: userID,
+            type: .text,
+            text: text,
+            createdAt: clock(),
+            replyTo: replyingTo.map { ChatReplyReference.make(from: $0.message) }
+        )
+        context.insert(ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending))
+        enqueue(.create, messageID: dto.id)
+        draft = ""
+        replyingTo = nil
+        // Gönderim, sunucudaki "yazıyor" alanını da temizler.
+        lastTypingSentAt = nil
+        save()
+        reloadMessages()
+        scheduleFlush()
+    }
+
+    func beginReply(to item: ChatMessageItem) {
+        guard !item.message.deleted else { return }
+        if editing != nil { draft = "" }
+        editing = nil
+        replyingTo = item
+    }
+
+    func beginEdit(_ item: ChatMessageItem) {
+        guard item.canEdit else { return }
+        replyingTo = nil
+        editing = item
+        draft = item.message.text
+    }
+
+    /// Alıntıyı ya da düzenlemeyi bırakır.
+    func cancelComposerContext() {
+        if editing != nil { draft = "" }
+        editing = nil
+        replyingTo = nil
+    }
+
+    private func commitEdit() {
+        guard let item = editing, let record = cachedRecord(for: item.id) else {
+            cancelComposerContext()
+            return
+        }
+        guard let text = ChatText.sanitizedOutgoing(draft) else {
+            if draftIsTooLong { errorMessage = "Mesaj en fazla \(ChatLimits.maxTextLength) karakter olabilir." }
+            return
+        }
+        defer {
+            editing = nil
+            draft = ""
+            save()
+            reloadMessages()
+            scheduleFlush()
+        }
+        guard text != record.text, !record.deletedForEveryone else { return }
+
+        record.text = text
+        if hasPendingCreate(item.id) {
+            // Henüz sunucuya gitmedi: gönderim zaten güncel metni yollar, "düzenlendi" yazmaz.
+            return
+        }
+        record.editedAt = clock()
+        removeOperations(for: item.id, kinds: [.edit])
+        enqueue(.edit, messageID: item.id, text: text)
+    }
+
+    /// Gönderilemeyen mesajı yeniden kuyruğa alır.
+    func retry(_ item: ChatMessageItem) {
+        guard item.status == .failed, let record = cachedRecord(for: item.id) else { return }
+        record.sendState = .pending
+        if !hasPendingCreate(item.id) { enqueue(.create, messageID: item.id) }
+        save()
+        reloadMessages()
+        scheduleFlush()
+    }
+
+    // MARK: Silme, tepki, kopyalama
+
+    /// Yalnızca bu cihazdan gizler.
+    func deleteForMe(_ item: ChatMessageItem) {
+        guard let record = cachedRecord(for: item.id) else { return }
+        record.hiddenForMe = true
+        clearComposer(ifReferencing: item.id)
+        save()
+        reloadMessages()
+    }
+
+    /// Kendi mesajını iki taraftan da siler ("Bu mesaj silindi" olarak kalır).
+    func deleteForEveryone(_ item: ChatMessageItem) {
+        guard item.isMine, let context, let record = cachedRecord(for: item.id) else { return }
+        clearComposer(ifReferencing: item.id)
+
+        if hasPendingCreate(item.id) {
+            // Sunucuya hiç gitmemiş: tamamen kaldırılır.
+            removeOperations(for: item.id, kinds: nil)
+            context.delete(record)
+        } else {
+            record.deletedForEveryone = true
+            record.text = ""
+            removeOperations(for: item.id, kinds: [.edit, .react])
+            enqueue(.deleteForEveryone, messageID: item.id)
+        }
+        save()
+        reloadMessages()
+        scheduleFlush()
+    }
+
+    /// Aynı emojiye tekrar dokunmak tepkiyi kaldırır.
+    func toggleReaction(_ emoji: String, on item: ChatMessageItem) {
+        guard let userID, !item.message.deleted, let record = cachedRecord(for: item.id) else { return }
+        var reactions = record.reactions
+        let newValue: String? = reactions[userID] == emoji ? nil : emoji
+        reactions[userID] = newValue
+        record.reactions = reactions
+        removeOperations(for: item.id, kinds: [.react])
+        enqueue(.react, messageID: item.id, emoji: newValue)
+        save()
+        reloadMessages()
+        scheduleFlush()
+    }
+
+    /// Panoya kopyalanacak metin (silinmiş / metin dışı mesajlarda yok).
+    func copyText(for item: ChatMessageItem) -> String? {
+        guard !item.message.deleted, item.message.type == .text else { return nil }
+        return item.message.text
+    }
+
+    private func clearComposer(ifReferencing messageID: String) {
+        if replyingTo?.id == messageID { replyingTo = nil }
+        if editing?.id == messageID {
+            editing = nil
+            draft = ""
+        }
+    }
+
+    // MARK: Okundu
+
+    private func markVisibleAsRead() {
+        guard isVisible, let context, let userID, let chatID = room?.id else { return }
+        let descriptor = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate {
+                $0.ownerID == userID && $0.chatID == chatID && $0.senderID != userID && $0.readAt == nil
+            }
+        )
+        let unread = (try? context.fetch(descriptor)) ?? []
+        guard !unread.isEmpty else { return }
+        let readAt = clock()
+        let queued = Set(pendingOperations().filter { $0.kind == .markRead }.map(\.messageID))
+        for record in unread {
+            record.readAt = readAt
+            if !queued.contains(record.messageID) { enqueue(.markRead, messageID: record.messageID) }
+        }
+        save()
+        reloadMessages()
+        scheduleFlush()
+    }
+
+    // MARK: Yazıyor…
+
+    /// Taslak her değiştiğinde görünümden çağrılır; sunucuya en sık `typingThrottle` aralıkla yazar.
+    func draftChanged() {
+        guard let userID, let chatID = room?.id else { return }
+        let isEmpty = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let current = clock()
+        if isEmpty || editing != nil {
+            stopTyping()
+            return
+        }
+        if let last = lastTypingSentAt, current.timeIntervalSince(last) < ChatLimits.typingThrottle { return }
+        lastTypingSentAt = current
+        let sync = sync
+        Task { try? await sync.setTyping(true, chatID: chatID, userID: userID, at: current) }
+    }
+
+    private func stopTyping() {
+        guard lastTypingSentAt != nil, let userID, let chatID = room?.id else { return }
+        lastTypingSentAt = nil
+        let sync = sync
+        let current = clock()
+        Task { try? await sync.setTyping(false, chatID: chatID, userID: userID, at: current) }
+    }
+
+    // MARK: Arama
+
+    private func updateSearch() {
+        guard let context, let userID, let chatID = room?.id,
+              !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            searchResults = []
+            return
+        }
+        let descriptor = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate {
+                $0.ownerID == userID && $0.chatID == chatID && !$0.hiddenForMe && !$0.deletedForEveryone
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        let query = searchQuery
+        let pendingCreates = Set(pendingOperations().filter { $0.kind == .create }.map(\.messageID))
+        searchResults = ((try? context.fetch(descriptor)) ?? [])
+            .filter { ChatText.matches($0.text, query: query) }
+            .map { makeItem($0, pendingCreates: pendingCreates) }
+    }
+
+    /// Arama sonucundaki mesaj ekranda yoksa gösterim penceresini genişletir.
+    @discardableResult
+    func reveal(messageID: String) -> Bool {
+        if messages.contains(where: { $0.id == messageID }) { return true }
+        guard let context, let userID, let chatID = room?.id, let target = cachedRecord(for: messageID) else { return false }
+        let date = target.createdAt
+        let newer = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate {
+                $0.ownerID == userID && $0.chatID == chatID && !$0.hiddenForMe && $0.createdAt >= date
+            }
+        )
+        let count = (try? context.fetchCount(newer)) ?? 0
+        displayLimit = max(displayLimit, count + 10)
+        reloadMessages()
+        return messages.contains { $0.id == messageID }
+    }
+
+    // MARK: Bekleyen kuyruk
+
+    private func enqueue(_ kind: ChatOperationKind, messageID: String, text: String? = nil, emoji: String? = nil) {
+        guard let context, let userID, let chatID = room?.id else { return }
+        context.insert(ChatPendingOperation(
+            ownerID: userID, chatID: chatID, messageID: messageID,
+            kind: kind, text: text, emoji: emoji, createdAt: clock()
+        ))
+    }
+
+    func pendingOperations() -> [ChatPendingOperation] {
+        guard let context, let userID else { return [] }
+        let descriptor = FetchDescriptor<ChatPendingOperation>(
+            predicate: #Predicate { $0.ownerID == userID },
+            sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.kindRaw)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private func hasPendingCreate(_ messageID: String) -> Bool {
+        pendingOperations().contains { $0.messageID == messageID && $0.kind == .create }
+    }
+
+    /// `kinds == nil` ise mesajın tüm bekleyen işlemleri.
+    private func removeOperations(for messageID: String, kinds: Set<ChatOperationKind>?) {
+        guard let context else { return }
+        for operation in pendingOperations() where operation.messageID == messageID {
+            if kinds == nil || kinds!.contains(operation.kind) { context.delete(operation) }
+        }
+    }
+
+    private func scheduleFlush() {
+        Task { await flushOutbox() }
+    }
+
+    /// Kuyruğu sırayla sunucuya yazar. Ağ hatasında durur (sonra yeniden denenir);
+    /// başka bir hatada üç denemeden sonra işlem bırakılır, mesaj "gönderilemedi" olur.
+    func flushOutbox() async {
+        guard !isFlushing else {
+            flushRequested = true
+            return
+        }
+        isFlushing = true
+        defer { isFlushing = false }
+
+        repeat {
+            flushRequested = false
+            await drainOutbox()
+        } while flushRequested
+    }
+
+    private func drainOutbox() async {
+        while let context, let operation = pendingOperations().first {
+            let operationID = operation.id
+            let kind = operation.kind
+            let chatID = operation.chatID
+            let messageID = operation.messageID
+            var batchIDs: [UUID] = [operationID]
+
+            do {
+                switch kind {
+                case .create:
+                    guard let record = cachedRecord(for: messageID), !record.deletedForEveryone else {
+                        context.delete(operation)
+                        save()
+                        continue
+                    }
+                    try await sync.sendMessage(record.dto, chatID: chatID)
+                case .edit:
+                    let text = operation.text ?? cachedRecord(for: messageID)?.text ?? ""
+                    let editedAt = cachedRecord(for: messageID)?.editedAt ?? operation.createdAt
+                    try await sync.editMessage(id: messageID, chatID: chatID, text: text, editedAt: editedAt)
+                case .deleteForEveryone:
+                    try await sync.deleteMessageForEveryone(id: messageID, chatID: chatID)
+                case .react:
+                    try await sync.setReaction(operation.emoji, messageID: messageID, chatID: chatID, userID: operation.ownerID)
+                case .markRead:
+                    // Aynı sohbetteki tüm bekleyen okundu bilgileri tek toplu yazımda gider.
+                    let reads = pendingOperations().filter { $0.kind == .markRead && $0.chatID == chatID }
+                    batchIDs = reads.map(\.id)
+                    let readAt = cachedRecord(for: messageID)?.readAt ?? operation.createdAt
+                    try await sync.markRead(messageIDs: reads.map(\.messageID), chatID: chatID, at: readAt)
+                }
+                finish(batchIDs, kind: kind, messageID: messageID, succeeded: true)
+            } catch {
+                let appError = AppError.map(error)
+                switch appError {
+                case .network, .firebaseNotConfigured, .notAuthenticated:
+                    // Bağlantı gelince yeniden denenir.
+                    return
+                default:
+                    guard let current = pendingOperation(id: operationID) else { continue }
+                    current.attempts += 1
+                    if current.attempts >= 3 {
+                        finish(batchIDs, kind: kind, messageID: messageID, succeeded: false)
+                    } else {
+                        save()
+                        return
+                    }
+                }
+            }
+        }
+    }
+
+    private func finish(_ operationIDs: [UUID], kind: ChatOperationKind, messageID: String, succeeded: Bool) {
+        guard let context else { return }
+        // Bekleme sırasında kullanıcı işlemi iptal etmiş olabilir; yeniden okunur.
+        for id in operationIDs {
+            if let stale = pendingOperation(id: id) { context.delete(stale) }
+        }
+        if kind == .create, let record = cachedRecord(for: messageID), !hasPendingCreate(messageID) {
+            record.sendState = succeeded ? .sent : .failed
+        }
+        save()
+        reloadMessages()
+    }
+
+    // MARK: Önbellek yardımcıları
+
+    private func cachedRecord(for messageID: String) -> ChatMessageRecord? {
+        guard let context, let userID else { return nil }
+        let key = ChatMessageRecord.key(ownerID: userID, messageID: messageID)
+        var descriptor = FetchDescriptor<ChatMessageRecord>(predicate: #Predicate { $0.key == key })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private func pendingOperation(id: UUID) -> ChatPendingOperation? {
+        guard let context else { return nil }
+        var descriptor = FetchDescriptor<ChatPendingOperation>(predicate: #Predicate { $0.id == id })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private func purgeLocal(chatID: String) {
+        guard let context, let userID else { return }
+        let records = (try? context.fetch(FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate { $0.ownerID == userID && $0.chatID == chatID }
+        ))) ?? []
+        records.forEach { context.delete($0) }
+        pendingOperations().filter { $0.chatID == chatID }.forEach { context.delete($0) }
+        save()
+    }
+
+    private func save() {
+        try? context?.save()
+    }
+}

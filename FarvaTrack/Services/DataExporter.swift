@@ -27,6 +27,8 @@ struct DataExport: Codable {
     var workoutTemplates: [WorkoutTemplateDTO]
     var trainingPrograms: [TrainingProgramDTO]
     var manualSteps: [ManualStepDTO]
+    /// Cihazda önbelleğe alınmış sohbet mesajları (iki tarafın mesajları; "benden sil" ile gizlenenler hariç).
+    var chatMessages: [ChatMessageExport]
 }
 
 @MainActor
@@ -52,7 +54,8 @@ enum DataExporter {
             biologicalWaste: try fetch(FetchDescriptor<WasteEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.date)])).map(\.dto),
             workoutTemplates: try fetch(FetchDescriptor<WorkoutTemplate>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.name)])).map(\.dto),
             trainingPrograms: try fetch(FetchDescriptor<TrainingProgram>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(\.dto),
-            manualSteps: try fetch(FetchDescriptor<ManualStepEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.day)])).map(\.dto)
+            manualSteps: try fetch(FetchDescriptor<ManualStepEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.day)])).map(\.dto),
+            chatMessages: try fetch(FetchDescriptor<ChatMessageRecord>(predicate: #Predicate { $0.ownerID == owner && !$0.hiddenForMe }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatMessageExport.init(record:))
         )
     }
 

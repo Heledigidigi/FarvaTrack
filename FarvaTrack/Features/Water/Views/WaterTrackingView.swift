@@ -5,6 +5,9 @@ struct WaterTrackingView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(WaterViewModel.self) private var viewModel
 
+    /// Özet'in gezinme yığınından açıldığında kendi `NavigationStack`'ini kurmaz.
+    var embedsNavigation = true
+
     @State private var showCustomSheet = false
     @State private var showSettings = false
 
@@ -13,7 +16,7 @@ struct WaterTrackingView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        OptionalNavigationStack(enabled: embedsNavigation) {
             Group {
                 if let user = auth.currentUser {
                     WaterContent(
@@ -392,5 +395,19 @@ private struct WaterSettingsSheet: View {
             }
         }
         .presentationDetents([.large])
+    }
+}
+
+/// İstenirse içeriği kendi `NavigationStack`'ine sarar; başka bir yığının içinde açılırken sarmaz.
+struct OptionalNavigationStack<Content: View>: View {
+    let enabled: Bool
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if enabled {
+            NavigationStack { content() }
+        } else {
+            content()
+        }
     }
 }

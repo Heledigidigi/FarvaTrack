@@ -1,0 +1,206 @@
+import Foundation
+import SwiftData
+
+/// Gönderim durumu (yalnızca kendi mesajlarımız için anlamlı).
+enum ChatSendState: String, Codable {
+    /// Bekleyen kuyrukta, sunucuya ulaşmadı.
+    case pending
+    /// Denemeler tükendi; kullanıcı tekrar deneyebilir.
+    case failed
+    /// Sunucuda.
+    case sent
+}
+
+/// Sohbet mesajlarının cihazdaki önbelleği. Uygulama çevrimdışı açılınca sohbet buradan gösterilir.
+@Model
+final class ChatMessageRecord {
+    /// `ownerID|messageID`: aynı cihazda iki hesap aynı sohbeti açsa bile kayıtlar karışmaz.
+    @Attribute(.unique) var key: String
+    var messageID: String
+    /// Önbelleğin sahibi (cihazdaki oturum açmış kullanıcı).
+    var ownerID: String
+    var chatID: String
+    var senderID: String
+    var typeRaw: String
+    var text: String
+    var createdAt: Date
+    var readAt: Date?
+    var replyToID: String?
+    var replyToSenderID: String?
+    var replyToPreview: String?
+    var replyToTypeRaw: String?
+    /// uid → emoji sözlüğünün JSON hali.
+    var reactionsData: Data
+    var editedAt: Date?
+    /// Herkesten silindi (Firestore'daki `deleted`).
+    var deletedForEveryone: Bool
+    /// Yalnızca bu cihazda gizlendi ("benden sil").
+    var hiddenForMe: Bool
+    var sendStateRaw: String
+
+    init(dto: ChatMessageDTO, ownerID: String, chatID: String, sendState: ChatSendState) {
+        self.key = ChatMessageRecord.key(ownerID: ownerID, messageID: dto.id)
+        self.messageID = dto.id
+        self.ownerID = ownerID
+        self.chatID = chatID
+        self.senderID = dto.senderID
+        self.typeRaw = dto.type.rawValue
+        self.text = dto.text
+        self.createdAt = dto.createdAt
+        self.readAt = dto.readAt
+        self.reactionsData = ChatMessageRecord.encode(dto.reactions)
+        self.editedAt = dto.editedAt
+        self.deletedForEveryone = dto.deleted
+        self.hiddenForMe = false
+        self.sendStateRaw = sendState.rawValue
+        self.replyToID = dto.replyTo?.messageID
+        self.replyToSenderID = dto.replyTo?.senderID
+        self.replyToPreview = dto.replyTo?.preview
+        self.replyToTypeRaw = dto.replyTo?.type.rawValue
+    }
+
+    static func key(ownerID: String, messageID: String) -> String { "\(ownerID)|\(messageID)" }
+
+    var type: ChatMessageType { ChatMessageType(rawOrUnknown: typeRaw) }
+
+    var sendState: ChatSendState {
+        get { ChatSendState(rawValue: sendStateRaw) ?? .sent }
+        set { sendStateRaw = newValue.rawValue }
+    }
+
+    var reactions: [String: String] {
+        get { (try? JSONDecoder().decode([String: String].self, from: reactionsData)) ?? [:] }
+        set { reactionsData = ChatMessageRecord.encode(newValue) }
+    }
+
+    var replyTo: ChatReplyReference? {
+        guard let replyToID, let replyToSenderID else { return nil }
+        return ChatReplyReference(
+            messageID: replyToID,
+            senderID: replyToSenderID,
+            preview: replyToPreview ?? "",
+            type: ChatMessageType(rawOrUnknown: replyToTypeRaw ?? "text")
+        )
+    }
+
+    var dto: ChatMessageDTO {
+        ChatMessageDTO(
+            id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
+            readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
+            deleted: deletedForEveryone
+        )
+    }
+
+    /// Sunucudaki hali yazılır; "benden sil" ve gönderim durumu yerel kalır.
+    func apply(remote dto: ChatMessageDTO) {
+        senderID = dto.senderID
+        typeRaw = dto.type.rawValue
+        text = dto.text
+        createdAt = dto.createdAt
+        readAt = dto.readAt
+        reactions = dto.reactions
+        editedAt = dto.editedAt
+        deletedForEveryone = dto.deleted
+        applyReply(dto.replyTo)
+    }
+
+    private func applyReply(_ reply: ChatReplyReference?) {
+        replyToID = reply?.messageID
+        replyToSenderID = reply?.senderID
+        replyToPreview = reply?.preview
+        replyToTypeRaw = reply?.type.rawValue
+    }
+
+    private static func encode(_ reactions: [String: String]) -> Data {
+        (try? JSONEncoder().encode(reactions)) ?? Data("{}".utf8)
+    }
+}
+
+/// Kuyruktaki işlem türü.
+enum ChatOperationKind: String, Codable {
+    case create, edit, deleteForEveryone, react, markRead
+}
+
+/// Çevrimdışı ya da hata nedeniyle sunucuya yazılamayan işlemler; sırayla yeniden denenir.
+@Model
+final class ChatPendingOperation {
+    @Attribute(.unique) var id: UUID
+    var ownerID: String
+    var chatID: String
+    var messageID: String
+    var kindRaw: String
+    /// `edit` için yeni metin.
+    var text: String?
+    /// `react` için emoji; `nil` tepkiyi kaldırır.
+    var emoji: String?
+    var createdAt: Date
+    var attempts: Int
+
+    init(ownerID: String, chatID: String, messageID: String, kind: ChatOperationKind, text: String? = nil, emoji: String? = nil, createdAt: Date) {
+        self.id = UUID()
+        self.ownerID = ownerID
+        self.chatID = chatID
+        self.messageID = messageID
+        self.kindRaw = kind.rawValue
+        self.text = text
+        self.emoji = emoji
+        self.createdAt = createdAt
+        self.attempts = 0
+    }
+
+    var kind: ChatOperationKind { ChatOperationKind(rawValue: kindRaw) ?? .create }
+}
+
+/// Eşleşilen sohbet odasının kimliği ve isimleri; uygulama çevrimdışı açılınca da sohbet görünsün diye.
+struct ChatRoomCache {
+    let defaults: UserDefaults
+
+    private func key(_ userID: String) -> String { "chatRoom.\(userID)" }
+
+    func load(userID: String) -> ChatRoomDTO? {
+        guard let data = defaults.data(forKey: key(userID)) else { return nil }
+        return try? JSONDecoder().decode(ChatRoomDTO.self, from: data)
+    }
+
+    func save(_ room: ChatRoomDTO, userID: String) {
+        // "Yazıyor" bilgisi geçicidir, saklanmaz.
+        var stored = room
+        stored.typing = [:]
+        if let data = try? JSONEncoder().encode(stored) {
+            defaults.set(data, forKey: key(userID))
+        }
+    }
+
+    func clear(userID: String) {
+        defaults.removeObject(forKey: key(userID))
+    }
+}
+
+/// Veri dışa aktarma için sohbet mesajı.
+struct ChatMessageExport: Codable, Equatable {
+    var id: String
+    var chatID: String
+    var senderID: String
+    var type: String
+    var text: String
+    var createdAt: Date
+    var readAt: Date?
+    var editedAt: Date?
+    var deleted: Bool
+    var replyToID: String?
+    var reactions: [String: String]
+
+    init(record: ChatMessageRecord) {
+        id = record.messageID
+        chatID = record.chatID
+        senderID = record.senderID
+        type = record.typeRaw
+        text = record.text
+        createdAt = record.createdAt
+        readAt = record.readAt
+        editedAt = record.editedAt
+        deleted = record.deletedForEveryone
+        replyToID = record.replyToID
+        reactions = record.reactions
+    }
+}

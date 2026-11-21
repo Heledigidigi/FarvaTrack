@@ -3,14 +3,15 @@ import Observation
 
 // MARK: - Sekmeler
 enum AppTab: Hashable, CaseIterable {
-    case dashboard, exercise, nutrition, water, profile
+    // iPhone sekme çubuğu 5 sekmeyi aşınca "Diğer" menüsüne düşer; Su, Özet'ten açılan sayfadır.
+    case dashboard, exercise, nutrition, chat, profile
 
     var title: String {
         switch self {
         case .dashboard: return "Özet"
         case .exercise: return "Egzersiz"
         case .nutrition: return "Beslenme"
-        case .water: return "Su"
+        case .chat: return "Sohbet"
         case .profile: return "Profil"
         }
     }
@@ -20,7 +21,7 @@ enum AppTab: Hashable, CaseIterable {
         case .dashboard: return "square.grid.2x2.fill"
         case .exercise: return "dumbbell.fill"
         case .nutrition: return "fork.knife"
-        case .water: return "drop.fill"
+        case .chat: return "bubble.left.and.bubble.right.fill"
         case .profile: return "person.crop.circle.fill"
         }
     }
@@ -28,13 +29,14 @@ enum AppTab: Hashable, CaseIterable {
 
 // MARK: - Özet ekranından açılan sayfalar
 enum AppRoute: Hashable, CaseIterable, Identifiable {
-    case steps, sleep, weight, biologicalWaste, statistics
+    case steps, water, sleep, weight, biologicalWaste, statistics
 
     var id: Self { self }
 
     var title: String {
         switch self {
         case .steps: return "Adımlar"
+        case .water: return "Su"
         case .sleep: return "Uyku"
         case .weight: return "Kilo"
         case .biologicalWaste: return "Biyolojik Atık"
@@ -45,6 +47,7 @@ enum AppRoute: Hashable, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .steps: return "figure.walk"
+        case .water: return "drop.fill"
         case .sleep: return "moon.stars.fill"
         case .weight: return "scalemass.fill"
         case .biologicalWaste: return "list.bullet.clipboard.fill"
@@ -55,6 +58,7 @@ enum AppRoute: Hashable, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .steps: return Color.ftAccentLight
+        case .water: return Color.ftWater
         case .sleep: return Color.ftSleep
         case .weight: return Color.ftWeight
         case .biologicalWaste: return Color.ftWaste
@@ -69,6 +73,8 @@ extension AppRoute {
         switch self {
         case .steps:
             StepsView()
+        case .water:
+            WaterTrackingView(embedsNavigation: false)
         case .sleep:
             SleepView()
         case .weight:
@@ -102,7 +108,7 @@ final class AppRouter {
         dashboardPath.removeAll()
     }
 
-    /// Widget / bildirim derin bağlantıları: farvatrack://steps, water, sleep, weight, waste
+    /// Widget / bildirim derin bağlantıları: farvatrack://steps, water, sleep, weight, waste, exercise, chat
     func handle(_ url: URL) {
         guard url.scheme == "farvatrack" else { return }
         switch url.host {
@@ -111,7 +117,7 @@ final class AppRouter {
             push(.steps)
         case "water":
             popToRoot()
-            select(.water)
+            push(.water)
         case "sleep":
             popToRoot()
             push(.sleep)
@@ -123,6 +129,8 @@ final class AppRouter {
             push(.biologicalWaste)
         case "exercise":
             select(.exercise)
+        case "chat":
+            select(.chat)
         default:
             break
         }

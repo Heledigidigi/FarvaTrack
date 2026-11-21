@@ -14,9 +14,9 @@ struct DashboardView: View {
         Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
     }
 
-    /// Biyolojik atık ayrı bir küçük satırda gösterildiği için modül kutularında yer almaz.
+    /// Biyolojik atık ayrı bir küçük satırda, su ise halkada gösterildiği için modül kutularında yer almaz.
     private var visibleRoutes: [AppRoute] {
-        AppRoute.allCases.filter { $0 != .biologicalWaste }
+        AppRoute.allCases.filter { $0 != .biologicalWaste && $0 != .water }
     }
 
     var body: some View {
@@ -141,7 +141,7 @@ struct DashboardView: View {
                     goalText: "/ \(liters(viewModel.goals.waterMl)) L",
                     progress: viewModel.waterProgress,
                     color: Color.ftWater
-                ) { router.select(.water) }
+                ) { router.push(.water) }
             }
         }
         .cardStyle(padding: 20)

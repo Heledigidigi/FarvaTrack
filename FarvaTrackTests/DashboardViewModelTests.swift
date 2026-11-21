@@ -77,7 +77,7 @@ final class DashboardViewModelTests: XCTestCase {
 final class AppRouterTests: XCTestCase {
     func testPushSwitchesToDashboardAndAppendsRoute() {
         let router = AppRouter()
-        router.select(.water)
+        router.select(.chat)
         router.push(.sleep)
         XCTAssertEqual(router.selectedTab, .dashboard)
         XCTAssertEqual(router.dashboardPath, [.sleep])
@@ -90,12 +90,22 @@ final class AppRouterTests: XCTestCase {
         XCTAssertTrue(router.dashboardPath.isEmpty)
     }
 
-    func testDeepLinkOpensWaterTab() {
+    func testDeepLinkOpensWaterPage() {
         let router = AppRouter()
         router.push(.sleep)
         router.handle(URL(string: "farvatrack://water")!)
-        XCTAssertEqual(router.selectedTab, .water)
-        XCTAssertTrue(router.dashboardPath.isEmpty)
+        XCTAssertEqual(router.selectedTab, .dashboard)
+        XCTAssertEqual(router.dashboardPath, [.water])
+    }
+
+    func testDeepLinkOpensChatTab() {
+        let router = AppRouter()
+        router.handle(URL(string: "farvatrack://chat")!)
+        XCTAssertEqual(router.selectedTab, .chat)
+    }
+
+    func testTabBarFitsWithoutMoreMenu() {
+        XCTAssertLessThanOrEqual(AppTab.allCases.count, 5, "iPhone 5'ten fazla sekmeyi 'Diğer' menüsüne taşır")
     }
 
     func testUnknownSchemeIsIgnored() {
