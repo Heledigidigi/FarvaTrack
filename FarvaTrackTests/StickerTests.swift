@@ -128,10 +128,12 @@ final class StickerMaskTests: XCTestCase {
         let ring = mask.outline(width: 4)
         XCTAssertEqual(ring[20, 20], 255, "şeklin içi de kapsanır (altına çizilir)")
         XCTAssertEqual(ring[13, 20], 255, "2 px dışarısı kontur")
-        XCTAssertEqual(ring[11, 20], 255)
+        XCTAssertEqual(ring[12, 20], 255, "3 px dışarısı kontur")
+        // Tam 4 px: kenar yumuşatılır (yarı saydam), 5 px ve ötesi boş.
+        XCTAssertGreaterThan(ring[11, 20], 0, "kenar yumuşak geçiş")
+        XCTAssertLessThan(ring[11, 20], 255)
+        XCTAssertEqual(ring[10, 20], 0)
         XCTAssertEqual(ring[5, 20], 0, "kalınlığın dışı boş")
-        XCTAssertGreaterThan(ring[10, 20], 0, "kenar yumuşak geçiş")
-        XCTAssertLessThan(ring[10, 20], 255)
         XCTAssertTrue(mask.outline(width: 0).isEmpty)
     }
 }
@@ -481,7 +483,8 @@ final class StickerEditorViewModelTests: XCTestCase {
     func testRenderAndFinalPreview() async throws {
         let sut = makeSUT()
         await sut.load(image: makeImage(width: 300, height: 300))
-        for _ in 0..<20 {
+        // Hata ayıklama derlemesinde (testler) piksel döngüleri yavaştır; 5 sn'ye kadar beklenir.
+        for _ in 0..<250 {
             if sut.finalPreview != nil { break }
             try await Task.sleep(for: .milliseconds(20))
         }
