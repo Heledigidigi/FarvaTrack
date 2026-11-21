@@ -281,6 +281,12 @@ final class ChatAudioPlayer {
     }
 
     func stop() {
+        stopEngine(releaseSession: true)
+    }
+
+    /// Mesajlar arası geçişte oturum bırakılmaz (arka plandaki müzik bir anlığına devreye girmesin).
+    private func stopEngine(releaseSession: Bool) {
+        let hadEngine = engine != nil
         engine?.stop()
         engine = nil
         isPlaying = false
@@ -290,7 +296,7 @@ final class ChatAudioPlayer {
         stopTicker()
         proximity.setEnabled(false)
         usingEarpiece = false
-        session.deactivate()
+        if releaseSession, hadEngine { session.deactivate() }
     }
 
     /// İlerlemeyi motordan okur (zamanlayıcı ve testler çağırır).
@@ -304,7 +310,7 @@ final class ChatAudioPlayer {
 
     @discardableResult
     private func load(id: String, url: URL) -> Bool {
-        stop()
+        stopEngine(releaseSession: false)
         do {
             let engine = try makeEngine(url)
             engine.rate = rate.rawValue
