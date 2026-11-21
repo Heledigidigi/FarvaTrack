@@ -180,7 +180,7 @@ final class BodyMetricsViewModel {
     }
 
     /// Her ölçü için en son iki değerin farkı (en yeni − önceki).
-    static func latestChanges(_ entries: [MeasurementEntry]) -> [BodyMeasure: MeasureChange] {
+    nonisolated static func latestChanges(_ entries: [MeasurementEntry]) -> [BodyMeasure: MeasureChange] {
         let sorted = entries.sorted { $0.date > $1.date }
         var result: [BodyMeasure: MeasureChange] = [:]
         for measure in BodyMeasure.allCases {

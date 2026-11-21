@@ -241,7 +241,7 @@ final class WaterViewModel {
 
     // MARK: - Hesaplamalar
     /// Son `days` günün (bugün dahil) günlük toplamları, eskiden yeniye.
-    static func dailyTotals(entries: [WaterEntry], endingOn end: Date = .now, days: Int = 7, calendar: Calendar = .current) -> [DailyValue] {
+    nonisolated static func dailyTotals(entries: [WaterEntry], endingOn end: Date = .now, days: Int = 7, calendar: Calendar = .current) -> [DailyValue] {
         let today = calendar.startOfDay(for: end)
         let dates = (0..<days).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
         var totals: [Date: Int] = [:]

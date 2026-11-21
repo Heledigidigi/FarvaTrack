@@ -60,7 +60,7 @@ final class SleepViewModel {
     }
 
     /// Saat seçicilerden gelen dakikaları gerçek tarihlere çevirir. Yatış saati uyanıştan sonraysa önceki güne aittir.
-    static func resolve(
+    nonisolated static func resolve(
         bedtimeMinutes: Int,
         wakeMinutes: Int,
         wakeDay: Date,
