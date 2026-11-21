@@ -80,6 +80,9 @@ private struct WasteContent: View {
         let today = entries.filter { Calendar.current.isDateInToday($0.date) }
 
         List {
+            if !SharedStore.isSharedContainerAvailable {
+                Section { WidgetSyncNotice() }
+            }
             Section {
                 counter(today: today.count)
                     .listRowInsets(EdgeInsets())

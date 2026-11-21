@@ -47,8 +47,45 @@ struct PendingWasteTap: Codable, Equatable, Identifiable {
 
 /// Uygulama ile widget arasındaki paylaşılan depo (App Group).
 enum SharedStore {
-    /// Config/*.entitlements içindeki App Group kimliğiyle aynı olmalı.
-    static let appGroupID = "group.com.farvatrack.shared"
+    /// Config/*.entitlements içindeki App Group kimliği.
+    static let defaultAppGroupID = "group.com.farvatrack.shared"
+
+    /// Gerçekte kullanılan App Group. Yan yükleme araçları (ör. ücretsiz Apple ID ile Sideloadly)
+    /// grubu yeniden adlandırabilir; bu durumda uygulama ve widget doğru grubu kurulumun
+    /// imza profilinden (embedded.mobileprovision) okur. Böylece ikisi aynı depoyu paylaşır.
+    static let appGroupID: String = resolveAppGroupID()
+
+    /// Uygulama ile widget'ın ortak deposu gerçekten erişilebilir mi?
+    /// Değilse widget dokunuşları uygulamaya ulaşamaz (uygulamada uyarı gösterilir).
+    static var isSharedContainerAvailable: Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) != nil
+    }
+
+    private static func resolveAppGroupID() -> String {
+        let fm = FileManager.default
+        if fm.containerURL(forSecurityApplicationGroupIdentifier: defaultAppGroupID) != nil {
+            return defaultAppGroupID
+        }
+        let groups = provisionedAppGroups()
+        let preferred = groups.first { $0.lowercased().contains("farvatrack") } ?? groups.first
+        if let preferred, fm.containerURL(forSecurityApplicationGroupIdentifier: preferred) != nil {
+            return preferred
+        }
+        return defaultAppGroupID
+    }
+
+    /// İmza profilindeki App Group listesi (uygulamada ve widget uzantısında ayrı profil bulunur).
+    private static func provisionedAppGroups() -> [String] {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url),
+              let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex) else { return [] }
+        let plistData = data.subdata(in: start.lowerBound..<end.upperBound)
+        guard let plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any],
+              let entitlements = plist["Entitlements"] as? [String: Any],
+              let groups = entitlements["com.apple.security.application-groups"] as? [String] else { return [] }
+        return groups.filter { !$0.contains("*") }
+    }
     static let stepsWidgetKind = "StepsWidget"
     static let waterWidgetKind = "WaterWidget"
     static let wasteWidgetKind = "WasteWidget"

@@ -93,6 +93,9 @@ private struct WaterContent: View {
         let weekData = WaterViewModel.dailyTotals(entries: entries)
 
         List {
+            if !SharedStore.isSharedContainerAvailable {
+                Section { WidgetSyncNotice() }
+            }
             Section {
                 hero(total: total, goal: goal)
                     .listRowInsets(EdgeInsets())
