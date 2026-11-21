@@ -31,6 +31,10 @@ struct PendingWaterAdd: Codable, Equatable, Identifiable {
 struct WasteSnapshot: Codable, Equatable {
     var count: Int
     var updatedAt: Date
+    /// Bugünkü son kaydın saati (widget'ta "son 08:40" ve geri al süresi için).
+    var lastAt: Date? = nil
+    /// Widget'tan yapılan son dokunuşun kimliği (geri al bunu siler).
+    var lastWidgetTapID: UUID? = nil
 
     static let empty = WasteSnapshot(count: 0, updatedAt: .distantPast)
 }
@@ -60,6 +64,11 @@ enum SharedStore {
     private static let pendingWaterKey = "pendingWaterAdds"
     private static let wasteKey = "wasteSnapshot"
     private static let pendingWasteKey = "pendingWasteTaps"
+    private static let pendingWasteUndoKey = "pendingWasteUndos"
+    private static let stepsMetricKey = "stepsWidgetMetric"
+
+    /// Widget'ta "Geri al" düğmesinin görünür kaldığı süre.
+    static let wasteUndoWindow: TimeInterval = 5 * 60
 
     /// App Group yoksa (ör. imzasız test derlemesi) standart depoya düşer; uygulama çalışmaya devam eder.
     static var defaults: UserDefaults {
@@ -85,8 +94,20 @@ enum SharedStore {
         return try? JSONDecoder().decode(StepsSnapshot.self, from: data)
     }
 
+    /// Adım widget'ında dokununca değişen gösterim: 0 adım, 1 km, 2 kcal.
+    static var stepsMetric: Int {
+        get { defaults.integer(forKey: stepsMetricKey) % 3 }
+        set { defaults.set(newValue % 3, forKey: stepsMetricKey) }
+    }
+
+    static func cycleStepsMetric() {
+        stepsMetric = (stepsMetric + 1) % 3
+        WidgetCenter.shared.reloadTimelines(ofKind: stepsWidgetKind)
+    }
+
     static func clearSteps() {
         defaults.removeObject(forKey: stepsKey)
+        defaults.removeObject(forKey: stepsMetricKey)
         WidgetCenter.shared.reloadTimelines(ofKind: stepsWidgetKind)
     }
 
@@ -169,18 +190,57 @@ enum SharedStore {
         }
         guard snapshot.count < maxDailyWasteCount else { return }
 
+        let tap = PendingWasteTap(id: UUID(), date: now)
         var pending = pendingWasteTaps()
-        pending.append(PendingWasteTap(id: UUID(), date: now))
+        pending.append(tap)
         defaults.set(try? JSONEncoder().encode(pending), forKey: pendingWasteKey)
 
         snapshot.count += 1
         snapshot.updatedAt = now
+        snapshot.lastAt = now
+        snapshot.lastWidgetTapID = tap.id
         saveWaste(snapshot)
+    }
+
+    /// Widget'taki "Geri al": son widget dokunuşunu kuyruktan siler; uygulama onu çoktan
+    /// aktardıysa silinmek üzere ayrı bir kuyruğa yazar.
+    static func undoLastWasteFromWidget(now: Date = .now) {
+        guard var snapshot = loadWaste(),
+              let id = snapshot.lastWidgetTapID,
+              let lastAt = snapshot.lastAt,
+              now.timeIntervalSince(lastAt) <= wasteUndoWindow + 60 else { return }
+
+        var pending = pendingWasteTaps()
+        if pending.contains(where: { $0.id == id }) {
+            pending.removeAll { $0.id == id }
+            defaults.set(try? JSONEncoder().encode(pending), forKey: pendingWasteKey)
+        } else {
+            var undos = pendingWasteUndos()
+            undos.append(id)
+            defaults.set(try? JSONEncoder().encode(undos), forKey: pendingWasteUndoKey)
+        }
+
+        snapshot.count = max(0, snapshot.count - 1)
+        snapshot.lastWidgetTapID = nil
+        snapshot.lastAt = pending.filter { Calendar.current.isDate($0.date, inSameDayAs: now) }.map(\.date).max()
+        snapshot.updatedAt = now
+        saveWaste(snapshot)
+    }
+
+    static func pendingWasteUndos() -> [UUID] {
+        guard let data = defaults.data(forKey: pendingWasteUndoKey) else { return [] }
+        return (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
+    }
+
+    static func removePendingWasteUndos(ids: [UUID]) {
+        let remaining = pendingWasteUndos().filter { !ids.contains($0) }
+        defaults.set(try? JSONEncoder().encode(remaining), forKey: pendingWasteUndoKey)
     }
 
     static func clearWaste() {
         defaults.removeObject(forKey: wasteKey)
         defaults.removeObject(forKey: pendingWasteKey)
+        defaults.removeObject(forKey: pendingWasteUndoKey)
         WidgetCenter.shared.reloadTimelines(ofKind: wasteWidgetKind)
     }
 

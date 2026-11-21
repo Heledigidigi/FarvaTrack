@@ -24,9 +24,13 @@ final class MockWasteWidget: WasteWidgetStoring {
     var pending: [PendingWasteTap] = []
     private(set) var published: [WasteSnapshot] = []
 
+    var undos: [UUID] = []
+
     func pendingTaps() -> [PendingWasteTap] { pending }
     func removePending(ids: [UUID]) { pending.removeAll { ids.contains($0.id) } }
     func publish(_ snapshot: WasteSnapshot) { published.append(snapshot) }
+    func pendingUndos() -> [UUID] { undos }
+    func removeUndos(ids: [UUID]) { undos.removeAll { ids.contains($0) } }
 }
 
 final class WasteAnalyzerTests: XCTestCase {
@@ -101,6 +105,27 @@ final class WasteViewModelTests: XCTestCase {
         let last = try XCTUnwrap(sync.dailyUploads.last)
         XCTAssertEqual(last.id, WasteAnalyzer.dayKey(.now))
         XCTAssertEqual(last.count, 2)
+    }
+
+    func testWidgetUndoDeletesImportedTap() async throws {
+        let tapID = UUID()
+        widget.pending = [PendingWasteTap(id: tapID, date: .now)]
+        sut.importWidgetTaps()
+        await settleTasks()
+        XCTAssertEqual(sut.count(on: .now), 1)
+
+        // Uygulama dokunuşu aktardıktan sonra widget'tan "Geri al" geldi.
+        widget.undos = [tapID]
+        sut.importWidgetTaps()
+        await settleTasks()
+        XCTAssertEqual(sut.count(on: .now), 0)
+        XCTAssertTrue(widget.undos.isEmpty)
+        XCTAssertEqual(widget.published.last?.count, 0)
+    }
+
+    func testPublishedSnapshotCarriesLastEntryTime() throws {
+        let entry = try sut.add()
+        XCTAssertEqual(widget.published.last?.lastAt, entry.date)
     }
 
     func testDailyLimit() throws {

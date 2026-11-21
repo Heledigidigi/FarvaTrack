@@ -7,12 +7,22 @@ protocol WasteWidgetStoring {
     func pendingTaps() -> [PendingWasteTap]
     func removePending(ids: [UUID])
     func publish(_ snapshot: WasteSnapshot)
+    /// Widget'taki "Geri al" ile silinmesi istenen, uygulamaya çoktan aktarılmış kayıtlar.
+    func pendingUndos() -> [UUID]
+    func removeUndos(ids: [UUID])
+}
+
+extension WasteWidgetStoring {
+    func pendingUndos() -> [UUID] { [] }
+    func removeUndos(ids: [UUID]) {}
 }
 
 struct SharedStoreWasteBridge: WasteWidgetStoring {
     func pendingTaps() -> [PendingWasteTap] { SharedStore.pendingWasteTaps() }
     func removePending(ids: [UUID]) { SharedStore.removePendingWaste(ids: ids) }
     func publish(_ snapshot: WasteSnapshot) { SharedStore.saveWaste(snapshot) }
+    func pendingUndos() -> [UUID] { SharedStore.pendingWasteUndos() }
+    func removeUndos(ids: [UUID]) { SharedStore.removePendingWasteUndos(ids: ids) }
 }
 
 @MainActor
@@ -130,6 +140,7 @@ final class WasteViewModel {
     /// Widget dokunuşlarını SwiftData'ya aktarır (UUID sayesinde tekrar çalışması güvenli).
     func importWidgetTaps() {
         guard let context, let userID else { return }
+        applyWidgetUndos()
         let pending = widget.pendingTaps()
         guard !pending.isEmpty else { return }
 
@@ -149,6 +160,16 @@ final class WasteViewModel {
             upload(entry)
             markDirty(entry.date)
         }
+    }
+
+    /// Widget'tan geri alınan ama uygulamaya çoktan aktarılmış kayıtları siler.
+    private func applyWidgetUndos() {
+        guard let context else { return }
+        let ids = widget.pendingUndos()
+        guard !ids.isEmpty else { return }
+        let entries = (try? context.fetch(FetchDescriptor<WasteEntry>(predicate: #Predicate { ids.contains($0.id) }))) ?? []
+        for entry in entries { delete(entry) }
+        widget.removeUndos(ids: ids)
     }
 
     // MARK: - Senkronizasyon
@@ -221,6 +242,19 @@ final class WasteViewModel {
         return (try? context.fetchCount(descriptor)) ?? 0
     }
 
+    /// Verilen gündeki en son kaydın saati.
+    func lastEntryDate(on date: Date) -> Date? {
+        guard let context, let userID else { return nil }
+        let start = calendar.startOfDay(for: date)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? date
+        var descriptor = FetchDescriptor<WasteEntry>(
+            predicate: #Predicate { $0.ownerID == userID && $0.date >= start && $0.date < end },
+            sortBy: [SortDescriptor(\.date, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first?.date
+    }
+
     private func markDirty(_ date: Date) {
         dirtyDays?.add(WasteAnalyzer.dayKey(date, calendar: calendar))
         Task { await flushDirtyDays() }
@@ -228,7 +262,7 @@ final class WasteViewModel {
 
     private func publishWidgetSnapshot() {
         guard userID != nil else { return }
-        widget.publish(WasteSnapshot(count: count(on: .now), updatedAt: .now))
+        widget.publish(WasteSnapshot(count: count(on: .now), updatedAt: .now, lastAt: lastEntryDate(on: .now)))
     }
 
     private func commit() throws {
