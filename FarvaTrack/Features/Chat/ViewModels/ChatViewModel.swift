@@ -113,6 +113,7 @@ final class ChatViewModel {
     /// Ağ hatasından sonra orijinal yüklemesi bu zamana kadar kendiliğinden yeniden denenmez.
     private var uploadBackoff: [String: Date] = [:]
     static let uploadRetryDelay: TimeInterval = 20
+    private var retryTimer: Task<Void, Never>?
 
     init(
         sync: ChatSyncing = ChatService(),
@@ -189,6 +190,11 @@ final class ChatViewModel {
 
     /// Çıkış yapıldığında ya da kullanıcı değiştiğinde.
     func reset() {
+        // Oturum kapanınca hiçbir arka plan görevi eski veritabanına dokunmasın.
+        retryTimer?.cancel()
+        retryTimer = nil
+        typingTask?.cancel()
+        typingTask = nil
         uploadTasks.values.forEach { $0.cancel() }
         uploadTasks = [:]
         uploadProgress = [:]
@@ -988,8 +994,10 @@ final class ChatViewModel {
                 // Bağlantı gelince (uygulama öne gelince ya da kısa bir beklemeden sonra) kaldığı aşamadan sürer.
                 uploadBackoff[messageID] = clock().addingTimeInterval(Self.uploadRetryDelay)
                 let delay = Self.uploadRetryDelay
-                Task { [weak self] in
+                retryTimer?.cancel()
+                retryTimer = Task { [weak self] in
                     try? await Task.sleep(for: .seconds(delay))
+                    guard !Task.isCancelled else { return }
                     self?.startMediaUploads()
                 }
             default:
