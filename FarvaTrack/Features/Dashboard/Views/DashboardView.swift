@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(AppRouter.self) private var router
+    @Environment(\.modelContext) private var modelContext
     @State private var viewModel = DashboardViewModel()
 
     private let twoColumns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
@@ -41,9 +42,19 @@ struct DashboardView: View {
                 route.destination
             }
         }
-        .task { await viewModel.load() }
         .onChange(of: auth.currentUser, initial: true) { _, user in
-            if let user { viewModel.updateGoals(from: user) }
+            guard let user else { return }
+            viewModel.updateGoals(from: user)
+            viewModel.configure(
+                dataSource: LiveDashboardDataSource(
+                    context: modelContext,
+                    ownerID: user.id,
+                    weightKg: user.weightKg,
+                    heightCm: user.heightCm,
+                    stepGoal: user.dailyStepGoal
+                )
+            )
+            Task { await viewModel.load() }
         }
         .onChange(of: router.selectedTab) { _, tab in
             if tab == .dashboard { Task { await viewModel.load() } }

@@ -6,8 +6,8 @@ SwiftUI ile yazılmış fitness ve sağlık takip uygulaması (iOS 17+, MVVM, Sw
 
 | Aşama | İçerik | Durum |
 |---|---|---|
-| 1 | Giriş / kayıt (e-posta, Apple), onboarding, sekmeler, Özet ekranı | Bu branch |
-| 2 | Egzersiz, adım (HealthKit) ve widget | Sırada |
+| 1 | Giriş / kayıt (e-posta, Apple), onboarding, sekmeler, Özet ekranı | Tamam |
+| 2 | Egzersiz, adım (HealthKit) ve adım widget'ı | Tamam |
 | 3 | Beslenme, su, uyku, kilo | Sırada |
 | 4 | Atık sayacı, istatistikler, rozetler, hatırlatıcılar | Sırada |
 | 5 | Profil, ayarlar, hesap silme, imzalama | Sırada |
@@ -44,7 +44,11 @@ Biyolojik atık modülü yalnızca `role: "admin"` alanı olan hesaplarda görü
 
 ## IPA'yı telefona kurma
 
-Actions'ın ürettiği IPA **imzasızdır**. Ücretsiz Apple ID ile Windows veya Mac'ten [Sideloadly](https://sideloadly.io) kullanarak kurabilirsin; ücretsiz hesapla imzalanan uygulama 7 gün çalışır ve Apple ile giriş, App Groups gibi bazı yetenekler çalışmayabilir. Kalıcı dağıtım (TestFlight) için ücretli Apple Developer Program üyeliği ve imzalama ayarı gerekir.
+Actions'ın ürettiği IPA ad-hoc imzalıdır (yetkiler gömülü, sertifika yok); telefona kurulurken yeniden imzalanması gerekir. Ücretsiz Apple ID ile Windows veya Mac'ten [Sideloadly](https://sideloadly.io) kullanarak kurabilirsin; ücretsiz hesapla imzalanan uygulama 7 gün çalışır ve Apple ile giriş, App Groups gibi bazı yetenekler çalışmayabilir. Kalıcı dağıtım (TestFlight) için ücretli Apple Developer Program üyeliği ve imzalama ayarı gerekir.
+
+## Proje rehberi
+
+Mimari kurallar, CI akışı ve yol haritası için `CLAUDE.md`'ye bak.
 
 ## Testler
 

@@ -15,7 +15,12 @@ struct FarvaTrackApp: App {
         // Yeni SwiftData modelleri sonraki aşamalarda bu şemaya eklenecek.
         let container: ModelContainer
         do {
-            container = try ModelContainer(for: LocalUserProfile.self)
+            container = try ModelContainer(
+                for: LocalUserProfile.self,
+                Workout.self,
+                WorkoutEntry.self,
+                Exercise.self
+            )
         } catch {
             fatalError("SwiftData ModelContainer oluşturulamadı: \(error)")
         }

@@ -102,6 +102,15 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/FarvaTrack.app Payload/
+          # Ad-hoc imza: yetkiler (HealthKit, App Group) pakete gömülür; Sideloadly kendi
+          # sertifikasıyla yeniden imzalarken bunları okur. Önce uzantı, sonra uygulama.
+          APP=Payload/FarvaTrack.app
+          if codesign -f -s - --entitlements Config/FarvaTrackWidget.entitlements "$APP/PlugIns/FarvaTrackWidget.appex" \
+             && codesign -f -s - --entitlements Config/FarvaTrack.sideload.entitlements "$APP"; then
+            codesign -d --entitlements :- "$APP" | head -40
+          else
+            echo "::warning::Ad-hoc imzalama başarısız; IPA imzasız paketleniyor."
+          fi
           zip -qr FarvaTrack.ipa Payload
 
       - name: IPA Dosyasini Yukle

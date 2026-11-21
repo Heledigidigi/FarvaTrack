@@ -67,7 +67,12 @@ extension AppRoute {
     /// Modüller eklendikçe ilgili case gerçek ekrana bağlanacak.
     @ViewBuilder
     var destination: some View {
-        ComingSoonView(title: title, systemImage: systemImage)
+        switch self {
+        case .steps:
+            StepsView()
+        default:
+            ComingSoonView(title: title, systemImage: systemImage)
+        }
     }
 }
 

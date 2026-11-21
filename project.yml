@@ -31,18 +31,40 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farvatrack.FarvaTrack
         TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_ENTITLEMENTS: Config/FarvaTrack.entitlements
+        # INFOPLIST_FILE (URL şeması) + aşağıdaki üretilen anahtarlar birleştirilir
+        INFOPLIST_FILE: Config/FarvaTrack-Info.plist
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: FarvaTrack
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSHealthShareUsageDescription: "FarvaTrack, günlük adım, yürüme mesafesi ve aktif enerji verilerini Sağlık uygulamasından okuyarak hedeflerindeki ilerlemeni gösterir. Bu veriler yalnızca cihazında gösterilir ve sunucularımıza gönderilmez."
     dependencies:
+      - target: FarvaTrackWidget
       - package: Firebase
         product: FirebaseAuth
       - package: Firebase
         product: FirebaseFirestore
       - package: Firebase
         product: FirebaseStorage
+
+  FarvaTrackWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: FarvaTrackWidget
+      # Uygulamayla paylaşılan App Group deposu
+      - path: FarvaTrack/Services/SharedStore.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.farvatrack.FarvaTrack.Widget
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_ENTITLEMENTS: Config/FarvaTrackWidget.entitlements
+        INFOPLIST_FILE: Config/FarvaTrackWidget-Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: FarvaTrack
+        SKIP_INSTALL: YES
 
   FarvaTrackTests:
     type: bundle.unit-test
