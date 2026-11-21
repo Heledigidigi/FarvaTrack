@@ -32,7 +32,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8B tamam; 8C–8H planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8C tamam; 8D–8H planlandı |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -56,7 +56,10 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Yükleme ilerlemesi, iptal ve yeniden deneme; büyük dosyalar için arka planda yükleme.
 - Tam ekran görüntüleyici (yakınlaştırma, video oynatma) ve cihaza kaydetme.
 
-**8C: Sesli mesaj**
+**8C: Sesli mesaj** (Tamamlandı)
+- Uygulandığı haliyle: `VoiceRecorder` (AVAudioRecorder, AAC .m4a, 48 kHz mono, 64 kbps) + `ChatVoiceRecorderModel` (basılı tut / sola 110 pt iptal / yukarı 90 pt kilit; 0,6 sn'den kısa kayıt atılır, 15 dk sınır). Dalga formu 48 çubuk (0…255) mesajla `audio.waveform` olarak gider.
+- Gönderim: `.create` işlemi önce `chats/{chatId}/media/{messageId}/voice.m4a` dosyasını yükler, sonra mesajı yazar (alıcı hemen çalabilir). Alıcı çalınca `listenedAt` (ve `readAt`) yazılır; kurallar yalnızca alıcıya ve bir kez izin verir.
+- `ChatAudioPlayer` (+ `AudioPlaybackEngine`, `AudioSessionControlling`, `ProximityMonitoring` protokolleri): 1x/1,5x/2x (tercih saklanır), sürükleyerek ilerleme; `.playback` (sessiz modda da çalar), kulağa yaklaşınca ahize, kulaklık çıkınca/kesintide duraklatma.
 - Basılı tutarak kayıt, yukarı kaydırarak kilitleme, sola kaydırarak iptal.
 - Kayıt sırasında ve oynatmada dalga formu; oynatma hızı (1x / 1,5x / 2x).
 - Düşük gecikme için sıkıştırılmış ses (AAC) ve anında gönderim; dinlendi bilgisi.
