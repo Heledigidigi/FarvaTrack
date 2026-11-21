@@ -25,6 +25,7 @@ final class StickerLibraryViewModel {
     private let makeID: () -> String
     private var context: ModelContext?
     private var userID: String?
+    @ObservationIgnored private var syncTask: Task<Void, Never>?
 
     static let deletionScope = "Sticker"
 
@@ -82,7 +83,7 @@ final class StickerLibraryViewModel {
         context.insert(StickerRecord(id: id, ownerID: userID, width: result.width, height: result.height, createdAt: clock()))
         try context.save()
         reload()
-        Task { await syncAll() }
+        scheduleSync()
         return id
     }
 
@@ -98,7 +99,7 @@ final class StickerLibraryViewModel {
         context.insert(StickerRecord(id: id, ownerID: userID, width: width, height: height, createdAt: clock()))
         try context.save()
         reload()
-        Task { await syncAll() }
+        scheduleSync()
         return id
     }
 
@@ -110,10 +111,23 @@ final class StickerLibraryViewModel {
         try? context.save()
         files.remove(id)
         reload()
-        Task { await syncAll() }
+        scheduleSync()
     }
 
     // MARK: Senkron
+
+    private func scheduleSync() {
+        let previous = syncTask
+        syncTask = Task { [weak self] in
+            await previous?.value
+            await self?.syncAll()
+        }
+    }
+
+    /// Arka planda başlatılan senkronun bitmesini bekler (testler ve kapanış için).
+    func waitForPendingSync() async {
+        await syncTask?.value
+    }
 
     /// Bekleyen silmeler → bekleyen yüklemeler → diğer cihazda eklenenleri indir / silinenleri kaldır.
     func syncAll() async {

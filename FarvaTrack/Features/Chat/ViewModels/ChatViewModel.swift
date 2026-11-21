@@ -1361,8 +1361,10 @@ final class ChatViewModel {
         isSyncingPlacements = true
         defer { isSyncingPlacements = false }
 
-        for record in placementRecords(chatID: chatID) where record.needsSync {
-            let id = record.placementID
+        // Kimliklerle dönülür; her adımda kayıt yeniden okunur (oturum kapanırsa güvenle durur).
+        let pendingIDs = placementRecords(chatID: chatID).filter(\.needsSync).map(\.placementID)
+        for id in pendingIDs {
+            guard let record = placementRecord(id), record.needsSync else { continue }
             do {
                 if record.pendingDelete {
                     let path = record.sticker.path

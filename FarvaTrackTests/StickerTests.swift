@@ -570,7 +570,11 @@ final class StickerLibraryViewModelTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // Arka plan senkronu bitmeden bellek içi veritabanı bırakılmaz.
+        await sut.waitForPendingSync()
         await settleTasks()
+        sut = nil
+        container = nil
         try? FileManager.default.removeItem(at: root)
         try await super.tearDown()
     }

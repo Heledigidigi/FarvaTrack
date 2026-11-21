@@ -286,7 +286,9 @@ final class ChatStickerViewModelTests: XCTestCase {
         let notPNG = root.appendingPathComponent("x.png")
         try Data("değil".utf8).write(to: notPNG)
         XCTAssertThrowsError(try library.addPNG(at: notPNG, width: 1, height: 1))
+        await library.waitForPendingSync()
         await settleTasks()
+        _ = stickerContainer
     }
 
     func testDeleteStickerForEveryoneRemovesFile() async throws {
