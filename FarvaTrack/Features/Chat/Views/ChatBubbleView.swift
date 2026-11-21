@@ -17,6 +17,9 @@ struct ChatBubbleView: View {
     var onOpenMedia: () -> Void = {}
     var onCancelUpload: () -> Void = {}
     var onLoadThumbnail: () async -> Void = {}
+    /// Sticker mesajı (8E).
+    var onLoadSticker: () async -> Void = {}
+    var onSaveSticker: () -> Void = {}
     /// Sesli mesaj: çalar (8C).
     var player: ChatAudioPlayer?
     var onLoadAudio: () async throws -> URL = { throw AppError.storage("Ses yok") }
@@ -50,7 +53,9 @@ struct ChatBubbleView: View {
                 quote(reply)
             }
 
-            if let audio = message.audio, !message.deleted, let player {
+            if let sticker = message.sticker, !message.deleted {
+                ChatStickerBubbleContent(item: item, sticker: sticker, onLoad: onLoadSticker)
+            } else if let audio = message.audio, !message.deleted, let player {
                 ChatVoiceBubbleContent(item: item, audio: audio, player: player, onLoad: onLoadAudio, onToggle: onToggleAudio)
             } else if let media = message.media, !message.deleted {
                 ChatMediaBubbleContent(
@@ -64,8 +69,8 @@ struct ChatBubbleView: View {
 
             footer
         }
-        .padding(.horizontal, message.media != nil && !message.deleted ? 4 : 12)
-        .padding(.vertical, message.media != nil && !message.deleted ? 4 : 8)
+        .padding(.horizontal, isSticker ? 0 : (message.media != nil && !message.deleted ? 4 : 12))
+        .padding(.vertical, isSticker ? 0 : (message.media != nil && !message.deleted ? 4 : 8))
         .background(bubbleColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -99,7 +104,11 @@ struct ChatBubbleView: View {
                 .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// Sticker baloncuksuz gösterilir.
+    private var isSticker: Bool { message.sticker != nil && !message.deleted }
+
     private var bubbleColor: Color {
+        if isSticker { return .clear }
         if message.deleted { return Color.ftCard }
         return item.isMine ? Color.ftAccent : Color.ftCardElevated
     }
@@ -141,8 +150,11 @@ struct ChatBubbleView: View {
         }
         .font(.caption2)
         .foregroundStyle(Color.white.opacity(0.65))
-        .padding(.horizontal, message.media != nil && !message.deleted ? 6 : 0)
+        .padding(.horizontal, message.media != nil && !message.deleted ? 6 : (isSticker ? 7 : 0))
+        .padding(.vertical, isSticker ? 2 : 0)
         .padding(.bottom, message.media != nil && !message.deleted ? 2 : 0)
+        // Sticker baloncuksuz: saat okunabilsin diye küçük kapsül.
+        .background(isSticker ? Color.black.opacity(0.4) : .clear, in: Capsule())
     }
 
     private func statusColor(_ status: ChatMessageStatus) -> Color {
@@ -192,6 +204,9 @@ struct ChatBubbleView: View {
             if item.isUploading {
                 Button(role: .destructive) { onCancelUpload() } label: { Label("Gönderimi iptal et", systemImage: "xmark.circle") }
             }
+            if message.sticker != nil, !item.isMine {
+                Button { onSaveSticker() } label: { Label("Kütüphaneme kaydet", systemImage: "square.and.arrow.down") }
+            }
             Button { onReply() } label: { Label("Yanıtla", systemImage: "arrowshape.turn.up.left") }
 
             Menu {
@@ -240,6 +255,7 @@ struct ChatBubbleView: View {
                 }
             }
             if item.isUploading { Button("Gönderimi iptal et", action: onCancelUpload) }
+            if message.sticker != nil, !item.isMine { Button("Kütüphaneme kaydet", action: onSaveSticker) }
             Button("Yanıtla", action: onReply)
             ForEach(ChatLimits.quickReactions, id: \.self) { emoji in
                 Button("\(emoji) tepkisi ver") { onReact(emoji) }
@@ -265,7 +281,9 @@ struct ChatBubbleView: View {
         if let reply = message.replyTo, !message.deleted {
             parts.append("\(name(for: reply.senderID)) kişisine yanıt: \(reply.preview)")
         }
-        if let audio = message.audio, !message.deleted {
+        if message.sticker != nil, !message.deleted {
+            parts.append(item.isUploading ? "Sticker, gönderiliyor" : "Sticker")
+        } else if let audio = message.audio, !message.deleted {
             var description = "Sesli mesaj, \(audio.formattedDuration)"
             if item.isUploading { description += ", gönderiliyor" }
             if item.isMine, item.isListened { description += ", dinlendi" }

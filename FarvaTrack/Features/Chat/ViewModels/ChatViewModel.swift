@@ -77,6 +77,8 @@ final class ChatViewModel {
     private(set) var downloadProgress: [String: Double] = [:]
     /// Seçilen medya hazırlanıyor (önizleme üretimi / Hızlı modda küçültme).
     private(set) var isPreparingMedia = false
+    /// Sohbet üstüne bırakılmış sticker'lar (8E), katman sırasına göre.
+    private(set) var placements: [ChatPlacementItem] = []
 
     var draft = ""
     var inviteCodeInput = ""
@@ -104,6 +106,8 @@ final class ChatViewModel {
     private var userName = ""
     private var roomSubscription: ChatSubscription?
     private var messagesSubscription: ChatSubscription?
+    private var placementsSubscription: ChatSubscription?
+    private var isSyncingPlacements = false
     private var displayLimit = ChatLimits.pageSize
     private var remoteExhausted = false
     private var isVisible = false
@@ -206,8 +210,11 @@ final class ChatViewModel {
         thumbnailLoads = []
         roomSubscription?.cancel()
         messagesSubscription?.cancel()
+        placementsSubscription?.cancel()
         roomSubscription = nil
         messagesSubscription = nil
+        placementsSubscription = nil
+        placements = []
         context = nil
         userID = nil
         room = nil
@@ -242,6 +249,7 @@ final class ChatViewModel {
         // Öne gelince bekleme süresi beklenmez: bağlantı büyük olasılıkla değişti.
         uploadBackoff = [:]
         await flushOutbox()
+        await syncPlacements()
     }
 
     /// Ekrandaki zamana bağlı bilgiler ("yazıyor…", düzenleme süresi) için periyodik yenileme.
@@ -283,10 +291,13 @@ final class ChatViewModel {
             // Oda sunucudan kaldırıldı (karşı taraf hesabını sildi).
             messagesSubscription?.cancel()
             messagesSubscription = nil
+            placementsSubscription?.cancel()
+            placementsSubscription = nil
             purgeLocal(chatID: old.id)
             roomCache.clear(userID: userID)
             room = nil
             messages = []
+            placements = []
         }
         phase = .unpaired
     }
@@ -339,6 +350,7 @@ final class ChatViewModel {
     // MARK: Mesajlar: uzak değişiklikler
 
     private func startMessagesListener(chatID: String) {
+        startPlacementsListener(chatID: chatID)
         messagesSubscription?.cancel()
         messagesSubscription = sync.observeRecentMessages(
             chatID: chatID,
@@ -365,7 +377,7 @@ final class ChatViewModel {
 
         for dto in items {
             if let record = cachedRecord(for: dto.id) {
-                if dto.deleted, !record.deletedForEveryone, record.media != nil || record.audio != nil {
+                if dto.deleted, !record.deletedForEveryone, record.media != nil || record.audio != nil || record.sticker != nil {
                     // Karşı taraf herkesten sildi: indirilmiş dosyalar da kaldırılır.
                     removeLocalFiles(of: record)
                 }
@@ -446,7 +458,7 @@ final class ChatViewModel {
             canEdit: canEdit,
             uploadProgress: status == .sending ? uploadProgress[dto.id] : nil,
             localThumbnailURL: dto.media == nil || dto.deleted ? nil : localThumbnailURL(for: record),
-            localOriginalURL: (dto.media == nil && dto.audio == nil) || dto.deleted ? nil : localOriginalURL(for: record)
+            localOriginalURL: (dto.media == nil && dto.audio == nil && dto.sticker == nil) || dto.deleted ? nil : localOriginalURL(for: record)
         )
     }
 
@@ -594,7 +606,7 @@ final class ChatViewModel {
         uploadProgress[item.id] = nil
 
         let media = record.media
-        let audioPath = record.audio?.path
+        let audioPath = record.audio?.path ?? record.sticker?.path
         let thumbnailUploaded = (record.uploadStage.map { $0 >= .original } ?? true)
         removeLocalFiles(of: record)
 
@@ -611,6 +623,7 @@ final class ChatViewModel {
             record.text = ""
             record.media = nil
             record.audio = nil
+            record.sticker = nil
             record.uploadStage = nil
             record.localOriginalName = nil
             record.localThumbnailName = nil
@@ -826,14 +839,14 @@ final class ChatViewModel {
                         cachedRecord(for: messageID)?.uploadStage = .original
                         save()
                     }
-                    if let audio = record.audio, record.uploadStage == .original {
-                        // Sesli mesaj küçüktür: dosya önce yüklenir, mesaj hazır olarak yazılır (dinleyen hemen çalabilir).
+                    if let upload = singleFileUpload(of: record), record.uploadStage == .original {
+                        // Sesli mesaj ve sticker küçüktür: dosya önce yüklenir, mesaj hazır olarak yazılır (alıcı hemen açabilir).
                         guard let name = record.localOriginalName, files.exists(files.outgoingURL(named: name)) else {
-                            throw AppError.storage("Ses kaydı cihazda bulunamadı.")
+                            throw AppError.storage("Gönderilecek dosya cihazda bulunamadı.")
                         }
                         try await mediaStore.upload(
-                            fileURL: files.outgoingURL(named: name), to: audio.path,
-                            contentType: audio.contentType, senderID: operation.ownerID,
+                            fileURL: files.outgoingURL(named: name), to: upload.path,
+                            contentType: upload.contentType, senderID: operation.ownerID,
                             progress: { [weak self] value in self?.setAudioProgress(value, for: messageID) }
                         )
                         cachedRecord(for: messageID)?.uploadStage = .done
@@ -896,7 +909,7 @@ final class ChatViewModel {
         }
         if kind == .create, let record = cachedRecord(for: messageID), !hasPendingCreate(messageID) {
             record.sendState = succeeded ? .sent : .failed
-            if succeeded, record.audio != nil { moveOutgoingToCache(record) }
+            if succeeded, record.audio != nil || record.sticker != nil { moveOutgoingToCache(record) }
         }
         save()
         reloadMessages()
@@ -1122,19 +1135,41 @@ final class ChatViewModel {
 
     /// Çalmak için ses dosyası: cihazda yoksa indirilir (bir kez).
     func loadAudio(for item: ChatMessageItem) async throws -> URL {
+        guard item.message.audio != nil else { throw AppError.storage("Bu mesajda ses yok.") }
+        return try await loadAttachment(for: item)
+    }
+
+    /// Sesli mesaj ya da sticker dosyası: cihazda yoksa indirilir (bir kez).
+    func loadAttachment(for item: ChatMessageItem) async throws -> URL {
         if let url = item.localOriginalURL { return url }
-        guard let audio = item.message.audio, !item.message.deleted else {
-            throw AppError.storage("Bu mesajda ses yok.")
+        guard !item.message.deleted else { throw AppError.storage("Bu mesaj silindi.") }
+        let path: String
+        let ext: String
+        if let audio = item.message.audio {
+            path = audio.path
+            ext = ChatAudioPath.fileExtension
+        } else if let sticker = item.message.sticker {
+            path = sticker.path
+            ext = ChatStickerPath.fileExtension
+        } else {
+            throw AppError.storage("Bu mesajda dosya yok.")
         }
-        let destination = files.cachedOriginalURL(messageID: item.id, fileExtension: ChatAudioPath.fileExtension)
+        let destination = files.cachedOriginalURL(messageID: item.id, fileExtension: ext)
         if files.exists(destination) { return destination }
         downloadProgress[item.id] = 0
         defer { downloadProgress[item.id] = nil }
-        try await mediaStore.download(path: audio.path, to: destination, progress: { [weak self] value in
+        try await mediaStore.download(path: path, to: destination, progress: { [weak self] value in
             self?.downloadProgress[item.id] = value
         })
         reloadMessages()
         return destination
+    }
+
+    /// Mesaj belgesinden önce yüklenen tek dosya (ses / sticker).
+    private func singleFileUpload(of record: ChatMessageRecord) -> (path: String, contentType: String)? {
+        if let audio = record.audio { return (audio.path, audio.contentType) }
+        if let sticker = record.sticker { return (sticker.path, ChatStickerPath.contentType) }
+        return nil
     }
 
     /// Alıcı sesli mesajı çalmaya başladı: "dinlendi" bilgisi gönderilir (okundu da sayılır).
@@ -1151,6 +1186,268 @@ final class ChatViewModel {
         save()
         reloadMessages()
         scheduleFlush()
+    }
+
+    // MARK: Sticker mesajı (8E)
+
+    /// Kütüphanedeki PNG'yi normal bir mesaj (`type: sticker`) olarak gönderir.
+    func sendSticker(fileURL: URL, width: Int, height: Int) {
+        guard let context, let userID, let chatID = room?.id else { return }
+        let messageID = makeID()
+        let fileName = "\(messageID).\(ChatStickerPath.fileExtension)"
+        let destination = files.outgoingURL(named: fileName)
+        do {
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.copyItem(at: fileURL, to: destination)
+        } catch {
+            errorMessage = "Sticker hazırlanamadı."
+            return
+        }
+        let dto = ChatMessageDTO(
+            id: messageID, senderID: userID, type: .sticker, text: "", createdAt: clock(),
+            replyTo: replyingTo.map { ChatReplyReference.make(from: $0.message) },
+            sticker: ChatSticker(path: ChatStickerPath.file(chatID: chatID, itemID: messageID), width: width, height: height)
+        )
+        replyingTo = nil
+        let record = ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending)
+        record.localOriginalName = fileName
+        record.uploadStage = .original
+        context.insert(record)
+        enqueue(.create, messageID: messageID)
+        save()
+        reloadMessages()
+        scheduleFlush()
+    }
+
+    // MARK: Serbest yerleştirme (8E)
+
+    private func startPlacementsListener(chatID: String) {
+        placementsSubscription?.cancel()
+        reloadPlacements()
+        placementsSubscription = sync.observePlacements(
+            chatID: chatID,
+            onChange: { [weak self] items, fromCache in self?.handleRemotePlacements(items, chatID: chatID, isFromCache: fromCache) },
+            onError: { [weak self] error in self?.handleListenerError(error) }
+        )
+        Task { await syncPlacements() }
+    }
+
+    /// Sunucudan gelenler önbelleğe yazılır; bekleyen yerel değişiklik kazanır.
+    /// Sunucuda artık olmayan (sahibi sildi) kayıtlar, yalnızca sunucudan gelen kesin sonuçta kaldırılır.
+    func handleRemotePlacements(_ items: [ChatPlacementDTO], chatID: String, isFromCache: Bool) {
+        guard let context, let userID, room?.id == chatID else { return }
+        let remoteIDs = Set(items.map(\.id))
+        for dto in items {
+            if let record = placementRecord(dto.id) {
+                if !record.needsSync { record.apply(remote: dto) }
+            } else {
+                context.insert(ChatPlacementRecord(dto: dto, ownerID: userID, chatID: chatID, needsSync: false, isOnServer: true))
+            }
+        }
+        if !isFromCache {
+            for record in placementRecords(chatID: chatID) where !record.needsSync && record.isOnServer && !remoteIDs.contains(record.placementID) {
+                removePlacementFiles(record)
+                context.delete(record)
+            }
+        }
+        save()
+        reloadPlacements()
+    }
+
+    func reloadPlacements() {
+        guard let userID, let chatID = room?.id else {
+            placements = []
+            return
+        }
+        placements = placementRecords(chatID: chatID)
+            .filter { !$0.pendingDelete }
+            .sorted { $0.z == $1.z ? $0.createdAt < $1.createdAt : $0.z < $1.z }
+            .map { record in
+                ChatPlacementItem(
+                    placement: record.dto,
+                    isMine: record.senderID == userID,
+                    localImageURL: placementImageURL(record),
+                    isSyncing: record.needsSync
+                )
+            }
+    }
+
+    /// Yeni yerleştirme. Konum hesabı görünümde (`PlacementGeometry.anchored`) yapılır.
+    @discardableResult
+    func placeSticker(fileURL: URL, width: Int, height: Int, anchorMessageID: String,
+                      x: Double, y: Double, scale: Double, rotation: Double) -> String? {
+        guard let context, let userID, let chatID = room?.id else { return nil }
+        let placementID = makeID()
+        let fileName = "placement-\(placementID).\(ChatStickerPath.fileExtension)"
+        do {
+            let destination = files.outgoingURL(named: fileName)
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.copyItem(at: fileURL, to: destination)
+        } catch {
+            errorMessage = "Sticker hazırlanamadı."
+            return nil
+        }
+        let now = clock()
+        let topZ = placementRecords(chatID: chatID).map(\.z).max() ?? now.timeIntervalSince1970
+        let dto = ChatPlacementDTO(
+            id: placementID, senderID: userID, anchorMessageID: anchorMessageID,
+            x: PlacementGeometry.clampX(x), y: y, scale: PlacementGeometry.clampScale(scale),
+            rotation: PlacementGeometry.normalizedRotation(rotation), z: max(topZ + 1, now.timeIntervalSince1970),
+            sticker: ChatSticker(path: ChatStickerPath.file(chatID: chatID, itemID: placementID), width: width, height: height),
+            createdAt: now, updatedAt: now
+        )
+        let record = ChatPlacementRecord(dto: dto, ownerID: userID, chatID: chatID, needsSync: true, isOnServer: false)
+        record.localFileName = fileName
+        context.insert(record)
+        save()
+        reloadPlacements()
+        Task { await syncPlacements() }
+        return placementID
+    }
+
+    /// Yerleştiren kişi taşır / büyütür / döndürür.
+    func movePlacement(_ id: String, anchorMessageID: String, x: Double, y: Double, scale: Double, rotation: Double) {
+        guard let record = placementRecord(id), record.senderID == userID, !record.pendingDelete else { return }
+        record.anchorMessageID = anchorMessageID
+        record.x = PlacementGeometry.clampX(x)
+        record.y = y
+        record.scale = PlacementGeometry.clampScale(scale)
+        record.rotation = PlacementGeometry.normalizedRotation(rotation)
+        markPlacementChanged(record)
+    }
+
+    /// Öne al / arkaya al.
+    func reorderPlacement(_ id: String, toFront: Bool) {
+        guard let record = placementRecord(id), record.senderID == userID, let chatID = room?.id else { return }
+        let others = placementRecords(chatID: chatID).filter { $0.placementID != id && !$0.pendingDelete }.map(\.z)
+        if toFront {
+            record.z = (others.max() ?? record.z) + 1
+        } else {
+            record.z = (others.min() ?? record.z) - 1
+        }
+        markPlacementChanged(record)
+    }
+
+    func deletePlacement(_ id: String) {
+        guard let context, let record = placementRecord(id), record.senderID == userID else { return }
+        if record.isOnServer {
+            record.pendingDelete = true
+            record.needsSync = true
+        } else {
+            // Sunucuya hiç gitmemiş: dosyası yüklendiyse o da silinir.
+            if record.fileUploaded {
+                let store = mediaStore, path = record.sticker.path
+                Task { await store.delete(paths: [path]) }
+            }
+            removePlacementFiles(record)
+            context.delete(record)
+        }
+        save()
+        reloadPlacements()
+        Task { await syncPlacements() }
+    }
+
+    private func markPlacementChanged(_ record: ChatPlacementRecord) {
+        record.updatedAt = clock()
+        record.needsSync = true
+        save()
+        reloadPlacements()
+        Task { await syncPlacements() }
+    }
+
+    /// Bekleyen yerleştirmeleri sırayla sunucuya yazar (önce PNG, sonra belge). Ağ hatasında durur.
+    func syncPlacements() async {
+        guard !isSyncingPlacements, let userID, let chatID = room?.id else { return }
+        isSyncingPlacements = true
+        defer { isSyncingPlacements = false }
+
+        for record in placementRecords(chatID: chatID) where record.needsSync {
+            let id = record.placementID
+            do {
+                if record.pendingDelete {
+                    let path = record.sticker.path
+                    try await sync.deletePlacement(id: id, chatID: chatID)
+                    await mediaStore.delete(paths: [path])
+                    if let current = placementRecord(id) {
+                        removePlacementFiles(current)
+                        context?.delete(current)
+                    }
+                } else {
+                    if !record.fileUploaded {
+                        guard let name = record.localFileName, files.exists(files.outgoingURL(named: name)) else {
+                            throw AppError.storage("Sticker dosyası cihazda bulunamadı.")
+                        }
+                        try await mediaStore.upload(fileURL: files.outgoingURL(named: name), to: record.sticker.path,
+                                                    contentType: ChatStickerPath.contentType, senderID: userID, progress: { _ in })
+                        placementRecord(id)?.fileUploaded = true
+                        save()
+                    }
+                    guard let current = placementRecord(id), !current.pendingDelete else { continue }
+                    let dto = current.dto
+                    try await sync.savePlacement(dto, chatID: chatID)
+                    if let fresh = placementRecord(id) {
+                        fresh.isOnServer = true
+                        // Yazım sırasında yeni değişiklik olmadıysa eşitlendi.
+                        if fresh.dto == dto { fresh.needsSync = false }
+                        movePlacementFileToCache(fresh)
+                    }
+                }
+                save()
+            } catch {
+                save()
+                if case .network = AppError.map(error) { break }
+                errorMessage = AppError.map(error).errorDescription
+            }
+        }
+        reloadPlacements()
+    }
+
+    /// Yerleştirmenin PNG'si: cihazda yoksa indirilir.
+    func loadPlacementImage(_ item: ChatPlacementItem) async -> URL? {
+        if let url = item.localImageURL { return url }
+        let destination = files.cachedOriginalURL(messageID: "placement-\(item.id)", fileExtension: ChatStickerPath.fileExtension)
+        if files.exists(destination) { return destination }
+        do {
+            try await mediaStore.download(path: item.placement.sticker.path, to: destination, progress: { _ in })
+            reloadPlacements()
+            return destination
+        } catch {
+            return nil
+        }
+    }
+
+    private func placementImageURL(_ record: ChatPlacementRecord) -> URL? {
+        if let name = record.localFileName, files.exists(files.outgoingURL(named: name)) { return files.outgoingURL(named: name) }
+        let cached = files.cachedOriginalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)
+        return files.exists(cached) ? cached : nil
+    }
+
+    private func movePlacementFileToCache(_ record: ChatPlacementRecord) {
+        guard let name = record.localFileName else { return }
+        let target = files.cachedOriginalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)
+        try? FileManager.default.removeItem(at: target)
+        try? FileManager.default.moveItem(at: files.outgoingURL(named: name), to: target)
+        record.localFileName = nil
+    }
+
+    private func removePlacementFiles(_ record: ChatPlacementRecord) {
+        var urls = [files.cachedOriginalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)]
+        if let name = record.localFileName { urls.append(files.outgoingURL(named: name)) }
+        files.remove(urls)
+    }
+
+    private func placementRecords(chatID: String) -> [ChatPlacementRecord] {
+        guard let context, let userID else { return [] }
+        let descriptor = FetchDescriptor<ChatPlacementRecord>(predicate: #Predicate { $0.ownerID == userID && $0.chatID == chatID })
+        return (try? context.fetch(descriptor)) ?? []
+    }
+
+    private func placementRecord(_ id: String) -> ChatPlacementRecord? {
+        guard let context, let userID else { return nil }
+        let key = ChatPlacementRecord.key(ownerID: userID, placementID: id)
+        var descriptor = FetchDescriptor<ChatPlacementRecord>(predicate: #Predicate { $0.key == key })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     // MARK: Medya: gösterme
@@ -1176,6 +1473,7 @@ final class ChatViewModel {
     private func originalExtension(of record: ChatMessageRecord) -> String? {
         if let media = record.media { return media.fileExtension }
         if record.audio != nil { return ChatAudioPath.fileExtension }
+        if record.sticker != nil { return ChatStickerPath.fileExtension }
         return nil
     }
 
@@ -1253,6 +1551,10 @@ final class ChatViewModel {
             context.delete($0)
         }
         pendingOperations().filter { $0.chatID == chatID }.forEach { context.delete($0) }
+        for placement in placementRecords(chatID: chatID) {
+            removePlacementFiles(placement)
+            context.delete(placement)
+        }
         save()
     }
 

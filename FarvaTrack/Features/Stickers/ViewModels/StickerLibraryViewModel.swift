@@ -86,6 +86,22 @@ final class StickerLibraryViewModel {
         return id
     }
 
+    /// Sohbette gelen bir sticker'ı (PNG dosyası) kütüphaneye kopyalar.
+    @discardableResult
+    func addPNG(at fileURL: URL, width: Int, height: Int) throws -> String {
+        guard let context, let userID else { throw AppError.notAuthenticated }
+        let data = try Data(contentsOf: fileURL)
+        // Yalnızca gerçek PNG kabul edilir (Storage kuralları da PNG ister).
+        guard data.starts(with: [0x89, 0x50, 0x4E, 0x47]) else { throw AppError.invalidInput("Bu dosya bir sticker değil.") }
+        let id = makeID()
+        try data.write(to: files.url(for: id), options: .atomic)
+        context.insert(StickerRecord(id: id, ownerID: userID, width: width, height: height, createdAt: clock()))
+        try context.save()
+        reload()
+        Task { await syncAll() }
+        return id
+    }
+
     func delete(_ id: String) {
         guard let context, let record = record(id) else { return }
         // Hiç yüklenmemişse sunucudan silinecek bir şey yok.

@@ -51,6 +51,15 @@ protocol ChatSyncing: AnyObject {
     func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws
     /// Alıcı: sesli mesaj dinlendi.
     func markListened(messageID: String, chatID: String, at: Date) async throws
+
+    // MARK: Serbest yerleştirme (8E)
+    func observePlacements(
+        chatID: String,
+        onChange: @escaping @MainActor (_ placements: [ChatPlacementDTO], _ isFromCache: Bool) -> Void,
+        onError: @escaping @MainActor (AppError) -> Void
+    ) -> ChatSubscription
+    func savePlacement(_ placement: ChatPlacementDTO, chatID: String) async throws
+    func deletePlacement(id: String, chatID: String) async throws
     func setReaction(_ emoji: String?, messageID: String, chatID: String, userID: String) async throws
     func markRead(messageIDs: [String], chatID: String, at: Date) async throws
     func setTyping(_ isTyping: Bool, chatID: String, userID: String, at: Date) async throws
@@ -80,6 +89,8 @@ enum ChatField {
     static let media = "media"
     static let audio = "audio"
     static let listenedAt = "listenedAt"
+    static let sticker = "sticker"
+    static let updatedAt = "updatedAt"
 
     static let messageId = "messageId"
     static let preview = "preview"
@@ -277,7 +288,8 @@ final class ChatService: ChatSyncing {
             ChatField.deleted: true,
             ChatField.text: "",
             ChatField.media: FieldValue.delete(),
-            ChatField.audio: FieldValue.delete()
+            ChatField.audio: FieldValue.delete(),
+            ChatField.sticker: FieldValue.delete()
         ])
     }
 
@@ -320,6 +332,58 @@ final class ChatService: ChatSyncing {
         }
     }
 
+    // MARK: Serbest yerleştirme
+
+    private func placements(_ chatID: String) throws -> CollectionReference {
+        try chats().document(chatID).collection(Constants.Collection.chatPlacements)
+    }
+
+    func observePlacements(
+        chatID: String,
+        onChange: @escaping @MainActor ([ChatPlacementDTO], Bool) -> Void,
+        onError: @escaping @MainActor (AppError) -> Void
+    ) -> ChatSubscription {
+        guard let query = try? placements(chatID).order(by: ChatField.createdAt).limit(to: 500) else {
+            Task { @MainActor in onError(.firebaseNotConfigured) }
+            return .none
+        }
+        let registration = query.addSnapshotListener { snapshot, error in
+            if let error {
+                Task { @MainActor in onError(AppError.map(error)) }
+                return
+            }
+            guard let snapshot else { return }
+            let items = snapshot.documents.compactMap { document -> ChatPlacementDTO? in
+                let data = document.data()
+                let created = (data[ChatField.createdAt] as? Timestamp)?.dateValue() ?? .now
+                let updated = (data[ChatField.updatedAt] as? Timestamp)?.dateValue() ?? created
+                return ChatPlacementFields.decode(id: document.documentID, data: data, createdAt: created, updatedAt: updated)
+            }
+            let fromCache = snapshot.metadata.isFromCache
+            Task { @MainActor in onChange(items, fromCache) }
+        }
+        return ChatSubscription { registration.remove() }
+    }
+
+    func savePlacement(_ placement: ChatPlacementDTO, chatID: String) async throws {
+        var fields = ChatPlacementFields.encode(placement)
+        fields[ChatField.createdAt] = Timestamp(date: placement.createdAt)
+        fields[ChatField.updatedAt] = Timestamp(date: placement.updatedAt)
+        do {
+            try await placements(chatID).document(placement.id).setData(fields)
+        } catch {
+            throw AppError.map(error)
+        }
+    }
+
+    func deletePlacement(id: String, chatID: String) async throws {
+        do {
+            try await placements(chatID).document(id).delete()
+        } catch {
+            throw AppError.map(error)
+        }
+    }
+
     private func update(chatID: String, messageID: String, _ fields: [AnyHashable: Any]) async throws {
         do {
             try await messages(chatID).document(messageID).updateData(fields)
@@ -347,10 +411,21 @@ final class ChatService: ChatSyncing {
                         if let audio = ChatAudioFields.decode(document.data()[ChatField.audio]) {
                             try? await Storage.storage().reference(withPath: audio.path).delete()
                         }
+                        if let sticker = ChatStickerFields.decode(document.data()[ChatField.sticker]) {
+                            try? await Storage.storage().reference(withPath: sticker.path).delete()
+                        }
                     }
                     let batch = try db.batch()
                     page.documents.forEach { batch.deleteDocument($0.reference) }
                     try await batch.commit()
+                }
+                // Sohbet üstüne bırakılan sticker'lar (belge + dosya).
+                let placements = try await room.reference.collection(Constants.Collection.chatPlacements).getDocuments()
+                for placement in placements.documents {
+                    if let sticker = ChatStickerFields.decode(placement.data()[ChatField.sticker]) {
+                        try? await Storage.storage().reference(withPath: sticker.path).delete()
+                    }
+                    try await placement.reference.delete()
                 }
                 try await room.reference.delete()
             }
@@ -415,6 +490,7 @@ enum ChatFirestoreMapper {
             media: ChatMediaFields.decode(data[ChatField.media]),
             audio: ChatAudioFields.decode(data[ChatField.audio]),
             listenedAt: date(data[ChatField.listenedAt]),
+            sticker: ChatStickerFields.decode(data[ChatField.sticker]),
             hasPendingWrites: hasPendingWrites
         )
     }
@@ -441,6 +517,9 @@ enum ChatFirestoreMapper {
         }
         if let audio = message.audio {
             fields[ChatField.audio] = ChatAudioFields.encode(audio)
+        }
+        if let sticker = message.sticker {
+            fields[ChatField.sticker] = ChatStickerFields.encode(sticker)
         }
         return fields
     }

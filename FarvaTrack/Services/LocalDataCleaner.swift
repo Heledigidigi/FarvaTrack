@@ -23,6 +23,7 @@ enum LocalDataCleaner {
         try delete(ManualStepEntry.self, context: context) { $0.ownerID == ownerID }
         try delete(ChatMessageRecord.self, context: context) { $0.ownerID == ownerID }
         try delete(ChatPendingOperation.self, context: context) { $0.ownerID == ownerID }
+        try delete(ChatPlacementRecord.self, context: context) { $0.ownerID == ownerID }
         for sticker in try context.fetch(FetchDescriptor<StickerRecord>()) where sticker.ownerID == ownerID {
             StickerFiles.live.remove(sticker.id)
             context.delete(sticker)
@@ -35,6 +36,7 @@ enum LocalDataCleaner {
         }
         UserDefaultsLiveSessionStore(defaults: defaults).clear(userID: ownerID)
         ChatRoomCache(defaults: defaults).clear(userID: ownerID)
+        StickerRecents(defaults: defaults, userID: ownerID).clear()
         // Sohbet fotoğraf/videoları (gönderilmeyi bekleyenler ve indirilenler).
         ChatMediaFiles.live.removeAll()
     }

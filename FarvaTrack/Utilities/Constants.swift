@@ -23,6 +23,8 @@ enum Constants {
         static let chats = "chats"
         static let chatMessages = "messages"
         static let chatInvites = "chatInvites"
+        /// Sohbet üstüne serbestçe bırakılan sticker'lar (8E).
+        static let chatPlacements = "placements"
 
         /// Hesap silinirken temizlenen `users/{uid}` alt koleksiyonları.
         static let userSubcollections = [workouts, meals, water, sleep, weight, measurements, waste, wasteDaily, library, templates, programs, manualSteps, stickers]

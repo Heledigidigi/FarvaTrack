@@ -49,6 +49,11 @@ service firebase.storage {
             && request.resource.size < 2 * 1024 * 1024 * 1024
             && request.resource.contentType.matches('(image|video)/.+'))
           ||
+          // Sticker mesajı ve sohbet üstü yerleştirme (8E): şeffaf PNG, en fazla 2 MB.
+          (fileName == 'sticker.png'
+            && request.resource.size < 2 * 1024 * 1024
+            && request.resource.contentType == 'image/png')
+          ||
           // Sesli mesaj (8C): AAC .m4a, en fazla 50 MB.
           (fileName == 'voice.m4a'
             && request.resource.size < 50 * 1024 * 1024

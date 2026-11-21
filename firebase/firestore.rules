@@ -82,7 +82,26 @@ service cloud.firestore {
             && data.audio.waveform is list
             && data.audio.waveform.size() <= 128)
         : !('audio' in data);
-      return mediaOk && audioOk;
+      let stickerOk = data.type == 'sticker'
+        ? (data.sticker is map && data.sticker.path == folder + 'sticker.png')
+        : !('sticker' in data);
+      return mediaOk && audioOk && stickerOk;
+    }
+
+    // Sohbet üstüne bırakılan sticker (8E): konum en yakın mesaja bağlı; dosya bu yerleştirmenin klasöründe.
+    function validPlacement(chatId, placementId, data) {
+      return data.keys().hasOnly(['senderId', 'anchorMessageId', 'x', 'y', 'scale', 'rotation', 'z', 'sticker', 'createdAt', 'updatedAt'])
+        && data.senderId == request.auth.uid
+        && data.anchorMessageId is string
+        && data.x is number && data.x >= 0 && data.x <= 1
+        && data.y is number && data.y >= -5000 && data.y <= 5000
+        && data.scale is number && data.scale >= 0.3 && data.scale <= 3
+        && data.rotation is number
+        && data.z is number
+        && data.sticker is map
+        && data.sticker.path == 'chats/' + chatId + '/media/' + placementId + '/sticker.png'
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     // Değişen alanlar yalnızca `keys` içinden olabilir.
@@ -146,7 +165,7 @@ service cloud.firestore {
         allow read: if isChatMember(chatId);
 
         allow create: if isChatMember(chatId)
-          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio'])
+          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio', 'sticker'])
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.type in ['text', 'image', 'video', 'audio', 'sticker', 'call']
           && request.resource.data.text is string
@@ -161,7 +180,7 @@ service cloud.firestore {
         allow update: if isChatMember(chatId) && (
           (resource.data.senderId == request.auth.uid
             && resource.data.deleted == false
-            && onlyChanges(['text', 'editedAt', 'deleted', 'media', 'audio'])
+            && onlyChanges(['text', 'editedAt', 'deleted', 'media', 'audio', 'sticker'])
             && request.resource.data.text is string
             && request.resource.data.text.size() <= 4000
             && (request.resource.data.deleted == true || validMedia(chatId, messageId, request.resource.data)))
@@ -187,6 +206,16 @@ service cloud.firestore {
 
         // Kalıcı silme yalnızca hesap silme temizliği içindir; arayüz "herkesten sil" için `deleted` alanını kullanır.
         allow delete: if isChatMember(chatId);
+      }
+
+      // Serbest yerleştirmeler: iki üye görür; yalnızca yerleştiren taşır ve siler.
+      match /placements/{placementId} {
+        allow read: if isChatMember(chatId);
+        allow create: if isChatMember(chatId) && validPlacement(chatId, placementId, request.resource.data);
+        allow update: if isChatMember(chatId)
+          && resource.data.senderId == request.auth.uid
+          && validPlacement(chatId, placementId, request.resource.data);
+        allow delete: if isChatMember(chatId) && resource.data.senderId == request.auth.uid;
       }
     }
   }

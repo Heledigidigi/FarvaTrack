@@ -47,6 +47,8 @@ final class ChatMessageRecord {
     /// `ChatAudio` JSON'u (sesli mesajlarda).
     var audioData: Data?
     var listenedAt: Date?
+    /// `ChatSticker` JSON'u (sticker mesajlarında).
+    var stickerData: Data?
 
     init(dto: ChatMessageDTO, ownerID: String, chatID: String, sendState: ChatSendState) {
         self.key = ChatMessageRecord.key(ownerID: ownerID, messageID: dto.id)
@@ -73,6 +75,7 @@ final class ChatMessageRecord {
         self.uploadStageRaw = nil
         self.audioData = dto.audio.flatMap { try? JSONEncoder().encode($0) }
         self.listenedAt = dto.listenedAt
+        self.stickerData = dto.sticker.flatMap { try? JSONEncoder().encode($0) }
     }
 
     static func key(ownerID: String, messageID: String) -> String { "\(ownerID)|\(messageID)" }
@@ -99,6 +102,11 @@ final class ChatMessageRecord {
         set { audioData = newValue.flatMap { try? JSONEncoder().encode($0) } }
     }
 
+    var sticker: ChatSticker? {
+        get { stickerData.flatMap { try? JSONDecoder().decode(ChatSticker.self, from: $0) } }
+        set { stickerData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     var uploadStage: ChatUploadStage? {
         get { uploadStageRaw.flatMap(ChatUploadStage.init(rawValue:)) }
         set { uploadStageRaw = newValue?.rawValue }
@@ -118,7 +126,7 @@ final class ChatMessageRecord {
         ChatMessageDTO(
             id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
             readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
-            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt
+            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker
         )
     }
 
@@ -135,6 +143,7 @@ final class ChatMessageRecord {
         media = dto.media
         audio = dto.audio
         listenedAt = dto.listenedAt
+        sticker = dto.sticker
         applyReply(dto.replyTo)
     }
 
@@ -231,6 +240,7 @@ struct ChatMessageExport: Codable, Equatable {
     var media: ChatMedia?
     var audio: ChatAudio?
     var listenedAt: Date?
+    var sticker: ChatSticker?
 
     init(record: ChatMessageRecord) {
         id = record.messageID
@@ -247,5 +257,6 @@ struct ChatMessageExport: Codable, Equatable {
         media = record.media
         audio = record.audio
         listenedAt = record.listenedAt
+        sticker = record.sticker
     }
 }

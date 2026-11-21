@@ -34,7 +34,7 @@ enum ChatMessageType: String, Codable, CaseIterable {
     }
 
     /// Bu sürümün gönderebildiği türler (8C: metin, fotoğraf, video, sesli mesaj).
-    static let sendable: Set<ChatMessageType> = [.text, .image, .video, .audio]
+    static let sendable: Set<ChatMessageType> = [.text, .image, .video, .audio, .sticker]
 
     var isMedia: Bool { self == .image || self == .video }
 
@@ -92,6 +92,8 @@ struct ChatMessageDTO: Equatable, Identifiable {
     var audio: ChatAudio?
     /// Alıcı sesli mesajı dinlediğinde (yalnızca alıcı yazar).
     var listenedAt: Date?
+    /// Sticker mesajının PNG'si (8E).
+    var sticker: ChatSticker?
     /// Firestore'un yerel (henüz sunucuya ulaşmamış) yazımı mı; sunucuya yazılmaz.
     var hasPendingWrites: Bool = false
 
@@ -109,6 +111,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         media: ChatMedia? = nil,
         audio: ChatAudio? = nil,
         listenedAt: Date? = nil,
+        sticker: ChatSticker? = nil,
         hasPendingWrites: Bool = false
     ) {
         self.id = id
@@ -124,6 +127,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         self.media = media
         self.audio = audio
         self.listenedAt = listenedAt
+        self.sticker = sticker
         self.hasPendingWrites = hasPendingWrites
     }
 }

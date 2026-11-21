@@ -81,6 +81,27 @@ final class MockChatSync: ChatSyncing {
         listens.append(messageID)
     }
 
+    // MARK: Yerleştirmeler
+    var placementsHandler: (@MainActor ([ChatPlacementDTO], Bool) -> Void)?
+    private(set) var savedPlacements: [ChatPlacementDTO] = []
+    private(set) var deletedPlacements: [String] = []
+
+    func observePlacements(chatID: String, onChange: @escaping @MainActor ([ChatPlacementDTO], Bool) -> Void,
+                           onError: @escaping @MainActor (AppError) -> Void) -> ChatSubscription {
+        placementsHandler = onChange
+        return ChatSubscription { [weak self] in self?.placementsHandler = nil }
+    }
+
+    func savePlacement(_ placement: ChatPlacementDTO, chatID: String) async throws {
+        try write()
+        savedPlacements.append(placement)
+    }
+
+    func deletePlacement(id: String, chatID: String) async throws {
+        try write()
+        deletedPlacements.append(id)
+    }
+
     func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws {
         try write()
         mediaUpdates.append((messageID, media))

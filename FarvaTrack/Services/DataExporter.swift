@@ -31,6 +31,8 @@ struct DataExport: Codable {
     var chatMessages: [ChatMessageExport]
     /// Sticker kütüphanesi (bilgiler; PNG dosyaları Storage'da).
     var stickers: [StickerDTO]
+    /// Sohbet üstüne yerleştirilen sticker'lar (konum bilgileri).
+    var chatPlacements: [ChatPlacementExport]
 }
 
 @MainActor
@@ -58,7 +60,8 @@ enum DataExporter {
             trainingPrograms: try fetch(FetchDescriptor<TrainingProgram>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(\.dto),
             manualSteps: try fetch(FetchDescriptor<ManualStepEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.day)])).map(\.dto),
             chatMessages: try fetch(FetchDescriptor<ChatMessageRecord>(predicate: #Predicate { $0.ownerID == owner && !$0.hiddenForMe }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatMessageExport.init(record:)),
-            stickers: try fetch(FetchDescriptor<StickerRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(\.dto)
+            stickers: try fetch(FetchDescriptor<StickerRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(\.dto),
+            chatPlacements: try fetch(FetchDescriptor<ChatPlacementRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatPlacementExport.init(record:))
         )
     }
 

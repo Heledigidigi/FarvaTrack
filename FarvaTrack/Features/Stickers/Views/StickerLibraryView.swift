@@ -8,7 +8,7 @@ struct StickerLibraryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @State private var library = StickerLibraryViewModel()
+    @State private var library: StickerLibraryViewModel
     @State private var pickerItem: PhotosPickerItem?
     @State private var editorInput: EditorInput?
     @State private var isLoadingPhoto = false
@@ -20,6 +20,11 @@ struct StickerLibraryView: View {
     }
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+
+    /// Sohbetteki sticker paneliyle aynı kütüphane modeli paylaşılabilir.
+    init(library: StickerLibraryViewModel = StickerLibraryViewModel()) {
+        _library = State(initialValue: library)
+    }
 
     var body: some View {
         NavigationStack {
