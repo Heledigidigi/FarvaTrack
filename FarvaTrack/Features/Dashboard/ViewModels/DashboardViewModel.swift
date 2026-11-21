@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 // MARK: - Modeller
-/// Dashboard'un bugün için gösterdiği toplu veriler.
+/// Özet ekranının bugün için gösterdiği toplu veriler.
 struct DashboardSummary: Equatable {
     var steps = 0
     var caloriesBurned = 0
@@ -40,10 +40,10 @@ struct DashboardGoals: Equatable {
 
 // MARK: - Veri kaynağı
 protocol DashboardDataSource {
-    func summary(for date: Date) async throws -> DashboardSummary
+    @MainActor func summary(for date: Date) async throws -> DashboardSummary
 }
 
-/// Modüller (Faz 3–9) bağlanana kadar kullanılan boş kaynak.
+/// Modüller bağlanana kadar kullanılan boş kaynak (sahte veri göstermez).
 struct EmptyDashboardDataSource: DashboardDataSource {
     func summary(for date: Date) async throws -> DashboardSummary {
         var summary = DashboardSummary()
@@ -57,32 +57,6 @@ struct EmptyDashboardDataSource: DashboardDataSource {
     }
 }
 
-#if DEBUG
-/// Arayüzü verili görmek için geçici örnek veri.
-struct SampleDashboardDataSource: DashboardDataSource {
-    func summary(for date: Date) async throws -> DashboardSummary {
-        var summary = DashboardSummary()
-        summary.steps = 6_240
-        summary.caloriesBurned = 310
-        summary.distanceKm = 4.6
-        summary.caloriesConsumed = 1_450
-        summary.waterMl = 1_500
-        summary.sleepHours = 7.2
-        summary.latestWeightKg = 72.4
-        summary.workoutMinutes = 35
-
-        let values: [Double] = [5_400, 8_200, 10_300, 7_600, 9_100, 4_300, 6_240]
-        summary.weeklySteps = values.enumerated().map { index, value in
-            DailyValue(
-                date: Calendar.current.date(byAdding: .day, value: index - 6, to: date.startOfDay) ?? date,
-                value: value
-            )
-        }
-        return summary
-    }
-}
-#endif
-
 // MARK: - ViewModel
 @MainActor
 @Observable
@@ -93,7 +67,7 @@ final class DashboardViewModel {
     private(set) var hasLoaded = false
     var errorMessage: String?
 
-    @ObservationIgnored private let dataSource: DashboardDataSource
+    @ObservationIgnored private var dataSource: DashboardDataSource
 
     init(dataSource: DashboardDataSource = EmptyDashboardDataSource()) {
         self.dataSource = dataSource
@@ -109,6 +83,10 @@ final class DashboardViewModel {
         goals = DashboardGoals(user: user)
     }
 
+    func configure(dataSource: DashboardDataSource) {
+        self.dataSource = dataSource
+    }
+
     func load() async {
         isLoading = true
         defer {
@@ -122,7 +100,7 @@ final class DashboardViewModel {
         }
     }
 
-    // MARK: İlerleme oranları (1'i geçebilir; halka/çubuk kendi içinde sınırlar)
+    // MARK: İlerleme oranları (1'i geçebilir; halka ve çubuk kendi içinde sınırlar)
     var stepProgress: Double { ratio(Double(summary.steps), Double(goals.steps)) }
     var calorieProgress: Double { ratio(Double(summary.caloriesConsumed), Double(goals.calories)) }
     var waterProgress: Double { ratio(Double(summary.waterMl), Double(goals.waterMl)) }

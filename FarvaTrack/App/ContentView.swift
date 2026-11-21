@@ -37,3 +37,46 @@ private struct SplashView: View {
         .accessibilityLabel("Yükleniyor")
     }
 }
+
+/// `GoogleService-Info.plist` pakette yoksa gösterilir.
+struct FirebaseSetupView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    Spacer()
+                    AppLogo(size: 90)
+                    Spacer()
+                }
+                .padding(.top, 40)
+
+                Text("Firebase yapılandırılmadı")
+                    .font(.title2.bold())
+
+                Text("Bu derlemede GoogleService-Info.plist dosyası yok. Giriş ve veri senkronizasyonu için dosyayı ekleyip uygulamayı yeniden derle.")
+                    .foregroundStyle(Color.ftTextSecondary)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    step(1, "Firebase konsolunda iOS uygulaması ekle ve GoogleService-Info.plist dosyasını indir.")
+                    step(2, "GitHub'da Settings → Secrets and variables → Actions bölümüne GOOGLE_SERVICE_INFO_PLIST adlı bir secret ekle; değer olarak dosyanın içeriğini yapıştır.")
+                    step(3, "Yeni bir derleme başlat ve yeni IPA'yı kur.")
+                }
+                .cardStyle()
+            }
+            .padding(Constants.Layout.screenPadding)
+        }
+        .background(Color.ftBackground.ignoresSafeArea())
+    }
+
+    private func step(_ number: Int, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text("\(number)")
+                .font(.subheadline.bold())
+                .frame(width: 24, height: 24)
+                .background(Color.ftAccent, in: Circle())
+            Text(text)
+                .font(.subheadline)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}

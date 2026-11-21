@@ -1,11 +1,11 @@
 import SwiftUI
 
 struct AppLogo: View {
-    var size: CGFloat = 80
+    var size: CGFloat = 84
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+            Circle()
                 .fill(
                     LinearGradient(
                         colors: [Color.ftAccent, Color.ftAccentLight],
@@ -13,14 +13,13 @@ struct AppLogo: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: size, height: size)
-                .shadow(color: Color.ftAccent.opacity(0.35), radius: size * 0.15, y: size * 0.08)
+                .shadow(color: Color.ftAccent.opacity(0.5), radius: 18, y: 8)
 
-            Image(systemName: "bolt.heart.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: size * 0.5, height: size * 0.5)
-                .foregroundStyle(Color.ftBackground)
+            Image(systemName: "heart.text.square.fill")
+                .font(.system(size: size * 0.46, weight: .semibold))
+                .foregroundStyle(.white)
         }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }

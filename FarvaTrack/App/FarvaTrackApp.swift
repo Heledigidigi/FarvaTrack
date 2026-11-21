@@ -9,23 +9,13 @@ struct FarvaTrackApp: App {
     @State private var authViewModel: AuthViewModel
 
     init() {
+        // Plist yoksa başlatılmaz; uygulama kurulum ekranıyla açılır (çökmez).
+        FirebaseBootstrap.configureIfPossible()
+
+        // Yeni SwiftData modelleri sonraki aşamalarda bu şemaya eklenecek.
         let container: ModelContainer
         do {
-            container = try ModelContainer(
-                for: LocalUserProfile.self,
-                Workout.self,
-                WorkoutEntry.self,
-                Exercise.self,
-                MealEntry.self,
-                CustomFood.self,
-                FavoriteFood.self,
-                WaterEntry.self,
-                SleepEntry.self,
-                WeightEntry.self,
-                MeasurementEntry.self,
-                WasteEntry.self,
-                BadgeUnlock.self
-            )
+            container = try ModelContainer(for: LocalUserProfile.self)
         } catch {
             fatalError("SwiftData ModelContainer oluşturulamadı: \(error)")
         }
@@ -41,10 +31,16 @@ struct FarvaTrackApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environment(authViewModel)
-                .preferredColorScheme(.dark)
-                .tint(Color.ftAccentLight)
+            Group {
+                if FirebaseBootstrap.isConfigured {
+                    ContentView()
+                        .environment(authViewModel)
+                } else {
+                    FirebaseSetupView()
+                }
+            }
+            .preferredColorScheme(.dark)
+            .tint(Color.ftAccentLight)
         }
         .modelContainer(modelContainer)
     }

@@ -3,15 +3,22 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(AppRouter.self) private var router
-    // Örnek veriyle denemek için: DashboardViewModel(dataSource: SampleDashboardDataSource())
     @State private var viewModel = DashboardViewModel()
 
     private let twoColumns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     private let threeColumns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
 
+    private var errorBinding: Binding<Bool> {
+        Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
+    }
+
+    /// Biyolojik atık modülü yalnızca yetkili (admin) hesaplarda görünür.
+    private var visibleRoutes: [AppRoute] {
+        AppRoute.allCases.filter { $0 != .biologicalWaste || auth.currentUser?.isAdmin == true }
+    }
+
     var body: some View {
         @Bindable var router = router
-        @Bindable var viewModel = viewModel
 
         NavigationStack(path: $router.dashboardPath) {
             ScrollView {
@@ -38,7 +45,10 @@ struct DashboardView: View {
         .onChange(of: auth.currentUser, initial: true) { _, user in
             if let user { viewModel.updateGoals(from: user) }
         }
-        .alert("Veriler yüklenemedi", isPresented: $viewModel.hasError) {
+        .onChange(of: router.selectedTab) { _, tab in
+            if tab == .dashboard { Task { await viewModel.load() } }
+        }
+        .alert("Veriler yüklenemedi", isPresented: errorBinding) {
             Button("Tamam", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
@@ -287,7 +297,7 @@ struct DashboardView: View {
                 .accessibilityAddTraits(.isHeader)
 
             LazyVGrid(columns: threeColumns, spacing: 12) {
-                ForEach(AppRoute.allCases) { route in
+                ForEach(visibleRoutes) { route in
                     NavigationLink(value: route) {
                         ModuleTile(route: route)
                     }
@@ -298,7 +308,7 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Yardımcı görünümler
+// MARK: - Modül kutusu
 private struct ModuleTile: View {
     let route: AppRoute
 
@@ -323,52 +333,5 @@ private struct ModuleTile: View {
             in: RoundedRectangle(cornerRadius: Constants.Layout.cornerRadius, style: .continuous)
         )
         .accessibilityElement(children: .combine)
-    }
-}
-
-private struct AvatarView: View {
-    let name: String
-    let photoURL: String?
-
-    private var initials: String {
-        name.split(separator: " ")
-            .prefix(2)
-            .compactMap { $0.first }
-            .map(String.init)
-            .joined()
-            .uppercased()
-    }
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(LinearGradient(
-                    colors: [Color.ftAccent, Color.ftAccentLight],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ))
-
-            if let url = photoURL.flatMap(URL.init(string:)) {
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    initialsView
-                }
-                .clipShape(Circle())
-            } else {
-                initialsView
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var initialsView: some View {
-        if initials.isEmpty {
-            Image(systemName: "person.fill").foregroundStyle(.white)
-        } else {
-            Text(initials)
-                .font(.headline)
-                .foregroundStyle(.white)
-        }
     }
 }

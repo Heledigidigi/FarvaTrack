@@ -6,24 +6,24 @@ extension Date {
     }
 
     var endOfDay: Date {
-        var components = DateComponents()
-        components.day = 1
-        components.second = -1
-        return Calendar.current.date(byAdding: components, to: startOfDay) ?? self
+        Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: startOfDay) ?? self
     }
 
     var isToday: Bool {
         Calendar.current.isDateInToday(self)
     }
 
-    var isYesterday: Bool {
-        Calendar.current.isDateInYesterday(self)
+    func isSameDay(as other: Date) -> Bool {
+        Calendar.current.isDate(self, inSameDayAs: other)
     }
 
-    func formatted(format: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = format
-        formatter.locale = Locale(identifier: "tr_TR")
-        return formatter.string(from: self)
+    /// Bu tarihten bugüne geçen tam yıl (doğum tarihinden yaş hesabı için).
+    var yearsSinceNow: Int {
+        Calendar.current.dateComponents([.year], from: self, to: .now).year ?? 0
+    }
+
+    /// Örn: "17 Kasım"
+    var shortDateString: String {
+        formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "tr_TR")))
     }
 }

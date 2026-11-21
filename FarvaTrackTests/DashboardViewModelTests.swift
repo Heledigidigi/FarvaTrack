@@ -89,4 +89,19 @@ final class AppRouterTests: XCTestCase {
         router.popToRoot()
         XCTAssertTrue(router.dashboardPath.isEmpty)
     }
+
+    func testDeepLinkOpensWaterTab() {
+        let router = AppRouter()
+        router.push(.sleep)
+        router.handle(URL(string: "farvatrack://water")!)
+        XCTAssertEqual(router.selectedTab, .water)
+        XCTAssertTrue(router.dashboardPath.isEmpty)
+    }
+
+    func testUnknownSchemeIsIgnored() {
+        let router = AppRouter()
+        router.handle(URL(string: "https://example.com/steps")!)
+        XCTAssertEqual(router.selectedTab, .dashboard)
+        XCTAssertTrue(router.dashboardPath.isEmpty)
+    }
 }

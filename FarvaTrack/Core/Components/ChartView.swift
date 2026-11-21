@@ -1,25 +1,49 @@
 import SwiftUI
 import Charts
 
-/// Günlük değerler için yeniden kullanılabilir çubuk grafik (hedef çizgisi + dokunarak seçim).
+/// Günlük (veya aylık) değerler için yeniden kullanılabilir çubuk grafik (hedef çizgisi + dokunarak seçim).
 struct ChartView: View {
+    enum XAxisStyle { case weekday, dayOfMonth, monthOfYear }
+
     let data: [DailyValue]
     var goal: Double?
     var tint: Color = Color.ftAccentLight
     var unit: String = ""
+    var xAxisStyle: XAxisStyle = .weekday
+    var fractionDigits = 0
+    /// Çubuk genişliği birimi: günlük için `.day`, aylık kovalar için `.month`.
+    var barUnit: Calendar.Component = .day
 
     @State private var selectedDate: Date?
 
+    private var granularity: Calendar.Component { barUnit == .month ? .month : .day }
+
     private var selectedItem: DailyValue? {
         guard let selectedDate else { return nil }
-        return data.first { $0.date.isSameDay(as: selectedDate) }
+        return data.first { Calendar.current.isDate($0.date, equalTo: selectedDate, toGranularity: granularity) }
+    }
+
+    private var axisValues: AxisMarkValues {
+        switch xAxisStyle {
+        case .weekday: return .stride(by: .day)
+        case .dayOfMonth: return .stride(by: .day, count: 5)
+        case .monthOfYear: return .stride(by: .month)
+        }
+    }
+
+    private var axisFormat: Date.FormatStyle {
+        switch xAxisStyle {
+        case .weekday: return .dateTime.weekday(.abbreviated)
+        case .dayOfMonth: return .dateTime.day()
+        case .monthOfYear: return .dateTime.month(.narrow)
+        }
     }
 
     var body: some View {
         Chart {
             ForEach(data) { item in
                 BarMark(
-                    x: .value("Gün", item.date, unit: .day),
+                    x: .value("Tarih", item.date, unit: barUnit),
                     y: .value("Değer", item.value)
                 )
                 .cornerRadius(6)
@@ -38,7 +62,7 @@ struct ChartView: View {
             }
 
             if let selectedItem {
-                RuleMark(x: .value("Seçili", selectedItem.date, unit: .day))
+                RuleMark(x: .value("Seçili", selectedItem.date, unit: barUnit))
                     .foregroundStyle(Color.white.opacity(0.15))
                     .annotation(
                         position: .top,
@@ -50,8 +74,8 @@ struct ChartView: View {
         }
         .chartXSelection(value: $selectedDate)
         .chartXAxis {
-            AxisMarks(values: .stride(by: .day)) { _ in
-                AxisValueLabel(format: .dateTime.weekday(.abbreviated), centered: true)
+            AxisMarks(values: axisValues) { _ in
+                AxisValueLabel(format: axisFormat, centered: true)
                     .foregroundStyle(Color.ftTextSecondary)
             }
         }
@@ -76,10 +100,12 @@ struct ChartView: View {
 
     private func tooltip(for item: DailyValue) -> some View {
         VStack(spacing: 2) {
-            Text(item.date.shortDateString)
+            Text(barUnit == .month
+                 ? item.date.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "tr_TR")))
+                 : item.date.shortDateString)
                 .font(.caption2)
                 .foregroundStyle(Color.ftTextSecondary)
-            Text("\(item.value.formatted(.number.precision(.fractionLength(0)))) \(unit)")
+            Text("\(item.value.formatted(.number.precision(.fractionLength(fractionDigits)))) \(unit)")
                 .font(.caption.bold().monospacedDigit())
         }
         .padding(.horizontal, 10)

@@ -25,7 +25,7 @@ enum Constants {
 
     enum Validation {
         static let minPasswordLength = 8
-        static let minAge = 13          // Mağaza/yasal gereksinimlerine göre güncelle
+        static let minAge = 13          // Mağaza/yasal gereksinimlere göre güncelle
         static let maxAge = 100
     }
 
@@ -42,7 +42,7 @@ enum Constants {
     }
 
     enum Links {
-        // TODO: Kendi adreslerinle değiştir.
+        // TODO: Yayından önce kendi adreslerinle değiştir.
         static let privacyPolicy = "https://example.com/gizlilik"
         static let termsOfUse = "https://example.com/kosullar"
     }

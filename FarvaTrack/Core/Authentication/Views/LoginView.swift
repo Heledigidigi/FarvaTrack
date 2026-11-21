@@ -1,50 +1,133 @@
 import SwiftUI
+import AuthenticationServices
 
 struct LoginView: View {
     @Environment(AuthViewModel.self) private var auth
-    @State private var email = ""
-    @State private var password = ""
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            AppLogo(size: 90)
-            Text("FarvaTrack")
-                .font(.title.bold())
-                .foregroundStyle(.white)
+        @Bindable var auth = auth
 
-            VStack(spacing: 14) {
-                TextField("E-posta", text: $email)
-                    .textFieldStyle(.plain)
-                    .padding()
-                    .background(Color.ftCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(.white)
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 28) {
+                    header
 
-                SecureField("Şifre", text: $password)
-                    .textFieldStyle(.plain)
-                    .padding()
-                    .background(Color.ftCard)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .foregroundStyle(.white)
+                    VStack(spacing: 16) {
+                        CustomTextField(
+                            title: "E-posta",
+                            systemImage: "envelope.fill",
+                            text: $auth.email,
+                            keyboard: .emailAddress,
+                            contentType: .emailAddress
+                        )
+                        CustomTextField(
+                            title: "Şifre",
+                            systemImage: "lock.fill",
+                            text: $auth.password,
+                            isSecure: true,
+                            contentType: .password
+                        )
+                        HStack {
+                            Spacer()
+                            Button("Şifremi unuttum") {
+                                Task { await auth.sendPasswordReset() }
+                            }
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.ftAccentLight)
+                        }
+                    }
+
+                    Button {
+                        hideKeyboard()
+                        Task { await auth.signIn() }
+                    } label: {
+                        Text("Giriş Yap")
+                    }
+                    .buttonStyle(PrimaryButtonStyle(isLoading: auth.isWorking))
+                    .disabled(auth.isWorking)
+
+                    orDivider
+
+                    SignInWithAppleButton(.signIn) { request in
+                        auth.configureAppleRequest(request)
+                    } onCompletion: { result in
+                        Task { await auth.handleAppleCompletion(result) }
+                    }
+                    .signInWithAppleButtonStyle(.white)
+                    .frame(height: Constants.Layout.fieldHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Constants.Layout.cornerRadius, style: .continuous))
+                    .disabled(auth.isWorking)
+
+                    NavigationLink {
+                        RegisterView()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text("Hesabın yok mu?")
+                                .foregroundStyle(Color.ftTextSecondary)
+                            Text("Kayıt ol")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color.ftAccentLight)
+                        }
+                        .font(.subheadline)
+                    }
+                }
+                .padding(.horizontal, Constants.Layout.screenPadding)
+                .padding(.vertical, 40)
             }
-            .padding(.horizontal)
-
-            Button {
-                auth.authState = .authenticated
-            } label: {
-                Text("Giriş Yap")
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.ftAccent)
-                    .foregroundStyle(Color.ftBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
-
-            Spacer()
+            .scrollDismissesKeyboard(.interactively)
+            .background(Color.ftBackground.ignoresSafeArea())
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .authAlerts()
+    }
+
+    private var header: some View {
+        VStack(spacing: 14) {
+            AppLogo()
+            Text("FarvaTrack")
+                .font(.largeTitle.bold())
+            Text("Sağlıklı yaşamın tek ekranda.")
+                .font(.subheadline)
+                .foregroundStyle(Color.ftTextSecondary)
+        }
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var orDivider: some View {
+        HStack(spacing: 12) {
+            Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+            Text("veya")
+                .font(.footnote)
+                .foregroundStyle(Color.ftTextSecondary)
+            Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Ortak uyarılar (Giriş, Kayıt, Onboarding)
+struct AuthAlertsModifier: ViewModifier {
+    @Environment(AuthViewModel.self) private var auth
+
+    func body(content: Content) -> some View {
+        @Bindable var auth = auth
+
+        content
+            .alert("Bir sorun oluştu", isPresented: $auth.hasError) {
+                Button("Tamam", role: .cancel) {}
+            } message: {
+                Text(auth.errorMessage ?? "")
+            }
+            .alert("Bilgi", isPresented: $auth.hasInfo) {
+                Button("Tamam", role: .cancel) {}
+            } message: {
+                Text(auth.infoMessage ?? "")
+            }
+    }
+}
+
+extension View {
+    func authAlerts() -> some View {
+        modifier(AuthAlertsModifier())
     }
 }

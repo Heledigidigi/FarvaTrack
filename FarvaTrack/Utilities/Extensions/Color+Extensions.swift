@@ -1,41 +1,42 @@
 import SwiftUI
 
 extension Color {
+    /// "#RRGGBB" veya "RRGGBB" formatında hex renk.
     init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: // RGB (12-bit)
-            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
-            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
-            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default:
-            (a, r, g, b) = (255, 0, 0, 0)
+        let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var value: UInt64 = 0
+        Scanner(string: cleaned).scanHexInt64(&value)
+
+        guard cleaned.count == 6 else {
+            self.init(.sRGB, red: 0, green: 0, blue: 0, opacity: 1)
+            return
         }
         self.init(
             .sRGB,
-            red: Double(r) / 255,
-            green: Double(g) / 255,
-            blue: Double(b) / 255,
-            opacity: Double(a) / 255
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255,
+            opacity: 1
         )
     }
 
-    // Temel UI Renkleri
-    static let ftBackground = Color(hex: "#0A0D14")
-    static let ftCard = Color(hex: "#141824")
-    static let ftCardElevated = Color(hex: "#1E2438")
-    static let ftAccent = Color(hex: "#10B981")
-    static let ftAccentLight = Color(hex: "#34D399")
-    static let ftTextSecondary = Color(hex: "#94A3B8")
-    static let ftDanger = Color(hex: "#EF4444")
-    static let ftSuccess = Color(hex: "#10B981")
+    // MARK: - FarvaTrack paleti (koyu tema öncelikli)
+    // Laciverte geçmek için: ftAccent -> "#00356B", ftAccentLight -> "#5B8FD6"
+    static let ftAccent = Color(hex: "#800020")
+    /// Koyu zeminde yazı ve ikonlar için okunaklı açık bordo.
+    static let ftAccentLight = Color(hex: "#E0607F")
 
-    // Modül Renkleri
+    static let ftBackground = Color(hex: "#0E0E12")
+    static let ftCard = Color(hex: "#1A1A21")
+    static let ftCardElevated = Color(hex: "#25252F")
+
+    static let ftTextSecondary = Color.white.opacity(0.65)
+
+    static let ftSuccess = Color(hex: "#30A46C")
+    static let ftWarning = Color(hex: "#F5A524")
+    static let ftDanger = Color(hex: "#E5484D")
+
+    // Modül renkleri
     static let ftCalories = Color(hex: "#FF9F43")
     static let ftWater = Color(hex: "#4DA3FF")
     static let ftSleep = Color(hex: "#8B7CF6")

@@ -1,7 +1,7 @@
 import SwiftUI
 import Observation
 
-// MARK: - Tab'lar
+// MARK: - Sekmeler
 enum AppTab: Hashable, CaseIterable {
     case dashboard, exercise, nutrition, water, profile
 
@@ -26,7 +26,7 @@ enum AppTab: Hashable, CaseIterable {
     }
 }
 
-// MARK: - Dashboard'dan push edilen ekranlar
+// MARK: - Özet ekranından açılan sayfalar
 enum AppRoute: Hashable, CaseIterable, Identifiable {
     case steps, sleep, weight, biologicalWaste, statistics
 
@@ -64,19 +64,14 @@ enum AppRoute: Hashable, CaseIterable, Identifiable {
 }
 
 extension AppRoute {
+    /// Modüller eklendikçe ilgili case gerçek ekrana bağlanacak.
     @ViewBuilder
     var destination: some View {
-        switch self {
-        case .steps: StepsView()
-        case .sleep: SleepView()
-        case .weight: WeightView()
-        case .biologicalWaste: BiologicalWasteView()
-        case .statistics: StatisticsView()
-        }
+        ComingSoonView(title: title, systemImage: systemImage)
     }
 }
 
-// MARK: - Router
+// MARK: - Yönlendirici
 @MainActor
 @Observable
 final class AppRouter {
@@ -87,7 +82,7 @@ final class AppRouter {
         selectedTab = tab
     }
 
-    /// Dashboard sekmesine geçip ilgili ekranı açar.
+    /// Özet sekmesine geçip ilgili sayfayı açar.
     func push(_ route: AppRoute) {
         selectedTab = .dashboard
         dashboardPath.append(route)

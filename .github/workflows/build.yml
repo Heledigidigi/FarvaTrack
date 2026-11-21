@@ -1,43 +1,149 @@
-name: Build FarvaTrack IPA
+name: Build FarvaTrack
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches-ignore: [ "ci-logs" ]
   workflow_dispatch:
+
+permissions:
+  contents: write   # derleme loglarını ci-logs branch'ine yazmak için
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 60
 
     steps:
       - name: Kodlari Cek
         uses: actions/checkout@v4
 
+      - name: Xcode surumu
+        run: xcodebuild -version
+
       - name: XcodeGen Kur
         run: brew install xcodegen
 
-      - name: FarvaTrack Projesini Uret
+      - name: GoogleService-Info.plist (secret'tan)
+        env:
+          GSI: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          mkdir -p FarvaTrack/Resources
+          if [ -z "$GSI" ]; then
+            echo "::warning::GOOGLE_SERVICE_INFO_PLIST secret'i yok. Uygulama 'Firebase yapilandirilmadi' ekraniyla acilacak."
+            exit 0
+          fi
+          # Secret, dosyanin duz icerigi ya da base64 hali olabilir.
+          python3 - <<'PY'
+          import base64, os
+          raw = os.environ["GSI"].strip()
+          if raw.startswith("<?xml") or raw.startswith("<plist"):
+              data = raw.encode()
+          else:
+              data = base64.b64decode(raw)
+          open("FarvaTrack/Resources/GoogleService-Info.plist", "wb").write(data)
+          PY
+          plutil -lint FarvaTrack/Resources/GoogleService-Info.plist
+
+      - name: Projeyi Uret
         run: xcodegen generate
 
-      - name: Uygulamayi Derle (Release)
+      - name: Swift paket onbellegi
+        uses: actions/cache@v4
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Uygulamayi Derle (Release, cihaz)
+        id: build
+        continue-on-error: true
         run: |
-          xcodebuild clean build \
+          set -o pipefail
+          xcodebuild build \
             -project FarvaTrack.xcodeproj \
             -scheme FarvaTrack \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
+            -clonedSourcePackagesDirPath SourcePackages \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGNING_REQUIRED=NO 2>&1 | tee build.log
+
+      - name: Testleri Calistir (simulator)
+        id: test
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devices = json.load(sys.stdin)['devices']
+          runtimes = sorted(k for k in devices if 'iOS' in k)
+          for runtime in reversed(runtimes):
+              phones = [d for d in devices[runtime] if d['name'].startswith('iPhone')]
+              if phones:
+                  print(phones[0]['udid']); break
+          ")
+          echo "Simulator: $UDID"
+          xcodebuild test \
+            -project FarvaTrack.xcodeproj \
+            -scheme FarvaTrack \
+            -destination "id=$UDID" \
+            -derivedDataPath build-test \
+            -clonedSourcePackagesDirPath SourcePackages \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log
 
       - name: IPA Paketini Olustur
+        if: steps.build.outcome == 'success'
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/FarvaTrack.app Payload/
-          zip -r FarvaTrack.ipa Payload
+          zip -qr FarvaTrack.ipa Payload
 
-      - name: IPA Dosyasini Artifact Olarak Yukle
+      - name: IPA Dosyasini Yukle
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: FarvaTrack-IPA
           path: FarvaTrack.ipa
+
+      - name: Loglari ci-logs branch'ine yaz
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+        run: |
+          mkdir -p ci-out
+          touch build.log test.log
+          {
+            echo "branch: $GITHUB_REF_NAME"
+            echo "commit: $GITHUB_SHA"
+            echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "build: $BUILD_OUTCOME"
+            echo "test: ${TEST_OUTCOME:-skipped}"
+            echo "time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          } > ci-out/STATUS.txt
+          grep -nE "error:|\*\* (BUILD|TEST) (SUCCEEDED|FAILED)" build.log | head -400 > ci-out/build-errors.txt || true
+          grep -nE "error:|failed|\*\* TEST (SUCCEEDED|FAILED)|Executed [0-9]+ test" test.log | head -400 > ci-out/test-summary.txt || true
+          tail -c 3000000 build.log > ci-out/build.log
+          tail -c 3000000 test.log > ci-out/test.log
+          cd ci-out
+          git init -q -b ci-logs
+          git config user.name "farvatrack-ci"
+          git config user.email "farvatrack-ci@users.noreply.github.com"
+          git add -A
+          git commit -qm "CI #$GITHUB_RUN_NUMBER $GITHUB_REF_NAME ${GITHUB_SHA::7} build=$BUILD_OUTCOME test=${TEST_OUTCOME:-skipped}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:ci-logs
+
+      - name: Sonuc
+        if: always()
+        run: |
+          echo "Derleme: ${{ steps.build.outcome }} | Test: ${{ steps.test.outcome }}"
+          if [ "${{ steps.build.outcome }}" != "success" ] || [ "${{ steps.test.outcome }}" != "success" ]; then
+            exit 1
+          fi

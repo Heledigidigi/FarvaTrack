@@ -3,24 +3,39 @@ options:
   bundleIdPrefix: com.farvatrack
   deploymentTarget:
     iOS: "17.0"
+  createIntermediateGroups: true
+
 settings:
   base:
-    SWIFT_VERSION: "5.9"
-    GENERATE_INFOPLIST_FILE: YES
-    INFOPLIST_KEY_UILaunchScreen_Generation: YES
-    INFOPLIST_KEY_UIBackgroundModes: ["remote-notification"]
+    # Swift 5 dil modu (Swift 6'nın katı eşzamanlılık denetimleri kapalı)
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Şimdilik imzasız derleme; imzalama ayrı aşamada eklenecek
     CODE_SIGNING_ALLOWED: NO
     CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+
 packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk.git
-    from: 10.20.0
+    from: 11.0.0
+
 targets:
   FarvaTrack:
     type: application
     platform: iOS
     sources:
       - path: FarvaTrack
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.farvatrack.FarvaTrack
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: FarvaTrack
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
     dependencies:
       - package: Firebase
         product: FirebaseAuth
@@ -28,3 +43,26 @@ targets:
         product: FirebaseFirestore
       - package: Firebase
         product: FirebaseStorage
+
+  FarvaTrackTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FarvaTrackTests
+    dependencies:
+      - target: FarvaTrack
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.farvatrack.FarvaTrackTests
+
+schemes:
+  FarvaTrack:
+    build:
+      targets:
+        FarvaTrack: all
+        FarvaTrackTests: [test]
+    test:
+      config: Debug
+      targets:
+        - FarvaTrackTests

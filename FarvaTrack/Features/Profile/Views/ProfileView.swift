@@ -1,25 +1,30 @@
 import SwiftUI
 
+/// Sade profil ekranı. Profil düzenleme, ayarlar ve hesap silme son aşamada eklenecek.
 struct ProfileView: View {
     @Environment(AuthViewModel.self) private var auth
+    @State private var showSignOutConfirmation = false
 
     var body: some View {
         NavigationStack {
             List {
                 if let user = auth.currentUser {
                     Section {
-                        header(user)
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                        HStack(spacing: 14) {
+                            AvatarView(name: user.displayName, photoURL: user.photoURL)
+                                .frame(width: 56, height: 56)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(user.displayName.isEmpty ? "Kullanıcı" : user.displayName)
+                                    .font(.headline)
+                                Text(user.email)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.ftTextSecondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                        .accessibilityElement(children: .combine)
                     }
-
-                    Section {
-                        summary(user)
-                            .listRowInsets(EdgeInsets())
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                    }
+                    .listRowBackground(Color.ftCard)
 
                     Section("Günlük hedeflerin") {
                         goalRow("Kalori", "flame.fill", "\(user.dailyCalorieGoal) kcal", Color.ftCalories)
@@ -28,76 +33,25 @@ struct ProfileView: View {
                         goalRow("Uyku", "moon.stars.fill", "\(user.sleepGoalHours.formatted()) saat", Color.ftSleep)
                     }
                     .listRowBackground(Color.ftCard)
-
-                    Section {
-                        NavigationLink {
-                            ProfileEditView()
-                        } label: {
-                            Label("Profili Düzenle", systemImage: "person.crop.circle")
-                        }
-                        NavigationLink {
-                            WeightView()
-                        } label: {
-                            Label("Kilo ve Ölçüler", systemImage: "scalemass")
-                        }
-                        NavigationLink {
-                            RemindersView()
-                        } label: {
-                            Label("Hatırlatıcılar", systemImage: "bell.badge")
-                        }
-                        NavigationLink {
-                            SettingsView()
-                        } label: {
-                            Label("Ayarlar", systemImage: "gearshape")
-                        }
-                    }
-                    .listRowBackground(Color.ftCard)
                 }
+
+                Section {
+                    Button(role: .destructive) {
+                        showSignOutConfirmation = true
+                    } label: {
+                        Label("Çıkış Yap", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                }
+                .listRowBackground(Color.ftCard)
             }
             .scrollContentBackground(.hidden)
             .background(Color.ftBackground.ignoresSafeArea())
             .navigationTitle("Profil")
+            .confirmationDialog("Çıkış yapmak istiyor musun?", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
+                Button("Çıkış Yap", role: .destructive) { auth.signOut() }
+                Button("Vazgeç", role: .cancel) {}
+            }
         }
-    }
-
-    private func header(_ user: AppUser) -> some View {
-        VStack(spacing: 10) {
-            AvatarView(name: user.displayName, photoURL: user.photoURL)
-                .frame(width: 96, height: 96)
-
-            Text(user.displayName.isEmpty ? "Kullanıcı" : user.displayName)
-                .font(.title2.bold())
-            Text(user.email)
-                .font(.subheadline)
-                .foregroundStyle(Color.ftTextSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .combine)
-    }
-
-    private func summary(_ user: AppUser) -> some View {
-        HStack(spacing: 12) {
-            tile("Yaş", user.age.map { "\($0)" } ?? "—", "yaş")
-            tile("Boy", user.heightCm.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "—", "cm")
-            tile("Kilo", user.weightKg.map { $0.formatted(.number.precision(.fractionLength(0...1))) } ?? "—", "kg")
-        }
-    }
-
-    private func tile(_ title: String, _ value: String, _ unit: String) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.title3.bold().monospacedDigit())
-            Text(unit)
-                .font(.caption)
-                .foregroundStyle(Color.ftTextSecondary)
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(Color.ftTextSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .cardStyle(padding: 14)
-        .accessibilityElement(children: .combine)
     }
 
     private func goalRow(_ title: String, _ systemImage: String, _ value: String, _ tint: Color) -> some View {

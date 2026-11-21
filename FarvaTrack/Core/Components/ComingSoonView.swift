@@ -1,9 +1,10 @@
 import SwiftUI
 
+/// Henüz eklenmemiş modüller için geçici ekran (sonraki aşamalarda kaldırılacak).
 struct ComingSoonView: View {
     let title: String
     let systemImage: String
-    var message = "Bu bölüm yakında geliyor."
+    var message = "Bu bölüm bir sonraki aşamada ekleniyor."
 
     var body: some View {
         VStack(spacing: 16) {
@@ -15,8 +16,10 @@ struct ComingSoonView: View {
                 .font(.title2.bold())
             Text(message)
                 .font(.subheadline)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Color.ftTextSecondary)
         }
+        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.ftBackground.ignoresSafeArea())
         .navigationTitle(title)

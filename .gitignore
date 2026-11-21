@@ -1,0 +1,15 @@
+# Xcode (proje XcodeGen ile üretilir)
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+build/
+build-test/
+SourcePackages/
+Payload/
+*.ipa
+ci-out/
+.DS_Store
+
+# Firebase yapılandırması: GitHub Secret olarak tutulur, repoya eklenmez
+FarvaTrack/Resources/GoogleService-Info.plist
