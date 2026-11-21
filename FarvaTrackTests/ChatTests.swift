@@ -124,6 +124,8 @@ final class ChatModelTests: XCTestCase {
     func testSearchIsCaseAndDiacriticInsensitiveInTurkish() {
         XCTAssertTrue(ChatText.matches("Yarın İstanbul'a gidiyoruz", query: "istanbul"))
         XCTAssertTrue(ChatText.matches("ISPARTA", query: "ısparta"))
+        XCTAssertTrue(ChatText.matches("ISTANBUL", query: "istanbul"), "İngilizce klavyeyle yazılmış büyük I")
+        XCTAssertTrue(ChatText.matches("Ağrı dağı", query: "AGRI"))
         XCTAssertTrue(ChatText.matches("Çok güzel", query: "cok guzel"))
         XCTAssertFalse(ChatText.matches("Merhaba", query: "  "))
         XCTAssertFalse(ChatText.matches("Merhaba", query: "selam"))

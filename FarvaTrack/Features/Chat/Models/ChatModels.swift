@@ -255,9 +255,18 @@ enum ChatText {
 
     /// Arama: büyük/küçük harf ve aksan duyarsız, Türkçe kurallarıyla (İ/ı).
     static func matches(_ text: String, query: String) -> Bool {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let needle = fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !needle.isEmpty else { return false }
-        return text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], locale: turkish) != nil
+        return fold(text).contains(needle)
+    }
+
+    /// Türkçe küçük harfe çevirir (İ→i, I→ı), aksanları atar (ç→c, ğ→g…) ve ı/i farkını kaldırır;
+    /// böylece "istanbul", "İSTANBUL" ve "ISTANBUL" aynı eşleşir.
+    static func fold(_ text: String) -> String {
+        text
+            .lowercased(with: turkish)
+            .folding(options: .diacriticInsensitive, locale: nil)
+            .replacingOccurrences(of: "ı", with: "i")
     }
 
     /// Tek satırlık kısa önizleme.
