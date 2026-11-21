@@ -88,6 +88,7 @@ final class ChatViewModel {
     private var isFlushing = false
     private var flushRequested = false
     private var lastTypingSentAt: Date?
+    private var typingTask: Task<Void, Never>?
 
     init(
         sync: ChatSyncing = ChatService(),
@@ -597,16 +598,23 @@ final class ChatViewModel {
         }
         if let last = lastTypingSentAt, current.timeIntervalSince(last) < ChatLimits.typingThrottle { return }
         lastTypingSentAt = current
-        let sync = sync
-        Task { try? await sync.setTyping(true, chatID: chatID, userID: userID, at: current) }
+        sendTyping(true, chatID: chatID, userID: userID, at: current)
     }
 
     private func stopTyping() {
         guard lastTypingSentAt != nil, let userID, let chatID = room?.id else { return }
         lastTypingSentAt = nil
+        sendTyping(false, chatID: chatID, userID: userID, at: clock())
+    }
+
+    /// Sinyaller sırayla gider; "yazmayı bıraktı" bir önceki "yazıyor"un önüne geçmez.
+    private func sendTyping(_ isTyping: Bool, chatID: String, userID: String, at date: Date) {
+        let previous = typingTask
         let sync = sync
-        let current = clock()
-        Task { try? await sync.setTyping(false, chatID: chatID, userID: userID, at: current) }
+        typingTask = Task {
+            await previous?.value
+            try? await sync.setTyping(isTyping, chatID: chatID, userID: userID, at: date)
+        }
     }
 
     // MARK: Arama
