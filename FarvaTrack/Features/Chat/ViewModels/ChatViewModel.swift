@@ -10,8 +10,16 @@ struct ChatMessageItem: Identifiable, Equatable {
     let status: ChatMessageStatus?
     let myReaction: String?
     let canEdit: Bool
+    /// Kendi medya mesajımızda orijinal dosyanın yükleme ilerlemesi (0…1).
+    var uploadProgress: Double? = nil
+    /// Cihazdaki önizleme / orijinal dosya (varsa).
+    var localThumbnailURL: URL? = nil
+    var localOriginalURL: URL? = nil
 
     var id: String { message.id }
+
+    /// Gönderen tarafta yükleme sürüyor mu (iptal düğmesi için).
+    var isUploading: Bool { isMine && message.media != nil && status == .sending }
 
     /// Bubble altında gösterilecek tepkiler (aynı emoji bir kez, sayısıyla).
     var reactionSummary: [(emoji: String, count: Int)] {
@@ -29,6 +37,8 @@ struct ChatMessageItem: Identifiable, Equatable {
     static func == (lhs: ChatMessageItem, rhs: ChatMessageItem) -> Bool {
         lhs.message == rhs.message && lhs.isMine == rhs.isMine && lhs.status == rhs.status
             && lhs.myReaction == rhs.myReaction && lhs.canEdit == rhs.canEdit
+            && lhs.uploadProgress == rhs.uploadProgress && lhs.localThumbnailURL == rhs.localThumbnailURL
+            && lhs.localOriginalURL == rhs.localOriginalURL
     }
 }
 
@@ -58,6 +68,12 @@ final class ChatViewModel {
     private(set) var isWorking = false
     private(set) var unreadCount = 0
     private(set) var now: Date
+    /// Orijinal dosya yükleme ilerlemeleri (mesaj kimliği → 0…1).
+    private(set) var uploadProgress: [String: Double] = [:]
+    /// Tam ekran görüntüleyicideki indirme ilerlemeleri.
+    private(set) var downloadProgress: [String: Double] = [:]
+    /// Seçilen medya hazırlanıyor (önizleme üretimi / Hızlı modda küçültme).
+    private(set) var isPreparingMedia = false
 
     var draft = ""
     var inviteCodeInput = ""
@@ -73,6 +89,9 @@ final class ChatViewModel {
 
     // MARK: Bağımlılıklar
     private let sync: ChatSyncing
+    private let mediaStore: ChatMediaStoring
+    private let processor: ChatMediaProcessing
+    let files: ChatMediaFiles
     private let roomCache: ChatRoomCache
     private let clock: () -> Date
     private let makeID: () -> String
@@ -89,14 +108,22 @@ final class ChatViewModel {
     private var flushRequested = false
     private var lastTypingSentAt: Date?
     private var typingTask: Task<Void, Never>?
+    private var uploadTasks: [String: Task<Void, Never>] = [:]
+    private var thumbnailLoads: Set<String> = []
 
     init(
         sync: ChatSyncing = ChatService(),
+        mediaStore: ChatMediaStoring = ChatMediaStorage(),
+        processor: ChatMediaProcessing = ChatMediaProcessor(),
+        files: ChatMediaFiles = .live,
         defaults: UserDefaults = .standard,
         clock: @escaping () -> Date = { .now },
         makeID: @escaping () -> String = { UUID().uuidString }
     ) {
         self.sync = sync
+        self.mediaStore = mediaStore
+        self.processor = processor
+        self.files = files
         self.roomCache = ChatRoomCache(defaults: defaults)
         self.clock = clock
         self.makeID = makeID
@@ -159,6 +186,11 @@ final class ChatViewModel {
 
     /// Çıkış yapıldığında ya da kullanıcı değiştiğinde.
     func reset() {
+        uploadTasks.values.forEach { $0.cancel() }
+        uploadTasks = [:]
+        uploadProgress = [:]
+        downloadProgress = [:]
+        thumbnailLoads = []
         roomSubscription?.cancel()
         messagesSubscription?.cancel()
         roomSubscription = nil
@@ -318,6 +350,10 @@ final class ChatViewModel {
 
         for dto in items {
             if let record = cachedRecord(for: dto.id) {
+                if dto.deleted, !record.deletedForEveryone, record.media != nil {
+                    // Karşı taraf herkesten sildi: indirilmiş dosyalar da kaldırılır.
+                    removeLocalFiles(of: record)
+                }
                 if pending.contains(dto.id) {
                     if let readAt = dto.readAt { record.readAt = readAt }
                     var merged = dto.reactions
@@ -375,7 +411,8 @@ final class ChatViewModel {
         if mine {
             if record.sendState == .failed {
                 status = .failed
-            } else if record.sendState == .pending || pendingCreates.contains(dto.id) {
+            } else if record.sendState == .pending || pendingCreates.contains(dto.id)
+                        || (record.uploadStage.map { $0 < .done } ?? false) {
                 status = .sending
             } else if dto.readAt != nil {
                 status = .read
@@ -390,7 +427,10 @@ final class ChatViewModel {
             isMine: mine,
             status: status,
             myReaction: userID.flatMap { dto.reactions[$0] },
-            canEdit: canEdit
+            canEdit: canEdit,
+            uploadProgress: status == .sending ? uploadProgress[dto.id] : nil,
+            localThumbnailURL: dto.media == nil || dto.deleted ? nil : localThumbnailURL(for: record),
+            localOriginalURL: dto.media == nil || dto.deleted ? nil : localOriginalURL(for: record)
         )
     }
 
@@ -498,7 +538,14 @@ final class ChatViewModel {
     func retry(_ item: ChatMessageItem) {
         guard item.status == .failed, let record = cachedRecord(for: item.id) else { return }
         record.sendState = .pending
-        if !hasPendingCreate(item.id) { enqueue(.create, messageID: item.id) }
+        let operations = pendingOperations().filter { $0.messageID == item.id }
+        if let stage = record.uploadStage, stage >= .original, record.media != nil {
+            // Mesaj belgesi sunucuda; yalnızca orijinal dosya yeniden yüklenir.
+            if !operations.contains(where: { $0.kind == .uploadOriginal }) { enqueue(.uploadOriginal, messageID: item.id) }
+            operations.filter { $0.kind == .uploadOriginal }.forEach { $0.attempts = 0 }
+        } else if !operations.contains(where: { $0.kind == .create }) {
+            enqueue(.create, messageID: item.id)
+        }
         save()
         reloadMessages()
         scheduleFlush()
@@ -510,6 +557,10 @@ final class ChatViewModel {
     func deleteForMe(_ item: ChatMessageItem) {
         guard let record = cachedRecord(for: item.id) else { return }
         record.hiddenForMe = true
+        if !item.isUploading {
+            // İndirilmiş kopyalar gereksiz; gönderimi süren kendi dosyamız yükleme bitene kadar kalır.
+            removeLocalFiles(of: record)
+        }
         clearComposer(ifReferencing: item.id)
         save()
         reloadMessages()
@@ -520,15 +571,34 @@ final class ChatViewModel {
         guard item.isMine, let context, let record = cachedRecord(for: item.id) else { return }
         clearComposer(ifReferencing: item.id)
 
+        // Süren yükleme durdurulur.
+        uploadTasks[item.id]?.cancel()
+        uploadTasks[item.id] = nil
+        uploadProgress[item.id] = nil
+
+        let media = record.media
+        let thumbnailUploaded = (record.uploadStage.map { $0 >= .original } ?? true)
+        removeLocalFiles(of: record)
+
         if hasPendingCreate(item.id) {
-            // Sunucuya hiç gitmemiş: tamamen kaldırılır.
+            // Mesaj belgesi sunucuya hiç gitmemiş: tamamen kaldırılır (önizleme yüklendiyse o da).
             removeOperations(for: item.id, kinds: nil)
             context.delete(record)
+            if let media, thumbnailUploaded {
+                let store = mediaStore
+                Task { await store.delete(paths: [media.thumbnailPath]) }
+            }
         } else {
             record.deletedForEveryone = true
             record.text = ""
-            removeOperations(for: item.id, kinds: [.edit, .react])
-            enqueue(.deleteForEveryone, messageID: item.id)
+            record.media = nil
+            record.uploadStage = nil
+            record.localOriginalName = nil
+            record.localThumbnailName = nil
+            removeOperations(for: item.id, kinds: [.edit, .react, .uploadOriginal])
+            // Storage'daki dosyalar, mesaj silindikten sonra kaldırılır (yollar işlemde saklanır).
+            let paths = media.map { [$0.thumbnailPath, $0.originalPath] } ?? []
+            enqueue(.deleteForEveryone, messageID: item.id, text: paths.isEmpty ? nil : paths.joined(separator: "\n"))
         }
         save()
         reloadMessages()
@@ -669,7 +739,7 @@ final class ChatViewModel {
         guard let context, let userID else { return [] }
         let descriptor = FetchDescriptor<ChatPendingOperation>(
             predicate: #Predicate { $0.ownerID == userID },
-            sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.kindRaw)]
+            sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.kindRaw), SortDescriptor(\.messageID)]
         )
         return (try? context.fetch(descriptor)) ?? []
     }
@@ -704,10 +774,12 @@ final class ChatViewModel {
             flushRequested = false
             await drainOutbox()
         } while flushRequested
+        startMediaUploads()
     }
 
     private func drainOutbox() async {
-        while let context, let operation = pendingOperations().first {
+        // Orijinal dosya yüklemeleri sıralı kuyruğu bekletmez; `startMediaUploads` ayrıca yürütür.
+        while let context, let operation = pendingOperations().first(where: { $0.kind != .uploadOriginal }) {
             let operationID = operation.id
             let kind = operation.kind
             let chatID = operation.chatID
@@ -722,13 +794,31 @@ final class ChatViewModel {
                         save()
                         continue
                     }
-                    try await sync.sendMessage(record.dto, chatID: chatID)
+                    if let media = record.media, record.uploadStage == .thumbnail {
+                        // Önce küçük önizleme: karşı taraf mesajı hemen görür, orijinal arkadan gelir.
+                        guard let name = record.localThumbnailName, files.exists(files.outgoingURL(named: name)) else {
+                            throw AppError.storage("Önizleme dosyası cihazda bulunamadı.")
+                        }
+                        try await mediaStore.upload(
+                            fileURL: files.outgoingURL(named: name), to: media.thumbnailPath,
+                            contentType: "image/jpeg", senderID: operation.ownerID, progress: { _ in }
+                        )
+                        cachedRecord(for: messageID)?.uploadStage = .original
+                        save()
+                    }
+                    guard let fresh = cachedRecord(for: messageID), !fresh.deletedForEveryone else {
+                        finish(batchIDs, kind: kind, messageID: messageID, succeeded: true)
+                        continue
+                    }
+                    try await sync.sendMessage(fresh.dto, chatID: chatID)
                 case .edit:
                     let text = operation.text ?? cachedRecord(for: messageID)?.text ?? ""
                     let editedAt = cachedRecord(for: messageID)?.editedAt ?? operation.createdAt
                     try await sync.editMessage(id: messageID, chatID: chatID, text: text, editedAt: editedAt)
                 case .deleteForEveryone:
+                    let paths = (operation.text ?? "").split(separator: "\n").map(String.init)
                     try await sync.deleteMessageForEveryone(id: messageID, chatID: chatID)
+                    if !paths.isEmpty { await mediaStore.delete(paths: paths) }
                 case .react:
                     try await sync.setReaction(operation.emoji, messageID: messageID, chatID: chatID, userID: operation.ownerID)
                 case .markRead:
@@ -737,6 +827,8 @@ final class ChatViewModel {
                     batchIDs = reads.map(\.id)
                     let readAt = cachedRecord(for: messageID)?.readAt ?? operation.createdAt
                     try await sync.markRead(messageIDs: reads.map(\.messageID), chatID: chatID, at: readAt)
+                case .uploadOriginal:
+                    continue
                 }
                 finish(batchIDs, kind: kind, messageID: messageID, succeeded: true)
             } catch {
@@ -770,6 +862,231 @@ final class ChatViewModel {
         }
         save()
         reloadMessages()
+        if kind == .create, succeeded { startMediaUploads() }
+    }
+
+    // MARK: Medya: gönderme
+
+    /// Galeriden ya da kameradan gelenleri gönderir. Önizleme cihazda üretilir; her dosya ayrı mesajdır.
+    func sendMedia(_ items: [PickedMedia], quality: ChatMediaQuality) async {
+        guard let userID, let chatID = room?.id, context != nil, !items.isEmpty else { return }
+        isPreparingMedia = true
+        defer { isPreparingMedia = false }
+        var reply = replyingTo.map { ChatReplyReference.make(from: $0.message) }
+        replyingTo = nil
+
+        for picked in items {
+            defer { files.remove([picked.fileURL]) }
+            let messageID = makeID()
+            do {
+                let prepared = try await processor.prepare(picked, quality: quality, messageID: messageID, directory: files.outgoingDirectory)
+                // Hazırlık sürerken oturum değiştiyse gönderilmez.
+                guard let context, self.userID == userID, room?.id == chatID else {
+                    files.remove([files.outgoingURL(named: prepared.originalFileName), files.outgoingURL(named: prepared.thumbnailFileName)])
+                    return
+                }
+                let media = ChatMedia(
+                    originalPath: ChatMediaPath.original(chatID: chatID, messageID: messageID, fileExtension: prepared.fileExtension),
+                    thumbnailPath: ChatMediaPath.thumbnail(chatID: chatID, messageID: messageID),
+                    contentType: prepared.contentType,
+                    fileExtension: ChatMediaPath.sanitizedExtension(prepared.fileExtension),
+                    byteSize: prepared.byteSize,
+                    width: prepared.width,
+                    height: prepared.height,
+                    duration: prepared.duration,
+                    quality: quality,
+                    status: .uploading
+                )
+                let dto = ChatMessageDTO(
+                    id: messageID, senderID: userID, type: picked.kind.messageType, text: "",
+                    createdAt: clock(), replyTo: reply, media: media
+                )
+                reply = nil
+                let record = ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending)
+                record.localOriginalName = prepared.originalFileName
+                record.localThumbnailName = prepared.thumbnailFileName
+                record.uploadStage = .thumbnail
+                context.insert(record)
+                enqueue(.create, messageID: messageID)
+                enqueue(.uploadOriginal, messageID: messageID)
+                save()
+                reloadMessages()
+                scheduleFlush()
+            } catch {
+                errorMessage = AppError.map(error).errorDescription
+            }
+        }
+    }
+
+    /// Yüklemeyi iptal eder: mesaj iki taraftan da kaldırılır.
+    func cancelUpload(_ item: ChatMessageItem) {
+        guard item.isUploading else { return }
+        deleteForEveryone(item)
+    }
+
+    /// Önizlemesi yüklenmiş, belgesi sunucuda olan mesajların orijinallerini paralel yükler.
+    func startMediaUploads() {
+        guard userID != nil else { return }
+        for operation in pendingOperations() where operation.kind == .uploadOriginal && uploadTasks[operation.messageID] == nil {
+            let messageID = operation.messageID
+            guard let record = cachedRecord(for: messageID), record.sendState != .failed,
+                  let stage = record.uploadStage, stage >= .original, !hasPendingCreate(messageID) else { continue }
+            let chatID = operation.chatID
+            uploadTasks[messageID] = Task { [weak self] in
+                await self?.runUpload(messageID: messageID, chatID: chatID)
+                self?.uploadTasks[messageID] = nil
+            }
+        }
+    }
+
+    private func runUpload(messageID: String, chatID: String) async {
+        guard let userID, let record = cachedRecord(for: messageID), var media = record.media else { return }
+        do {
+            if record.uploadStage == .original {
+                guard let name = record.localOriginalName, files.exists(files.outgoingURL(named: name)) else {
+                    throw AppError.storage("Gönderilecek dosya cihazda bulunamadı.")
+                }
+                uploadProgress[messageID] = 0
+                reloadMessages()
+                try await mediaStore.upload(
+                    fileURL: files.outgoingURL(named: name), to: media.originalPath,
+                    contentType: media.contentType, senderID: userID,
+                    progress: { [weak self] value in self?.setUploadProgress(value, for: messageID) }
+                )
+                guard let current = cachedRecord(for: messageID) else { return }
+                current.uploadStage = .finalize
+                save()
+            }
+            media.status = .ready
+            try await sync.updateMedia(media, messageID: messageID, chatID: chatID)
+
+            guard let current = cachedRecord(for: messageID) else { return }
+            current.media = media
+            current.uploadStage = .done
+            current.sendState = .sent
+            moveOutgoingToCache(current)
+            removeOperations(for: messageID, kinds: [.uploadOriginal])
+            uploadProgress[messageID] = nil
+            save()
+            reloadMessages()
+        } catch is CancellationError {
+            uploadProgress[messageID] = nil
+        } catch {
+            uploadProgress[messageID] = nil
+            switch AppError.map(error) {
+            case .network, .firebaseNotConfigured, .notAuthenticated:
+                // Bağlantı gelince (uygulama öne gelince) kaldığı aşamadan sürer.
+                break
+            default:
+                if let operation = pendingOperations().first(where: { $0.messageID == messageID && $0.kind == .uploadOriginal }) {
+                    operation.attempts += 1
+                    if operation.attempts >= 3 {
+                        context?.delete(operation)
+                        cachedRecord(for: messageID)?.sendState = .failed
+                    }
+                }
+                if pendingOperations().contains(where: { $0.messageID == messageID && $0.kind == .uploadOriginal }) {
+                    // Bir sonraki denemede yeniden başlatılsın.
+                    save()
+                    reloadMessages()
+                    return
+                }
+            }
+            save()
+            reloadMessages()
+        }
+    }
+
+    private func setUploadProgress(_ value: Double, for messageID: String) {
+        guard uploadTasks[messageID] != nil else { return }
+        uploadProgress[messageID] = value
+        if let index = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[index].uploadProgress = value
+        }
+    }
+
+    /// Yükleme bitince dosyalar silinmeyi bekleyen klasörden önbelleğe taşınır (görüntüleyici yine anında açılır).
+    private func moveOutgoingToCache(_ record: ChatMessageRecord) {
+        guard let media = record.media else { return }
+        let fm = FileManager.default
+        if let name = record.localOriginalName {
+            let target = files.cachedOriginalURL(messageID: record.messageID, fileExtension: media.fileExtension)
+            try? fm.removeItem(at: target)
+            try? fm.moveItem(at: files.outgoingURL(named: name), to: target)
+        }
+        if let name = record.localThumbnailName {
+            let target = files.cachedThumbnailURL(messageID: record.messageID)
+            try? fm.removeItem(at: target)
+            try? fm.moveItem(at: files.outgoingURL(named: name), to: target)
+        }
+        record.localOriginalName = nil
+        record.localThumbnailName = nil
+    }
+
+    // MARK: Medya: gösterme
+
+    private func localThumbnailURL(for record: ChatMessageRecord) -> URL? {
+        if let name = record.localThumbnailName, files.exists(files.outgoingURL(named: name)) {
+            return files.outgoingURL(named: name)
+        }
+        let cached = files.cachedThumbnailURL(messageID: record.messageID)
+        return files.exists(cached) ? cached : nil
+    }
+
+    private func localOriginalURL(for record: ChatMessageRecord) -> URL? {
+        if let name = record.localOriginalName, files.exists(files.outgoingURL(named: name)) {
+            return files.outgoingURL(named: name)
+        }
+        guard let media = record.media else { return nil }
+        let cached = files.cachedOriginalURL(messageID: record.messageID, fileExtension: media.fileExtension)
+        return files.exists(cached) ? cached : nil
+    }
+
+    /// Karşı tarafın gönderdiği önizlemeyi indirir (bir kez; sonra önbellekten).
+    @discardableResult
+    func loadThumbnail(for item: ChatMessageItem) async -> URL? {
+        if let url = item.localThumbnailURL { return url }
+        guard let media = item.message.media, !item.message.deleted, !thumbnailLoads.contains(item.id) else { return nil }
+        thumbnailLoads.insert(item.id)
+        defer { thumbnailLoads.remove(item.id) }
+        let destination = files.cachedThumbnailURL(messageID: item.id)
+        do {
+            try await mediaStore.download(path: media.thumbnailPath, to: destination, progress: { _ in })
+            reloadMessages()
+            return destination
+        } catch {
+            return nil
+        }
+    }
+
+    /// Tam ekran için orijinal dosya: cihazda yoksa ilerlemeyle indirilir.
+    func loadOriginal(for item: ChatMessageItem) async throws -> URL {
+        if let url = item.localOriginalURL { return url }
+        guard let media = item.message.media, !item.message.deleted else {
+            throw AppError.storage("Bu mesajda dosya yok.")
+        }
+        guard media.status == .ready else {
+            throw AppError.storage("Dosya hâlâ gönderiliyor, biraz sonra tekrar dene.")
+        }
+        let destination = files.cachedOriginalURL(messageID: item.id, fileExtension: media.fileExtension)
+        if files.exists(destination) { return destination }
+        downloadProgress[item.id] = 0
+        defer { downloadProgress[item.id] = nil }
+        try await mediaStore.download(path: media.originalPath, to: destination, progress: { [weak self] value in
+            self?.downloadProgress[item.id] = value
+        })
+        reloadMessages()
+        return destination
+    }
+
+    private func removeLocalFiles(of record: ChatMessageRecord) {
+        var urls: [URL] = [files.cachedThumbnailURL(messageID: record.messageID)]
+        if let media = record.media {
+            urls.append(files.cachedOriginalURL(messageID: record.messageID, fileExtension: media.fileExtension))
+        }
+        if let name = record.localOriginalName { urls.append(files.outgoingURL(named: name)) }
+        if let name = record.localThumbnailName { urls.append(files.outgoingURL(named: name)) }
+        files.remove(urls)
     }
 
     // MARK: Önbellek yardımcıları
@@ -794,7 +1111,10 @@ final class ChatViewModel {
         let records = (try? context.fetch(FetchDescriptor<ChatMessageRecord>(
             predicate: #Predicate { $0.ownerID == userID && $0.chatID == chatID }
         ))) ?? []
-        records.forEach { context.delete($0) }
+        records.forEach {
+            removeLocalFiles(of: $0)
+            context.delete($0)
+        }
         pendingOperations().filter { $0.chatID == chatID }.forEach { context.delete($0) }
         save()
     }

@@ -37,6 +37,13 @@ final class ChatMessageRecord {
     /// Yalnızca bu cihazda gizlendi ("benden sil").
     var hiddenForMe: Bool
     var sendStateRaw: String
+    /// `ChatMedia` JSON'u (fotoğraf/video mesajlarında).
+    var mediaData: Data?
+    /// Gönderen cihazda `outgoing` klasöründeki dosya adları.
+    var localOriginalName: String?
+    var localThumbnailName: String?
+    /// Gönderen cihazda medya yüklemesinin aşaması.
+    var uploadStageRaw: String?
 
     init(dto: ChatMessageDTO, ownerID: String, chatID: String, sendState: ChatSendState) {
         self.key = ChatMessageRecord.key(ownerID: ownerID, messageID: dto.id)
@@ -57,6 +64,10 @@ final class ChatMessageRecord {
         self.replyToSenderID = dto.replyTo?.senderID
         self.replyToPreview = dto.replyTo?.preview
         self.replyToTypeRaw = dto.replyTo?.type.rawValue
+        self.mediaData = dto.media.flatMap { try? JSONEncoder().encode($0) }
+        self.localOriginalName = nil
+        self.localThumbnailName = nil
+        self.uploadStageRaw = nil
     }
 
     static func key(ownerID: String, messageID: String) -> String { "\(ownerID)|\(messageID)" }
@@ -73,6 +84,16 @@ final class ChatMessageRecord {
         set { reactionsData = ChatMessageRecord.encode(newValue) }
     }
 
+    var media: ChatMedia? {
+        get { mediaData.flatMap { try? JSONDecoder().decode(ChatMedia.self, from: $0) } }
+        set { mediaData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
+    var uploadStage: ChatUploadStage? {
+        get { uploadStageRaw.flatMap(ChatUploadStage.init(rawValue:)) }
+        set { uploadStageRaw = newValue?.rawValue }
+    }
+
     var replyTo: ChatReplyReference? {
         guard let replyToID, let replyToSenderID else { return nil }
         return ChatReplyReference(
@@ -87,7 +108,7 @@ final class ChatMessageRecord {
         ChatMessageDTO(
             id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
             readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
-            deleted: deletedForEveryone
+            deleted: deletedForEveryone, media: media
         )
     }
 
@@ -101,6 +122,7 @@ final class ChatMessageRecord {
         reactions = dto.reactions
         editedAt = dto.editedAt
         deletedForEveryone = dto.deleted
+        media = dto.media
         applyReply(dto.replyTo)
     }
 
@@ -119,6 +141,8 @@ final class ChatMessageRecord {
 /// Kuyruktaki işlem türü.
 enum ChatOperationKind: String, Codable {
     case create, edit, deleteForEveryone, react, markRead
+    /// Fotoğraf/video orijinalinin yüklenmesi; sıralı kuyruğu bekletmemek için ayrı, paralel çalışır.
+    case uploadOriginal
 }
 
 /// Çevrimdışı ya da hata nedeniyle sunucuya yazılamayan işlemler; sırayla yeniden denenir.
@@ -189,6 +213,8 @@ struct ChatMessageExport: Codable, Equatable {
     var deleted: Bool
     var replyToID: String?
     var reactions: [String: String]
+    /// Medya mesajlarında Storage yolu ve boyutu (dosyanın kendisi dışa aktarılmaz).
+    var media: ChatMedia?
 
     init(record: ChatMessageRecord) {
         id = record.messageID
@@ -202,5 +228,6 @@ struct ChatMessageExport: Codable, Equatable {
         deleted = record.deletedForEveryone
         replyToID = record.replyToID
         reactions = record.reactions
+        media = record.media
     }
 }

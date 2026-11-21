@@ -31,6 +31,8 @@ enum LocalDataCleaner {
         }
         UserDefaultsLiveSessionStore(defaults: defaults).clear(userID: ownerID)
         ChatRoomCache(defaults: defaults).clear(userID: ownerID)
+        // Sohbet fotoğraf/videoları (gönderilmeyi bekleyenler ve indirilenler).
+        ChatMediaFiles.live.removeAll()
     }
 
     /// Nesneleri tek tek siler; böylece ilişkilerdeki `cascade` kuralı (antrenman → egzersizler) uygulanır.

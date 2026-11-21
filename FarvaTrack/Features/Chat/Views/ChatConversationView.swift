@@ -6,6 +6,11 @@ struct ChatConversationView: View {
     @FocusState private var composerFocused: Bool
     @State private var highlightedID: String?
     @State private var confirmDelete: ChatMessageItem?
+    @State private var showPicker = false
+    @State private var showCamera = false
+    /// Galeriden seçilenler; gönderim sayfası (Orijinal / Hızlı) bunlar için açılır.
+    @State private var pickedMedia: [PickedMedia] = []
+    @State private var viewerItem: ChatMessageItem?
 
     private static let bottomID = "chat-bottom"
 
@@ -51,7 +56,46 @@ struct ChatConversationView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                ChatComposer(viewModel: viewModel, focused: $composerFocused)
+                ChatComposer(
+                    viewModel: viewModel,
+                    focused: $composerFocused,
+                    onGallery: { showPicker = true },
+                    onCamera: { showCamera = true }
+                )
+            }
+        }
+        .sheet(isPresented: $showPicker) {
+            ChatMediaPicker { items in
+                pickedMedia = items
+            }
+            .ignoresSafeArea()
+        }
+        .sheet(isPresented: Binding(get: { !pickedMedia.isEmpty }, set: { if !$0 { discardPicked() } })) {
+            ChatMediaSendSheet(items: pickedMedia) { quality in
+                let items = pickedMedia
+                pickedMedia = []
+                Task { await viewModel.sendMedia(items, quality: quality) }
+            } onCancel: {
+                discardPicked()
+            }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            ChatCameraView { media, quality in
+                Task { await viewModel.sendMedia([media], quality: quality) }
+            }
+        }
+        .fullScreenCover(item: $viewerItem) { item in
+            ChatMediaViewer(item: item, viewModel: viewModel)
+        }
+        .overlay(alignment: .top) {
+            if viewModel.isPreparingMedia {
+                Label("Medya hazırlanıyor…", systemImage: "hourglass")
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.ftCardElevated, in: Capsule())
+                    .padding(.top, 8)
+                    .transition(.opacity)
             }
         }
         .searchable(text: $viewModel.searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Mesajlarda ara")
@@ -129,8 +173,20 @@ struct ChatConversationView: View {
                 viewModel.retry(item)
                 Haptics.impact(.light)
             },
-            onOpenQuote: { id in jump(to: id, proxy: proxy) }
+            onOpenQuote: { id in jump(to: id, proxy: proxy) },
+            onOpenMedia: { viewerItem = item },
+            onCancelUpload: {
+                viewModel.cancelUpload(item)
+                Haptics.impact(.medium)
+            },
+            onLoadThumbnail: { await viewModel.loadThumbnail(for: item) }
         )
+    }
+
+    /// Gönderilmeden vazgeçilen geçici kopyalar silinir.
+    private func discardPicked() {
+        pickedMedia.forEach { try? FileManager.default.removeItem(at: $0.fileURL) }
+        pickedMedia = []
     }
 
     private func showsDayHeader(at index: Int) -> Bool {

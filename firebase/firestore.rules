@@ -60,6 +60,19 @@ service cloud.firestore {
       return signedIn() && request.auth.uid in chatDoc(chatId).data.members;
     }
 
+    // Fotoğraf/video mesajı: medya bilgisi bu mesajın Storage klasörünü göstermeli (8B).
+    // Metin mesajında medya alanı olmaz.
+    function validMedia(chatId, messageId, data) {
+      let folder = 'chats/' + chatId + '/media/' + messageId + '/';
+      return data.type in ['image', 'video']
+        ? (data.media is map
+            && data.media.thumbnailPath == folder + 'thumb.jpg'
+            && data.media.originalPath.matches(folder + 'original[.][a-z0-9]{2,5}')
+            && data.media.status in ['uploading', 'ready']
+            && data.media.size is int)
+        : !('media' in data);
+    }
+
     // Değişen alanlar yalnızca `keys` içinden olabilir.
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
@@ -121,13 +134,14 @@ service cloud.firestore {
         allow read: if isChatMember(chatId);
 
         allow create: if isChatMember(chatId)
-          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted'])
+          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media'])
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.type in ['text', 'image', 'video', 'audio', 'sticker', 'call']
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 4000
           && request.resource.data.createdAt is timestamp
-          && request.resource.data.deleted == false;
+          && request.resource.data.deleted == false
+          && validMedia(chatId, messageId, request.resource.data);
 
         // Gönderen: metni düzenler ya da herkesten siler (silinmiş mesaj bir daha değişmez).
         // Alıcı: yalnızca bir kez okundu bilgisini yazar.
@@ -135,9 +149,10 @@ service cloud.firestore {
         allow update: if isChatMember(chatId) && (
           (resource.data.senderId == request.auth.uid
             && resource.data.deleted == false
-            && onlyChanges(['text', 'editedAt', 'deleted'])
+            && onlyChanges(['text', 'editedAt', 'deleted', 'media'])
             && request.resource.data.text is string
-            && request.resource.data.text.size() <= 4000)
+            && request.resource.data.text.size() <= 4000
+            && (request.resource.data.deleted == true || validMedia(chatId, messageId, request.resource.data)))
           ||
           (resource.data.senderId != request.auth.uid
             && resource.data.get('readAt', null) == null

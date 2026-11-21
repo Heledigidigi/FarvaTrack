@@ -18,6 +18,9 @@ final class MockChatSync: ChatSyncing {
     private(set) var sent: [ChatMessageDTO] = []
     private(set) var edits: [(id: String, text: String)] = []
     private(set) var deletions: [String] = []
+    private(set) var mediaUpdates: [(id: String, media: ChatMedia)] = []
+    /// Gönderim anında çağrılır (sıra testleri için).
+    var onSend: ((ChatMessageDTO) -> Void)?
     private(set) var reactions: [(id: String, emoji: String?)] = []
     private(set) var reads: [[String]] = []
     private(set) var typing: [Bool] = []
@@ -58,6 +61,7 @@ final class MockChatSync: ChatSyncing {
     func sendMessage(_ message: ChatMessageDTO, chatID: String) async throws {
         sendAttempts += 1
         try write()
+        onSend?(message)
         sent.append(message)
     }
 
@@ -69,6 +73,11 @@ final class MockChatSync: ChatSyncing {
     func deleteMessageForEveryone(id: String, chatID: String) async throws {
         try write()
         deletions.append(id)
+    }
+
+    func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws {
+        try write()
+        mediaUpdates.append((messageID, media))
     }
 
     func setReaction(_ emoji: String?, messageID: String, chatID: String, userID: String) async throws {

@@ -33,8 +33,10 @@ enum ChatMessageType: String, Codable, CaseIterable {
         self = ChatMessageType(rawValue: raw) ?? .unknown
     }
 
-    /// Bu sürümün gönderebildiği türler (8A: yalnızca metin).
-    static let sendable: Set<ChatMessageType> = [.text]
+    /// Bu sürümün gönderebildiği türler (8B: metin, fotoğraf, video).
+    static let sendable: Set<ChatMessageType> = [.text, .image, .video]
+
+    var isMedia: Bool { self == .image || self == .video }
 
     /// Metin içermeyen türlerin sohbet ve alıntılardaki kısa açıklaması.
     var placeholder: String {
@@ -84,6 +86,8 @@ struct ChatMessageDTO: Equatable, Identifiable {
     var reactions: [String: String]
     var editedAt: Date?
     var deleted: Bool
+    /// Fotoğraf / video mesajlarının dosya bilgisi.
+    var media: ChatMedia?
     /// Firestore'un yerel (henüz sunucuya ulaşmamış) yazımı mı; sunucuya yazılmaz.
     var hasPendingWrites: Bool = false
 
@@ -98,6 +102,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         reactions: [String: String] = [:],
         editedAt: Date? = nil,
         deleted: Bool = false,
+        media: ChatMedia? = nil,
         hasPendingWrites: Bool = false
     ) {
         self.id = id
@@ -110,6 +115,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         self.reactions = reactions
         self.editedAt = editedAt
         self.deleted = deleted
+        self.media = media
         self.hasPendingWrites = hasPendingWrites
     }
 }

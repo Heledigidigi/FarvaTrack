@@ -14,6 +14,9 @@ struct ChatBubbleView: View {
     let onDeleteForEveryone: () -> Void
     let onRetry: () -> Void
     let onOpenQuote: (String) -> Void
+    var onOpenMedia: () -> Void = {}
+    var onCancelUpload: () -> Void = {}
+    var onLoadThumbnail: () async -> Void = {}
 
     private var message: ChatMessageDTO { item.message }
     private var canCopy: Bool { !message.deleted && message.type == .text }
@@ -43,18 +46,20 @@ struct ChatBubbleView: View {
                 quote(reply)
             }
 
-            Text(item.displayText)
-                .font(.body)
-                .italic(message.deleted || message.type != .text)
-                .foregroundStyle(message.deleted ? Color.white.opacity(0.6) : .white)
-                .multilineTextAlignment(.leading)
-                .frame(alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+            if let media = message.media, !message.deleted {
+                ChatMediaBubbleContent(
+                    item: item, media: media,
+                    onOpen: { item.status == .failed ? onRetry() : onOpenMedia() },
+                    onCancelUpload: onCancelUpload, onLoadThumbnail: onLoadThumbnail
+                )
+            } else {
+                messageText
+            }
 
             footer
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, message.media != nil && !message.deleted ? 4 : 12)
+        .padding(.vertical, message.media != nil && !message.deleted ? 4 : 8)
         .background(bubbleColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -67,8 +72,24 @@ struct ChatBubbleView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
-        .accessibilityHint(item.status == .failed ? "Tekrar göndermek için iki kez dokun" : "Seçenekler için eylemler menüsünü kullan")
+        .accessibilityHint(accessibilityHintText)
         .accessibilityActions { accessibilityActionList }
+    }
+
+    private var accessibilityHintText: String {
+        if item.status == .failed { return "Tekrar göndermek için iki kez dokun" }
+        if message.media != nil, !message.deleted, !item.isUploading { return "Açmak için eylemler menüsünden Aç'ı seç" }
+        return "Seçenekler için eylemler menüsünü kullan"
+    }
+
+    private var messageText: some View {
+            Text(item.displayText)
+                .font(.body)
+                .italic(message.deleted || message.type != .text)
+                .foregroundStyle(message.deleted ? Color.white.opacity(0.6) : .white)
+                .multilineTextAlignment(.leading)
+                .frame(alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
     }
 
     private var bubbleColor: Color {
@@ -113,6 +134,8 @@ struct ChatBubbleView: View {
         }
         .font(.caption2)
         .foregroundStyle(Color.white.opacity(0.65))
+        .padding(.horizontal, message.media != nil && !message.deleted ? 6 : 0)
+        .padding(.bottom, message.media != nil && !message.deleted ? 2 : 0)
     }
 
     private func statusColor(_ status: ChatMessageStatus) -> Color {
@@ -156,6 +179,12 @@ struct ChatBubbleView: View {
     @ViewBuilder
     private var menu: some View {
         if !message.deleted {
+            if message.media != nil, !item.isUploading, item.status != .failed {
+                Button { onOpenMedia() } label: { Label("Aç", systemImage: "arrow.up.left.and.arrow.down.right") }
+            }
+            if item.isUploading {
+                Button(role: .destructive) { onCancelUpload() } label: { Label("Gönderimi iptal et", systemImage: "xmark.circle") }
+            }
             Button { onReply() } label: { Label("Yanıtla", systemImage: "arrowshape.turn.up.left") }
 
             Menu {
@@ -194,6 +223,10 @@ struct ChatBubbleView: View {
     @ViewBuilder
     private var accessibilityActionList: some View {
         if !message.deleted {
+            if message.media != nil, !item.isUploading, item.status != .failed {
+                Button("Aç", action: onOpenMedia)
+            }
+            if item.isUploading { Button("Gönderimi iptal et", action: onCancelUpload) }
             Button("Yanıtla", action: onReply)
             ForEach(ChatLimits.quickReactions, id: \.self) { emoji in
                 Button("\(emoji) tepkisi ver") { onReact(emoji) }
@@ -219,7 +252,18 @@ struct ChatBubbleView: View {
         if let reply = message.replyTo, !message.deleted {
             parts.append("\(name(for: reply.senderID)) kişisine yanıt: \(reply.preview)")
         }
-        parts.append(item.displayText)
+        if let media = message.media, !message.deleted {
+            var description = message.type == .video ? "Video" : "Fotoğraf"
+            if let duration = media.formattedDuration { description += ", \(duration)" }
+            if item.isUploading {
+                description += item.uploadProgress.map { ", yükleniyor yüzde \(Int($0 * 100))" } ?? ", hazırlanıyor"
+            } else if !item.isMine, media.status == .uploading {
+                description += ", gönderiliyor"
+            }
+            parts.append(description)
+        } else {
+            parts.append(item.displayText)
+        }
         if message.editedAt != nil, !message.deleted { parts.append("düzenlendi") }
         parts.append(message.createdAt.formatted(date: .omitted, time: .shortened))
         if let status = item.status, !message.deleted { parts.append(status.accessibilityText) }
@@ -234,6 +278,8 @@ struct ChatBubbleView: View {
 struct ChatComposer: View {
     @Bindable var viewModel: ChatViewModel
     var focused: FocusState<Bool>.Binding
+    var onGallery: () -> Void = {}
+    var onCamera: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 6) {
@@ -248,6 +294,16 @@ struct ChatComposer: View {
             }
 
             HStack(alignment: .bottom, spacing: 8) {
+                if viewModel.editing == nil {
+                    Button(action: onGallery) {
+                        Image(systemName: "photo.on.rectangle.angled")
+                            .font(.system(size: 22))
+                            .frame(width: 36, height: 40)
+                    }
+                    .foregroundStyle(Color.ftAccentLight)
+                    .accessibilityLabel("Galeriden fotoğraf veya video seç")
+                }
+
                 TextField("Mesaj", text: $viewModel.draft, axis: .vertical)
                     .lineLimit(1...6)
                     .focused(focused)
@@ -257,6 +313,20 @@ struct ChatComposer: View {
                     .onChange(of: viewModel.draft) { _, _ in viewModel.draftChanged() }
                     .accessibilityLabel("Mesaj yaz")
 
+                if viewModel.editing == nil, viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // WhatsApp gibi: yazı yokken kamera, yazınca gönder düğmesi.
+                    Button {
+                        Haptics.impact(.light)
+                        onCamera()
+                    } label: {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 22))
+                            .frame(width: 36, height: 40)
+                    }
+                    .foregroundStyle(Color.ftAccentLight)
+                    .accessibilityLabel("Kamera")
+                    .accessibilityHint("Fotoğraf çek ya da video kaydet")
+                } else {
                 Button {
                     viewModel.send()
                     Haptics.impact(.light)
@@ -267,6 +337,7 @@ struct ChatComposer: View {
                 }
                 .disabled(!viewModel.canSend)
                 .accessibilityLabel(viewModel.editing == nil ? "Gönder" : "Düzenlemeyi kaydet")
+                }
             }
 
             if viewModel.draftIsTooLong {

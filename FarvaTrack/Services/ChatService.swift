@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseStorage
 
 /// Anlık dinleyici aboneliği; `cancel()` dinlemeyi bırakır.
 final class ChatSubscription {
@@ -46,6 +47,8 @@ protocol ChatSyncing: AnyObject {
     func sendMessage(_ message: ChatMessageDTO, chatID: String) async throws
     func editMessage(id: String, chatID: String, text: String, editedAt: Date) async throws
     func deleteMessageForEveryone(id: String, chatID: String) async throws
+    /// Medya bilgisini günceller (ör. orijinal yüklenince `status = ready`).
+    func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws
     func setReaction(_ emoji: String?, messageID: String, chatID: String, userID: String) async throws
     func markRead(messageIDs: [String], chatID: String, at: Date) async throws
     func setTyping(_ isTyping: Bool, chatID: String, userID: String, at: Date) async throws
@@ -72,6 +75,7 @@ enum ChatField {
     static let reactions = "reactions"
     static let editedAt = "editedAt"
     static let deleted = "deleted"
+    static let media = "media"
 
     static let messageId = "messageId"
     static let preview = "preview"
@@ -264,11 +268,16 @@ final class ChatService: ChatSyncing {
     }
 
     func deleteMessageForEveryone(id: String, chatID: String) async throws {
-        // Belge kalır (sıra ve alıntılar bozulmasın), içerik boşaltılır.
+        // Belge kalır (sıra ve alıntılar bozulmasın), içerik ve medya bilgisi boşaltılır.
         try await update(chatID: chatID, messageID: id, [
             ChatField.deleted: true,
-            ChatField.text: ""
+            ChatField.text: "",
+            ChatField.media: FieldValue.delete()
         ])
+    }
+
+    func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws {
+        try await update(chatID: chatID, messageID: messageID, [ChatField.media: ChatMediaFields.encode(media)])
     }
 
     func setReaction(_ emoji: String?, messageID: String, chatID: String, userID: String) async throws {
@@ -320,6 +329,13 @@ final class ChatService: ChatSyncing {
                 while true {
                     let page = try await collection.limit(to: 300).getDocuments()
                     guard !page.documents.isEmpty else { break }
+                    // Önce Storage'daki fotoğraf/videolar (kurallar üyeliği Firestore'dan okuduğu için oda silinmeden).
+                    for document in page.documents {
+                        if let media = ChatMediaFields.decode(document.data()[ChatField.media]) {
+                            try? await Storage.storage().reference(withPath: media.originalPath).delete()
+                            try? await Storage.storage().reference(withPath: media.thumbnailPath).delete()
+                        }
+                    }
                     let batch = try db.batch()
                     page.documents.forEach { batch.deleteDocument($0.reference) }
                     try await batch.commit()
@@ -384,6 +400,7 @@ enum ChatFirestoreMapper {
             reactions: (data[ChatField.reactions] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:],
             editedAt: date(data[ChatField.editedAt]),
             deleted: data[ChatField.deleted] as? Bool ?? false,
+            media: ChatMediaFields.decode(data[ChatField.media]),
             hasPendingWrites: hasPendingWrites
         )
     }
@@ -404,6 +421,9 @@ enum ChatFirestoreMapper {
                 ChatField.preview: reply.preview,
                 ChatField.type: reply.type.rawValue
             ]
+        }
+        if let media = message.media {
+            fields[ChatField.media] = ChatMediaFields.encode(media)
         }
         return fields
     }
