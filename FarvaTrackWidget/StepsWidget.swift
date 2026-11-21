@@ -368,8 +368,22 @@ struct StepsWidgetView: View {
         }
     }
 
+    /// Sadece halkanın içi dokunulabilir; köşelerden uzun basmak gösterimi değiştirmez.
     private var ringButton: some View {
-        Button(intent: CycleStepsMetricIntent()) {
+        ZStack {
+            ringFace
+            ArtHotspot(rect: CGRect(x: 30, y: 30, width: 110, height: 110)) {
+                Button(intent: CycleStepsMetricIntent()) {
+                    Color.clear.contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Bugünkü adım: \(snapshot.steps), hedef \(snapshot.goal), \(snapshot.distanceKm.formatted(.number.precision(.fractionLength(1)))) kilometre")
+                .accessibilityHint("Adım, kilometre ve kalori arasında geçiş yapar")
+            }
+        }
+    }
+
+    private var ringFace: some View {
             ZStack {
                 RingArt(progress: progress, theme: theme)
                 VStack(spacing: 1) {
@@ -386,11 +400,7 @@ struct StepsWidgetView: View {
                 }
                 .padding(.horizontal, 28)
             }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Bugünkü adım: \(snapshot.steps), hedef \(snapshot.goal), \(snapshot.distanceKm.formatted(.number.precision(.fractionLength(1)))) kilometre")
-        .accessibilityHint("Adım, kilometre ve kalori arasında geçiş yapar")
+            .accessibilityHidden(true)
     }
 }
 

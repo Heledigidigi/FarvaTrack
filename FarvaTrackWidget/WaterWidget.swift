@@ -9,6 +9,7 @@ struct WaterEntryModel: TimelineEntry {
     let snapshot: WaterSnapshot
     let amount: Int
     let theme: WaterThemeOption
+    var showUndo = false
 }
 
 struct WaterProvider: AppIntentTimelineProvider {
@@ -24,7 +25,18 @@ struct WaterProvider: AppIntentTimelineProvider {
 
     func timeline(for configuration: WaterWidgetConfig, in context: Context) async -> Timeline<WaterEntryModel> {
         let next = Calendar.current.date(byAdding: .minute, value: 15, to: .now) ?? .now
-        return Timeline(entries: [currentEntry(configuration)], policy: .after(next))
+        var entry = currentEntry(configuration)
+        // Widget'tan son ekleme yeniyse "Geri al" görünür; süresi bitince ikinci kayıtla gizlenir.
+        if entry.snapshot.lastWidgetAddID != nil, let at = entry.snapshot.lastWidgetAddAt {
+            let ends = at.addingTimeInterval(SharedStore.wasteUndoWindow)
+            if ends > .now {
+                entry.showUndo = true
+                var later = currentEntry(configuration)
+                later = WaterEntryModel(date: ends, snapshot: later.snapshot, amount: later.amount, theme: later.theme, showUndo: false)
+                return Timeline(entries: [entry, later], policy: .after(max(next, ends)))
+            }
+        }
+        return Timeline(entries: [entry], policy: .after(next))
     }
 
     private func currentEntry(_ configuration: WaterWidgetConfig) -> WaterEntryModel {
@@ -397,12 +409,26 @@ struct WaterWidgetView: View {
                         .padding(.vertical, 4)
                         .background(theme.pill, in: Capsule())
                         .padding(.top, 4)
+                    if entry.showUndo {
+                        Button(intent: UndoWaterIntent()) { UndoCapsule(dark: Color(hex: 0x1E4E73, opacity: 0.85)) }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Son eklenen suyu geri al")
+                    }
                 }
                 Spacer(minLength: 0)
             }
         default:
             ZStack(alignment: .topLeading) {
                 dropButton
+                if entry.showUndo {
+                    VStack {
+                        Spacer(minLength: 0)
+                        Button(intent: UndoWaterIntent()) { UndoCapsule(dark: Color(hex: 0x1E4E73, opacity: 0.85)) }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Son eklenen suyu geri al")
+                    }
+                    .transition(.opacity)
+                }
                 HStack(alignment: .top) {
                     Text(litersText)
                         .font(numberFont)
@@ -421,14 +447,19 @@ struct WaterWidgetView: View {
         }
     }
 
+    /// Sadece damlanın (ya da kedi silüetinin) kendisi dokunulabilir; köşelerden uzun basmak kayıt eklemez.
     private var dropButton: some View {
-        Button(intent: AddWaterIntent(amountMl: entry.amount)) {
+        ZStack {
             DropArt(total: snapshot.totalMl, goal: snapshot.goalMl, theme: theme)
-                .contentShape(Rectangle())
+            ArtHotspot(rect: theme.isCat ? CGRect(x: 44, y: 32, width: 82, height: 118) : CGRect(x: 48, y: 36, width: 74, height: 107)) {
+                Button(intent: AddWaterIntent(amountMl: entry.amount)) {
+                    Color.clear.contentShape(Ellipse())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Damla, \(DropMood(total: snapshot.totalMl, goal: snapshot.goalMl).label). Bugün \(snapshot.totalMl) mililitre, hedef \(snapshot.goalMl).")
+                .accessibilityHint("\(entry.amount) mililitre ekler")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Damla, \(DropMood(total: snapshot.totalMl, goal: snapshot.goalMl).label). Bugün \(snapshot.totalMl) mililitre, hedef \(snapshot.goalMl).")
-        .accessibilityHint("\(entry.amount) mililitre ekler")
     }
 }
 

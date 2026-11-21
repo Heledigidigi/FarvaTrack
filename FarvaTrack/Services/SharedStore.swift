@@ -17,6 +17,10 @@ struct WaterSnapshot: Codable, Equatable {
     var totalMl: Int
     var goalMl: Int
     var updatedAt: Date
+    /// Widget'tan yapılan son eklemenin kimliği, miktarı ve saati (geri al için).
+    var lastWidgetAddID: UUID? = nil
+    var lastWidgetAddMl: Int? = nil
+    var lastWidgetAddAt: Date? = nil
 
     static let empty = WaterSnapshot(totalMl: 0, goalMl: 2_500, updatedAt: .distantPast)
 }
@@ -99,12 +103,13 @@ enum SharedStore {
     private static let stepsKey = "stepsSnapshot"
     private static let waterKey = "waterSnapshot"
     private static let pendingWaterKey = "pendingWaterAdds"
+    private static let pendingWaterUndoKey = "pendingWaterUndos"
     private static let wasteKey = "wasteSnapshot"
     private static let pendingWasteKey = "pendingWasteTaps"
     private static let pendingWasteUndoKey = "pendingWasteUndos"
     private static let stepsMetricKey = "stepsWidgetMetric"
 
-    /// Widget'ta "Geri al" düğmesinin görünür kaldığı süre.
+    /// Widget'ta "Geri al" düğmesinin görünür kaldığı süre (su ve Ritim).
     static let wasteUndoWindow: TimeInterval = 5 * 60
 
     /// App Group yoksa (ör. imzasız test derlemesi) standart depoya düşer; uygulama çalışmaya devam eder.
@@ -181,19 +186,61 @@ enum SharedStore {
         }
         guard snapshot.totalMl + amountMl <= maxDailyWaterMl else { return }
 
+        let add = PendingWaterAdd(id: UUID(), amountMl: amountMl, date: now)
         var pending = pendingWaterAdds()
-        pending.append(PendingWaterAdd(id: UUID(), amountMl: amountMl, date: now))
+        pending.append(add)
         defaults.set(try? JSONEncoder().encode(pending), forKey: pendingWaterKey)
 
         snapshot.totalMl += amountMl
         snapshot.updatedAt = now
+        snapshot.lastWidgetAddID = add.id
+        snapshot.lastWidgetAddMl = amountMl
+        snapshot.lastWidgetAddAt = now
         saveWater(snapshot)
+    }
+
+    /// Widget'taki "Geri al": son widget eklemesini kuyruktan siler; uygulama onu çoktan
+    /// aktardıysa silinmek üzere ayrı bir kuyruğa yazar.
+    static func undoLastWaterFromWidget(now: Date = .now) {
+        guard var snapshot = loadWater(),
+              let id = snapshot.lastWidgetAddID,
+              let amount = snapshot.lastWidgetAddMl,
+              let at = snapshot.lastWidgetAddAt,
+              now.timeIntervalSince(at) <= wasteUndoWindow + 60 else { return }
+
+        var pending = pendingWaterAdds()
+        if pending.contains(where: { $0.id == id }) {
+            pending.removeAll { $0.id == id }
+            defaults.set(try? JSONEncoder().encode(pending), forKey: pendingWaterKey)
+        } else {
+            var undos = pendingWaterUndos()
+            undos.append(id)
+            defaults.set(try? JSONEncoder().encode(undos), forKey: pendingWaterUndoKey)
+        }
+
+        snapshot.totalMl = max(0, snapshot.totalMl - amount)
+        snapshot.lastWidgetAddID = nil
+        snapshot.lastWidgetAddMl = nil
+        snapshot.lastWidgetAddAt = nil
+        snapshot.updatedAt = now
+        saveWater(snapshot)
+    }
+
+    static func pendingWaterUndos() -> [UUID] {
+        guard let data = defaults.data(forKey: pendingWaterUndoKey) else { return [] }
+        return (try? JSONDecoder().decode([UUID].self, from: data)) ?? []
+    }
+
+    static func removePendingWaterUndos(ids: [UUID]) {
+        let remaining = pendingWaterUndos().filter { !ids.contains($0) }
+        defaults.set(try? JSONEncoder().encode(remaining), forKey: pendingWaterUndoKey)
     }
 
     /// Çıkışta: bekleyen su kuyruğu başka bir hesaba aktarılmasın.
     static func clearWater() {
         defaults.removeObject(forKey: waterKey)
         defaults.removeObject(forKey: pendingWaterKey)
+        defaults.removeObject(forKey: pendingWaterUndoKey)
         WidgetCenter.shared.reloadTimelines(ofKind: waterWidgetKind)
     }
 

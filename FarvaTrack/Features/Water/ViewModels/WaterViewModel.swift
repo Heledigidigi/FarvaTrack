@@ -8,12 +8,22 @@ protocol WaterWidgetStoring {
     func pendingAdds() -> [PendingWaterAdd]
     func removePending(ids: [UUID])
     func publish(_ snapshot: WaterSnapshot)
+    /// Widget'taki "Geri al" ile silinmesi istenen, uygulamaya çoktan aktarılmış kayıtlar.
+    func pendingUndos() -> [UUID]
+    func removeUndos(ids: [UUID])
+}
+
+extension WaterWidgetStoring {
+    func pendingUndos() -> [UUID] { [] }
+    func removeUndos(ids: [UUID]) {}
 }
 
 struct SharedStoreWaterBridge: WaterWidgetStoring {
     func pendingAdds() -> [PendingWaterAdd] { SharedStore.pendingWaterAdds() }
     func removePending(ids: [UUID]) { SharedStore.removePendingWater(ids: ids) }
     func publish(_ snapshot: WaterSnapshot) { SharedStore.saveWater(snapshot) }
+    func pendingUndos() -> [UUID] { SharedStore.pendingWaterUndos() }
+    func removeUndos(ids: [UUID]) { SharedStore.removePendingWaterUndos(ids: ids) }
 }
 
 struct WaterUndoToken: Equatable {
@@ -155,6 +165,7 @@ final class WaterViewModel {
     /// Widget'tan eklenen kayıtları SwiftData'ya aktarır. Her kayıt kendi UUID'siyle geldiği için tekrar çalışması güvenlidir.
     func importWidgetAdds() {
         guard let context, let userID else { return }
+        applyWidgetUndos()
         let pending = widget.pendingAdds()
         guard !pending.isEmpty else { return }
 
@@ -172,6 +183,16 @@ final class WaterViewModel {
 
         widget.removePending(ids: ids)
         inserted.forEach(scheduleUpload)
+    }
+
+    /// Widget'tan geri alınan ama uygulamaya çoktan aktarılmış kayıtları siler.
+    private func applyWidgetUndos() {
+        guard let context else { return }
+        let ids = widget.pendingUndos()
+        guard !ids.isEmpty else { return }
+        let entries = (try? context.fetch(FetchDescriptor<WaterEntry>(predicate: #Predicate { ids.contains($0.id) }))) ?? []
+        for entry in entries { delete(entry) }
+        widget.removeUndos(ids: ids)
     }
 
     // MARK: - Hatırlatıcılar
