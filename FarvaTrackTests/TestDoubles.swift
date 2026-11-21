@@ -3,7 +3,7 @@ import UserNotifications
 @testable import FarvaTrack
 
 /// Tüm hatırlatıcı protokollerini taklit eder.
-final class MockNotificationScheduler: NotificationScheduling, SleepReminderScheduling, WeighInReminderScheduling {
+final class MockNotificationScheduler: NotificationScheduling, SleepReminderScheduling, WeighInReminderScheduling, WorkoutReminderScheduling {
     var status: UNAuthorizationStatus = .authorized
     var grantOnRequest = true
     private(set) var requestedAuthorization = false
@@ -34,6 +34,15 @@ final class MockNotificationScheduler: NotificationScheduling, SleepReminderSche
         weighInScheduled = (weekday, hour, minute)
     }
     func cancelWeighInReminder() async { weighInCancelled = true }
+
+    private(set) var workoutSlots: [WorkoutReminderSlot]?
+    private(set) var workoutTime: (hour: Int, minute: Int)?
+    private(set) var workoutCancelled = 0
+    func scheduleWorkoutReminders(_ slots: [WorkoutReminderSlot], hour: Int, minute: Int) async throws {
+        workoutSlots = slots
+        workoutTime = (hour, minute)
+    }
+    func cancelWorkoutReminders() async { workoutCancelled += 1 }
 }
 
 /// Her test için boş, izole bir UserDefaults.

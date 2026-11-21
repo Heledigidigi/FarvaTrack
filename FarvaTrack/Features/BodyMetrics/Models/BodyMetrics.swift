@@ -62,38 +62,43 @@ extension WeightEntry {
 }
 
 // MARK: - Vücut ölçüleri
+/// Takip edilen ölçüler. Kalça ölçüsü listeden çıkarıldı; eski kayıtlardaki değer silinmez, yalnızca gösterilmez.
 enum BodyMeasure: String, CaseIterable, Identifiable, Codable {
-    case waist, chest, hip, arm, thigh, neck
+    case neck, chest, arm, forearm, wrist, waist, thigh
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .waist: return "Bel"
-        case .chest: return "Göğüs"
-        case .hip: return "Kalça"
-        case .arm: return "Kol"
-        case .thigh: return "Bacak"
         case .neck: return "Boyun"
+        case .chest: return "Göğüs"
+        case .arm: return "Kol"
+        case .forearm: return "Ön Kol"
+        case .wrist: return "Bilek"
+        case .waist: return "Bel"
+        case .thigh: return "Bacak"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .waist: return "circle.dashed"
-        case .chest: return "heart.circle"
-        case .hip: return "oval.portrait"
-        case .arm: return "figure.strengthtraining.traditional"
-        case .thigh: return "figure.walk"
         case .neck: return "person.crop.circle"
+        case .chest: return "heart.circle"
+        case .arm: return "figure.strengthtraining.traditional"
+        case .forearm: return "hand.raised.fill"
+        case .wrist: return "applewatch"
+        case .waist: return "circle.dashed"
+        case .thigh: return "figure.walk"
         }
     }
 
     /// Makul giriş aralığı (cm).
     var validRange: ClosedRange<Double> {
         switch self {
-        case .waist, .hip, .chest: return 40...250
+        case .waist, .chest: return 40...250
         case .arm: return 10...80
+        case .forearm: return 10...60
+        case .wrist: return 8...30
         case .thigh: return 20...120
         case .neck: return 20...70
         }
@@ -107,8 +112,11 @@ final class MeasurementEntry {
     var date: Date
     var waistCm: Double?
     var chestCm: Double?
+    /// Eski sürümlerden kalan kalça ölçüsü (artık gösterilmez, veri korunur).
     var hipCm: Double?
     var armCm: Double?
+    var forearmCm: Double?
+    var wristCm: Double?
     var thighCm: Double?
     var neckCm: Double?
     var needsSync: Bool
@@ -136,8 +144,9 @@ final class MeasurementEntry {
         switch measure {
         case .waist: return waistCm
         case .chest: return chestCm
-        case .hip: return hipCm
         case .arm: return armCm
+        case .forearm: return forearmCm
+        case .wrist: return wristCm
         case .thigh: return thighCm
         case .neck: return neckCm
         }
@@ -147,8 +156,9 @@ final class MeasurementEntry {
         switch measure {
         case .waist: waistCm = value
         case .chest: chestCm = value
-        case .hip: hipCm = value
         case .arm: armCm = value
+        case .forearm: forearmCm = value
+        case .wrist: wristCm = value
         case .thigh: thighCm = value
         case .neck: neckCm = value
         }
@@ -168,6 +178,8 @@ final class MeasurementEntry {
         chestCm = dto.chestCm
         hipCm = dto.hipCm
         armCm = dto.armCm
+        forearmCm = dto.forearmCm
+        wristCm = dto.wristCm
         thighCm = dto.thighCm
         neckCm = dto.neckCm
         updatedAt = dto.updatedAt
@@ -186,6 +198,8 @@ struct MeasurementDTO: Codable, Equatable {
     var neckCm: Double?
     var createdAt: Date
     var updatedAt: Date
+    var forearmCm: Double?
+    var wristCm: Double?
 }
 
 extension MeasurementEntry {
@@ -194,7 +208,8 @@ extension MeasurementEntry {
             id: id.uuidString, date: date,
             waistCm: waistCm, chestCm: chestCm, hipCm: hipCm,
             armCm: armCm, thighCm: thighCm, neckCm: neckCm,
-            createdAt: createdAt, updatedAt: updatedAt
+            createdAt: createdAt, updatedAt: updatedAt,
+            forearmCm: forearmCm, wristCm: wristCm
         )
     }
 }

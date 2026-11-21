@@ -121,6 +121,8 @@ final class AppRouter {
         case "waste":
             popToRoot()
             push(.biologicalWaste)
+        case "exercise":
+            select(.exercise)
         default:
             break
         }

@@ -119,33 +119,40 @@ private struct PickerList: View {
     }
 
     private func row(for template: ExerciseTemplate) -> some View {
-        Button {
-            Haptics.selection()
-            onSelect(template)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: template.category.systemImage)
-                    .foregroundStyle(template.category.tint)
-                    .frame(width: 36, height: 36)
-                    .background(template.category.tint.opacity(0.18), in: Circle())
+        HStack(spacing: 8) {
+            Button {
+                Haptics.selection()
+                onSelect(template)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: template.category.systemImage)
+                        .foregroundStyle(template.category.tint)
+                        .frame(width: 36, height: 36)
+                        .background(template.category.tint.opacity(0.18), in: Circle())
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(template.name)
-                        .font(.body)
-                        .foregroundStyle(Color.primary)
-                    Text("\(template.category.title) • \(template.mode.title)")
-                        .font(.caption)
-                        .foregroundStyle(Color.ftTextSecondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(template.name)
+                            .font(.body)
+                            .foregroundStyle(Color.primary)
+                        Text("\(template.category.title) • \(template.mode.title)")
+                            .font(.caption)
+                            .foregroundStyle(Color.ftTextSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "plus")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(Color.ftAccentLight)
                 }
-                Spacer()
-                Image(systemName: "plus")
-                    .font(.footnote.weight(.bold))
-                    .foregroundStyle(Color.ftAccentLight)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint("Antrenmana ekler")
+
+            // Rehber butonu ayrı tutulur ki dokunuş "ekle" ile karışmasın.
+            ExerciseGuideButton(key: template.key, name: template.name, category: template.category)
         }
         .listRowBackground(Color.ftCard)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Antrenmana ekler")
     }
 }
 

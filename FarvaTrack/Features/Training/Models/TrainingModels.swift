@@ -151,6 +151,8 @@ final class TrainingProgram {
     var weekdayTemplateIDs: [String]
     /// Döngü: şablon kimlikleri sırasıyla.
     var rotationTemplateIDs: [String]
+    /// Döngüde planlanan antrenman günleri (0 = Pazartesi). Hatırlatıcı ve uyum hesabında kullanılır.
+    var rotationDays: [Int] = [0, 2, 4]
     var isActive: Bool
     /// Döngüde sıranın sayılmaya başladığı an (programı yeniden etkinleştirince sıfırlanır).
     var activatedAt: Date
@@ -190,6 +192,7 @@ final class TrainingProgram {
         kindRaw = dto.kind
         weekdayTemplateIDs = TrainingProgram.normalizedWeek(dto.weekdayTemplateIDs)
         rotationTemplateIDs = dto.rotationTemplateIDs
+        rotationDays = TrainingProgram.normalizedDays(dto.rotationDays ?? [0, 2, 4])
         isActive = dto.isActive
         activatedAt = dto.activatedAt
         updatedAt = dto.updatedAt
@@ -200,7 +203,8 @@ final class TrainingProgram {
         TrainingProgramDTO(
             id: id.uuidString, name: name, kind: kindRaw,
             weekdayTemplateIDs: weekdayTemplateIDs, rotationTemplateIDs: rotationTemplateIDs,
-            isActive: isActive, activatedAt: activatedAt, createdAt: createdAt, updatedAt: updatedAt
+            isActive: isActive, activatedAt: activatedAt, createdAt: createdAt, updatedAt: updatedAt,
+            rotationDays: rotationDays
         )
     }
 
@@ -209,7 +213,8 @@ final class TrainingProgram {
             id: id, kind: kind,
             weekly: TrainingProgram.normalizedWeek(weekdayTemplateIDs).map { UUID(uuidString: $0) },
             rotation: rotationTemplateIDs.compactMap(UUID.init(uuidString:)),
-            activatedAt: activatedAt
+            activatedAt: activatedAt,
+            rotationDays: TrainingProgram.normalizedDays(rotationDays)
         )
     }
 
@@ -220,6 +225,11 @@ final class TrainingProgram {
 
     static func normalizedWeek(_ ids: [String]) -> [String] {
         Array((ids + Array(repeating: "", count: 7)).prefix(7))
+    }
+
+    /// 0–6 arası, tekrarsız ve sıralı gün listesi.
+    static func normalizedDays(_ days: [Int]) -> [Int] {
+        Array(Set(days.filter { (0...6).contains($0) })).sorted()
     }
 }
 
@@ -233,6 +243,7 @@ struct TrainingProgramDTO: Codable, Equatable {
     var activatedAt: Date
     var createdAt: Date
     var updatedAt: Date
+    var rotationDays: [Int]?
 }
 
 // MARK: - Planlayıcı
@@ -244,6 +255,21 @@ struct ProgramSnapshot: Equatable {
     var weekly: [UUID?]
     var rotation: [UUID]
     var activatedAt: Date
+    /// Döngüde planlanan günler (0 = Pazartesi)
+    var rotationDays: [Int] = [0, 2, 4]
+
+    /// Haftada planlanan antrenman günleri (0 = Pazartesi).
+    var plannedWeekdays: [Int] {
+        switch kind {
+        case .weekly: return weekly.indices.filter { weekly[$0] != nil }
+        case .rotation: return rotationDays
+        }
+    }
+
+    /// Programa ait şablonlar (uyum hesabında hangi antrenmanların sayılacağı).
+    var templateIDs: Set<UUID> {
+        Set(weekly.compactMap { $0 } + rotation)
+    }
 }
 
 struct CompletedSession: Equatable {
@@ -328,5 +354,69 @@ enum ProgramPlanner {
             }
         }
         return nil
+    }
+}
+
+// MARK: - Program uyumu
+struct WeekAdherence: Identifiable, Equatable {
+    let weekStart: Date
+    let planned: Int
+    let done: Int
+    /// İçinde bulunulan hafta (henüz bitmedi).
+    let isCurrent: Bool
+
+    var id: Date { weekStart }
+    var ratio: Double { planned > 0 ? min(Double(done) / Double(planned), 1) : 0 }
+    var isComplete: Bool { planned > 0 && done >= planned }
+}
+
+enum AdherenceCalculator {
+    /// Son `count` haftanın (Pazartesi başlangıçlı) planlanan/yapılan sayıları, eskiden yeniye.
+    /// Program etkinleştirilmeden önceki haftalar dahil edilmez. Aynı gün yapılan birden çok antrenman bir sayılır.
+    static func weeks(
+        program: ProgramSnapshot,
+        completed: [CompletedSession],
+        count: Int = 8,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [WeekAdherence] {
+        var mondayCalendar = calendar
+        mondayCalendar.firstWeekday = 2
+        guard let currentWeek = mondayCalendar.dateInterval(of: .weekOfYear, for: now)?.start,
+              let activationWeek = mondayCalendar.dateInterval(of: .weekOfYear, for: program.activatedAt)?.start else { return [] }
+
+        let planned = program.plannedWeekdays.count
+        let ids = program.templateIDs
+        let sessionDays = Set(completed.compactMap { session -> Date? in
+            guard let id = session.templateID, ids.contains(id) else { return nil }
+            return calendar.startOfDay(for: session.date)
+        })
+
+        return (0..<max(count, 1)).reversed().compactMap { offset -> WeekAdherence? in
+            guard let start = mondayCalendar.date(byAdding: .weekOfYear, value: -offset, to: currentWeek),
+                  start >= activationWeek,
+                  let end = mondayCalendar.date(byAdding: .day, value: 7, to: start) else { return nil }
+            let done = sessionDays.filter { $0 >= start && $0 < end }.count
+            return WeekAdherence(weekStart: start, planned: planned, done: done, isCurrent: offset == 0)
+        }
+    }
+
+    /// Biten haftalardan geriye doğru, planın tamamlandığı ardışık hafta sayısı.
+    static func completeWeekStreak(_ weeks: [WeekAdherence]) -> Int {
+        var streak = 0
+        for week in weeks.reversed() where !week.isCurrent {
+            guard week.isComplete else { break }
+            streak += 1
+        }
+        // Bu hafta da şimdiden tamamlandıysa seriye eklenir.
+        if let current = weeks.last, current.isCurrent, current.isComplete { streak += 1 }
+        return streak
+    }
+
+    /// Biten haftaların ortalama uyum oranı (yüzde).
+    static func averagePercent(_ weeks: [WeekAdherence]) -> Int? {
+        let finished = weeks.filter { !$0.isCurrent && $0.planned > 0 }
+        guard !finished.isEmpty else { return nil }
+        return Int((finished.reduce(0) { $0 + $1.ratio } / Double(finished.count) * 100).rounded())
     }
 }

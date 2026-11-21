@@ -12,7 +12,7 @@ SwiftUI ile yazılmış fitness ve sağlık takip uygulaması (iOS 17+, MVVM, Sw
 | 4 | Atık sayacı, istatistikler, rozetler, hatırlatıcılar | Tamam |
 | 5 | Profil, ayarlar, hesap silme, kütüphane senkronu, TestFlight | Tamam |
 | 6 | Antrenman şablonları ve programları, canlı mod, elle adım | Tamam |
-| 7 | Antrenman hatırlatıcısı, program uyumu, form ipuçları | Sırada |
+| 7 | Antrenman hatırlatıcısı, program uyumu, form ipuçları, ölçü karşılaştırma | Tamam |
 
 ## Derleme (Mac gerekmez)
 

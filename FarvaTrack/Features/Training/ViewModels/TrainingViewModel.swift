@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import SwiftData
+import UserNotifications
+
+typealias WorkoutNotificationScheduling = NotificationScheduling & WorkoutReminderScheduling
 
 /// Şablonlar, programlar ve "bugün ne var" hesabı.
 @MainActor
@@ -8,6 +11,7 @@ import SwiftData
 final class TrainingViewModel {
     var errorMessage: String?
     private(set) var isSyncing = false
+    private(set) var reminderSettings: WorkoutReminderSettings
 
     @ObservationIgnored private var context: ModelContext?
     @ObservationIgnored private(set) var userID: String?
@@ -16,6 +20,7 @@ final class TrainingViewModel {
     @ObservationIgnored private let sync: TrainingSyncing
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let calendar: Calendar
+    @ObservationIgnored private let scheduler: WorkoutNotificationScheduling
 
     static let nameLength = 2...40
     private static let turkish = Locale(identifier: "tr_TR")
@@ -28,10 +33,17 @@ final class TrainingViewModel {
     private static func key(_ name: String) -> String { name.lowercased(with: turkish) }
     static let maxExercises = 20
 
-    init(sync: TrainingSyncing = FirestoreTrainingSyncService(), defaults: UserDefaults = .standard, calendar: Calendar = .current) {
+    init(
+        sync: TrainingSyncing = FirestoreTrainingSyncService(),
+        scheduler: WorkoutNotificationScheduling = NotificationManager.shared,
+        defaults: UserDefaults = .standard,
+        calendar: Calendar = .current
+    ) {
         self.sync = sync
+        self.scheduler = scheduler
         self.defaults = defaults
         self.calendar = calendar
+        self.reminderSettings = WorkoutReminderSettings.load(defaults: defaults)
     }
 
     var hasError: Bool {
@@ -164,6 +176,7 @@ final class TrainingViewModel {
         Haptics.impact(.medium)
         templateDeletions?.add(id)
         deleteRemoteTemplate(id: id, userID: userID)
+        Task { await refreshReminders() }
     }
 
     // MARK: - Programlar
@@ -181,6 +194,7 @@ final class TrainingViewModel {
         kind: ProgramKind,
         weekly: [String],
         rotation: [String],
+        rotationDays: [Int]? = nil,
         editing: TrainingProgram? = nil,
         activate: Bool = false
     ) throws -> TrainingProgram {
@@ -197,6 +211,9 @@ final class TrainingViewModel {
             guard week.contains(where: { !$0.isEmpty }) else { throw AppError.invalidInput("En az bir güne şablon ata.") }
         case .rotation:
             guard !cycle.isEmpty else { throw AppError.invalidInput("Döngüye en az bir şablon ekle.") }
+            if let rotationDays, TrainingProgram.normalizedDays(rotationDays).isEmpty {
+                throw AppError.invalidInput("Döngü için en az bir antrenman günü seç.")
+            }
         }
 
         let program: TrainingProgram
@@ -212,6 +229,7 @@ final class TrainingViewModel {
         program.kind = kind
         program.weekdayTemplateIDs = week
         program.rotationTemplateIDs = cycle
+        if let rotationDays { program.rotationDays = TrainingProgram.normalizedDays(rotationDays) }
         program.updatedAt = .now
         program.needsSync = true
         try commit()
@@ -222,6 +240,7 @@ final class TrainingViewModel {
             uploadProgram(program)
         }
         Haptics.success()
+        Task { await refreshReminders() }
         return program
     }
 
@@ -238,6 +257,7 @@ final class TrainingViewModel {
         }
         try? commit()
         Haptics.selection()
+        Task { await refreshReminders() }
     }
 
     func deleteProgram(_ program: TrainingProgram) {
@@ -248,6 +268,7 @@ final class TrainingViewModel {
         Haptics.impact(.medium)
         programDeletions?.add(id)
         deleteRemoteProgram(id: id, userID: userID)
+        Task { await refreshReminders() }
     }
 
     /// Hazır programı kullanıcının hesabına kopyalar ve etkinleştirir. Aynı adlı şablon varsa ad sonuna sayı eklenir.
@@ -283,6 +304,91 @@ final class TrainingViewModel {
             rotation: preset.kind == .rotation ? ids : [],
             activate: true
         )
+    }
+
+    // MARK: - Antrenman hatırlatıcısı
+    /// Aktif programa göre hatırlatıcıların içeriği.
+    /// Haftalık: şablon atanmış her gün "Bugün: …". Döngü: seçilen günlerde sıradaki şablon.
+    func reminderSlots(on date: Date = .now) -> [WorkoutReminderSlot] {
+        guard let program = activeProgram() else { return [] }
+        let names = Dictionary(templates().map { ($0.id.uuidString, $0.name) }, uniquingKeysWith: { first, _ in first })
+
+        switch program.kind {
+        case .weekly:
+            return TrainingProgram.normalizedWeek(program.weekdayTemplateIDs).enumerated().compactMap { index, id in
+                guard let name = names[id] else { return nil }
+                return WorkoutReminderSlot(weekday: Self.calendarWeekday(fromIndex: index), body: "Bugün: \(name)")
+            }
+        case .rotation:
+            var nextName = program.name
+            if case .workout(let id, let isDone) = todayPlan(on: date) {
+                // Bugünkü yapıldıysa bir sonrakini göster.
+                let nextID = isDone ? todayPlan(on: calendar.date(byAdding: .day, value: 1, to: date) ?? date) : .workout(templateID: id, isDone: false)
+                if case .workout(let upcoming, _) = nextID, let name = names[upcoming.uuidString] { nextName = name }
+            }
+            return TrainingProgram.normalizedDays(program.rotationDays).map {
+                WorkoutReminderSlot(weekday: Self.calendarWeekday(fromIndex: $0), body: "Sıradaki antrenman: \(nextName)")
+            }
+        }
+    }
+
+    /// 0 = Pazartesi → Calendar haftanın günü (1 = Pazar).
+    static func calendarWeekday(fromIndex index: Int) -> Int {
+        (index + 1) % 7 + 1
+    }
+
+    /// Ayarı kaydeder ve hatırlatıcıları kurar. İzin verilmezse kapatır ve `false` döner.
+    @discardableResult
+    func applyReminder(_ settings: WorkoutReminderSettings) async -> Bool {
+        var updated = settings
+        defer {
+            reminderSettings = updated
+            updated.save(defaults: defaults)
+        }
+        guard settings.isEnabled else {
+            await scheduler.cancelWorkoutReminders()
+            return true
+        }
+        var status = await scheduler.authorizationStatus()
+        if status == .notDetermined {
+            _ = try? await scheduler.requestAuthorization()
+            status = await scheduler.authorizationStatus()
+        }
+        guard status.allowsNotifications else {
+            updated.isEnabled = false
+            await scheduler.cancelWorkoutReminders()
+            return false
+        }
+        do {
+            try await scheduler.scheduleWorkoutReminders(reminderSlots(), hour: settings.hour, minute: settings.minute)
+            return true
+        } catch {
+            updated.isEnabled = false
+            present(error)
+            return false
+        }
+    }
+
+    /// Program veya antrenman değiştiğinde içerikleri günceller (açık değilse bir şey yapmaz).
+    func refreshReminders() async {
+        guard reminderSettings.isEnabled else { return }
+        let slots = reminderSlots()
+        if slots.isEmpty {
+            await scheduler.cancelWorkoutReminders()
+        } else {
+            try? await scheduler.scheduleWorkoutReminders(slots, hour: reminderSettings.hour, minute: reminderSettings.minute)
+        }
+    }
+
+    // MARK: - Program uyumu
+    func adherence(weeks: Int = 8, now: Date = .now) -> [WeekAdherence] {
+        guard let context, let userID, let program = activeProgram() else { return [] }
+        let since = calendar.date(byAdding: .day, value: -(weeks * 7 + 7), to: now) ?? .distantPast
+        let workouts = (try? context.fetch(FetchDescriptor<Workout>(
+            predicate: #Predicate { $0.ownerID == userID && $0.date >= since }
+        ))) ?? []
+        let completed = workouts.map { CompletedSession(date: $0.date, templateID: $0.templateID.flatMap(UUID.init(uuidString:))) }
+        return AdherenceCalculator.weeks(program: program.snapshot, completed: completed, count: weeks, now: now, calendar: calendar)
     }
 
     // MARK: - Senkronizasyon

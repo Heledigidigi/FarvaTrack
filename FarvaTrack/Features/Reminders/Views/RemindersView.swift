@@ -10,6 +10,7 @@ struct RemindersView: View {
 
     @State private var sleep = SleepViewModel()
     @State private var metrics = BodyMetricsViewModel()
+    @State private var training = TrainingViewModel()
     @State private var status: UNAuthorizationStatus = .notDetermined
     @State private var showDenied = false
 
@@ -37,6 +38,7 @@ struct RemindersView: View {
                 }
             }
 
+            workoutSection
             waterSection
             sleepSection
             weighInSection
@@ -55,6 +57,7 @@ struct RemindersView: View {
             if let user = auth.currentUser {
                 sleep.configure(context: modelContext, user: user)
                 metrics.configure(context: modelContext, user: user)
+                training.configure(context: modelContext, user: user)
             }
             water.reloadReminderSettings()
             await refreshStatus()
@@ -62,6 +65,47 @@ struct RemindersView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await refreshStatus() } }
         }
+    }
+
+    // MARK: - Antrenman
+    private var workoutSection: some View {
+        let program = training.activeProgram()
+        let slots = training.reminderSlots()
+        return Section {
+            Toggle(isOn: Binding(
+                get: { training.reminderSettings.isEnabled },
+                set: { enabled in update(workout: { $0.isEnabled = enabled }) }
+            )) {
+                Label("Antrenman hatırlatıcısı", systemImage: "dumbbell.fill").foregroundStyle(Color.ftExercise)
+            }
+            .disabled(program == nil && !training.reminderSettings.isEnabled)
+
+            if training.reminderSettings.isEnabled {
+                DatePicker("Saat", selection: Binding(
+                    get: {
+                        Calendar.current.date(bySettingHour: training.reminderSettings.hour,
+                                              minute: training.reminderSettings.minute, second: 0, of: .now) ?? .now
+                    },
+                    set: { date in
+                        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                        update(workout: {
+                            $0.hour = parts.hour ?? 18
+                            $0.minute = parts.minute ?? 0
+                        })
+                    }
+                ), displayedComponents: .hourAndMinute)
+            }
+        } header: {
+            Text("Antrenman")
+        } footer: {
+            if let program {
+                let days = slots.map { ProgramPlanner.weekdayShortNames[($0.weekday + 5) % 7] }.joined(separator: ", ")
+                Text("\(program.name): \(days.isEmpty ? "planlı gün yok" : days). Günleri programdan değiştirebilirsin.")
+            } else {
+                Text("Önce Egzersiz → Programlar'dan bir programı aktif yap.")
+            }
+        }
+        .listRowBackground(Color.ftCard)
     }
 
     // MARK: - Su
@@ -183,6 +227,12 @@ struct RemindersView: View {
             Spacer()
             Text(value).monospacedDigit().foregroundStyle(Color.ftTextSecondary)
         }
+    }
+
+    private func update(workout change: (inout WorkoutReminderSettings) -> Void) {
+        var settings = training.reminderSettings
+        change(&settings)
+        Task { await finish(await training.applyReminder(settings), enabled: settings.isEnabled) }
     }
 
     private func update(water change: (inout WaterReminderSettings) -> Void) {

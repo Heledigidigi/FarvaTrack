@@ -45,26 +45,24 @@ private struct MeasurementsContent: View {
     let viewModel: BodyMetricsViewModel
     let onEdit: (MeasurementEditorTarget) -> Void
 
-    @State private var selectedMeasure: BodyMeasure = .waist
+    let ownerID: String
 
     init(ownerID: String, viewModel: BodyMetricsViewModel, onEdit: @escaping (MeasurementEditorTarget) -> Void) {
         _entries = Query(filter: #Predicate<MeasurementEntry> { $0.ownerID == ownerID }, sort: \.date, order: .reverse)
+        self.ownerID = ownerID
         self.viewModel = viewModel
         self.onEdit = onEdit
     }
 
     var body: some View {
         let changes = BodyMetricsViewModel.latestChanges(entries)
-        let series = entries
-            .compactMap { entry in entry.value(for: selectedMeasure).map { WeightPoint(date: entry.date, weightKg: $0) } }
-            .sorted { $0.date < $1.date }
 
         List {
             if entries.isEmpty {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Ölçülerini takip et").font(.headline)
-                        Text("Bel, göğüs, kalça gibi ölçüler, tartının göstermediği değişimi yakalar. Ayda bir ölçüm yeterli.")
+                        Text("Bel, göğüs, kol gibi ölçüler, tartının göstermediği değişimi yakalar. Ayda bir ölçüm yeterli.")
                             .font(.subheadline)
                             .foregroundStyle(Color.ftTextSecondary)
                         Button("İlk ölçünü ekle") { onEdit(MeasurementEditorTarget(entry: nil)) }
@@ -75,37 +73,24 @@ private struct MeasurementsContent: View {
                     .listRowBackground(Color.ftCard)
                 }
             } else {
-                Section("Son Ölçüler") {
+                Section {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(BodyMeasure.allCases) { measure in
-                            tile(measure, change: changes[measure])
+                            NavigationLink {
+                                MeasureTrendView(ownerID: ownerID, primary: measure)
+                            } label: {
+                                tile(measure, change: changes[measure])
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint("Zaman içindeki değişim grafiğini aç")
                         }
                     }
                     .padding(.vertical, 6)
                     .listRowBackground(Color.ftCard)
-                }
-
-                if series.count >= 2 {
-                    Section {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Picker("Ölçü", selection: $selectedMeasure) {
-                                ForEach(BodyMeasure.allCases) { Text($0.title).tag($0) }
-                            }
-                            .pickerStyle(.menu)
-                            Chart(series) { point in
-                                LineMark(x: .value("Tarih", point.date), y: .value("cm", point.weightKg))
-                                    .interpolationMethod(.catmullRom)
-                                    .foregroundStyle(Color.ftWeight)
-                                PointMark(x: .value("Tarih", point.date), y: .value("cm", point.weightKg))
-                                    .foregroundStyle(Color.ftWeight)
-                            }
-                            .chartYScale(domain: .automatic(includesZero: false))
-                            .frame(height: 170)
-                            .accessibilityLabel("\(selectedMeasure.title) ölçüsü grafiği")
-                        }
-                        .padding(.vertical, 4)
-                        .listRowBackground(Color.ftCard)
-                    }
+                } header: {
+                    Text("Son Ölçüler")
+                } footer: {
+                    Text("Bir ölçüye dokunarak zaman içindeki değişimini gör; kilo veya diğer ölçülerle karşılaştır.")
                 }
 
                 Section("Geçmiş") {

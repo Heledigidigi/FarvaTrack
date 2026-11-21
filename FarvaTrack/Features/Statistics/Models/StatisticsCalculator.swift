@@ -131,6 +131,7 @@ enum Badge: String, CaseIterable, Identifiable {
     case mealStreak7
     case sleepLog7
     case weighIn4, firstMeasurement
+    case programWeeks4, programWeeks12
 
     var id: String { rawValue }
 
@@ -147,6 +148,8 @@ enum Badge: String, CaseIterable, Identifiable {
         case .sleepLog7: return "Uyku Günlüğü"
         case .weighIn4: return "Düzenli Tartı"
         case .firstMeasurement: return "Mezura"
+        case .programWeeks4: return "Sadık"
+        case .programWeeks12: return "Program Ustası"
         }
     }
 
@@ -163,6 +166,8 @@ enum Badge: String, CaseIterable, Identifiable {
         case .sleepLog7: return "7 gece uyku kaydet"
         case .weighIn4: return "4 farklı günde tartıl"
         case .firstMeasurement: return "İlk vücut ölçünü gir"
+        case .programWeeks4: return "Programını 4 hafta üst üste eksiksiz tamamla"
+        case .programWeeks12: return "Programını 12 hafta üst üste eksiksiz tamamla"
         }
     }
 
@@ -175,6 +180,7 @@ enum Badge: String, CaseIterable, Identifiable {
         case .sleepLog7: return "moon.stars.fill"
         case .weighIn4: return "scalemass.fill"
         case .firstMeasurement: return "ruler.fill"
+        case .programWeeks4, .programWeeks12: return "calendar.badge.checkmark"
         }
     }
 
@@ -186,7 +192,8 @@ enum Badge: String, CaseIterable, Identifiable {
         case .steps10k: return 10_000
         case .stepGoalStreak7, .waterStreak7, .mealStreak7, .sleepLog7: return 7
         case .waterStreak30: return 30
-        case .weighIn4: return 4
+        case .weighIn4, .programWeeks4: return 4
+        case .programWeeks12: return 12
         }
     }
 }
@@ -213,6 +220,8 @@ struct BadgeInput {
     var sleepNights = 0
     var weighInDays: Set<Date> = []
     var measurementCount = 0
+    /// Aktif programda planın eksiksiz tamamlandığı ardışık hafta sayısı.
+    var programWeekStreak = 0
 }
 
 enum BadgeEngine {
@@ -232,6 +241,7 @@ enum BadgeEngine {
             case .sleepLog7: current = input.sleepNights
             case .weighIn4: current = input.weighInDays.count
             case .firstMeasurement: current = input.measurementCount
+            case .programWeeks4, .programWeeks12: current = input.programWeekStreak
             }
             return BadgeStatus(badge: badge, current: current)
         }

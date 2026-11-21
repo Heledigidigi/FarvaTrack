@@ -328,9 +328,13 @@ private struct TemplateExerciseRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(item.name, systemImage: item.category.systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(item.category.tint)
+            HStack {
+                Label(item.name, systemImage: item.category.systemImage)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(item.category.tint)
+                Spacer()
+                ExerciseGuideButton(key: item.exerciseKey, name: item.name, category: item.category)
+            }
 
             if item.mode == .sets {
                 Stepper(value: $item.targetSets, in: TemplateExercise.setRange) {
@@ -374,6 +378,7 @@ struct ProgramEditorView: View {
     @State private var kind: ProgramKind
     @State private var weekly: [String]
     @State private var rotation: [String]
+    @State private var rotationDays: [Int]
     @State private var activate: Bool
     @State private var error: String?
 
@@ -385,6 +390,7 @@ struct ProgramEditorView: View {
         _kind = State(initialValue: program?.kind ?? .weekly)
         _weekly = State(initialValue: TrainingProgram.normalizedWeek(program?.weekdayTemplateIDs ?? []))
         _rotation = State(initialValue: program?.rotationTemplateIDs ?? [])
+        _rotationDays = State(initialValue: program?.rotationDays ?? [0, 2, 4])
         _activate = State(initialValue: program?.isActive ?? true)
     }
 
@@ -438,6 +444,32 @@ struct ProgramEditorView: View {
                     } footer: {
                         Text("Her antrenmandan sonra sıradaki şablon önerilir; son şablondan sonra başa döner.")
                     }
+
+                    Section {
+                        HStack(spacing: 6) {
+                            ForEach(0..<7, id: \.self) { index in
+                                let selected = rotationDays.contains(index)
+                                Button {
+                                    Haptics.selection()
+                                    if selected { rotationDays.removeAll { $0 == index } } else { rotationDays.append(index) }
+                                } label: {
+                                    Text(ProgramPlanner.weekdayShortNames[index])
+                                        .font(.caption.weight(.semibold))
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 8)
+                                        .background(selected ? Color.ftExercise : Color.white.opacity(0.08), in: Capsule())
+                                        .foregroundStyle(selected ? Color.black : Color.ftTextSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(ProgramPlanner.weekdayNames[index])
+                                .accessibilityAddTraits(selected ? .isSelected : [])
+                            }
+                        }
+                    } header: {
+                        Text("Antrenman günleri")
+                    } footer: {
+                        Text("Haftada \(TrainingProgram.normalizedDays(rotationDays).count) gün. Hatırlatıcı bu günlerde gelir, program uyumu buna göre hesaplanır.")
+                    }
                 }
 
                 Section {
@@ -471,6 +503,7 @@ struct ProgramEditorView: View {
         do {
             let saved = try training.saveProgram(
                 name: name, kind: kind, weekly: weekly, rotation: rotation,
+                rotationDays: kind == .rotation ? rotationDays : nil,
                 editing: program, activate: activate
             )
             if !activate && saved.isActive { training.setActive(nil) }

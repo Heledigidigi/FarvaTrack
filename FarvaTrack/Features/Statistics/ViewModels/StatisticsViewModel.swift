@@ -80,6 +80,9 @@ final class StatisticsViewModel {
     var period: StatsPeriod = .week
     private(set) var cards: [MetricCard] = []
     private(set) var badges: [BadgeStatus] = []
+    /// Aktif programın son haftalardaki uyumu (program yoksa boş).
+    private(set) var adherence: [WeekAdherence] = []
+    private(set) var programName: String?
     private(set) var isLoading = false
 
     @ObservationIgnored private var samples = StatisticsSamples()
@@ -142,7 +145,20 @@ final class StatisticsViewModel {
         samples = data
         rebuild()
 
-        badges = BadgeEngine.evaluate(badgeInput(context: context, user: user, steps: data.steps), calendar: calendar)
+        // Program uyumu (son 12 hafta; rozet serisi için)
+        let activePrograms = (try? context.fetch(FetchDescriptor<TrainingProgram>(predicate: #Predicate { $0.ownerID == owner && $0.isActive }))) ?? []
+        if let program = activePrograms.first {
+            let sessions = workouts.map { CompletedSession(date: $0.date, templateID: $0.templateID.flatMap(UUID.init(uuidString:))) }
+            adherence = AdherenceCalculator.weeks(program: program.snapshot, completed: sessions, count: 12, now: end, calendar: calendar)
+            programName = program.name
+        } else {
+            adherence = []
+            programName = nil
+        }
+
+        var input = badgeInput(context: context, user: user, steps: data.steps)
+        input.programWeekStreak = AdherenceCalculator.completeWeekStreak(adherence)
+        badges = BadgeEngine.evaluate(input, calendar: calendar)
     }
 
     func setPeriod(_ newPeriod: StatsPeriod) {

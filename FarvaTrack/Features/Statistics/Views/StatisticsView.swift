@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 import SwiftData
 
 struct StatisticsView: View {
@@ -31,6 +32,13 @@ struct StatisticsView: View {
                     }
                 }
                 .listRowBackground(Color.ftCard)
+            }
+
+            if let name = viewModel.programName, !viewModel.adherence.isEmpty {
+                Section {
+                    AdherenceCard(programName: name, weeks: viewModel.adherence)
+                        .listRowBackground(Color.ftCard)
+                }
             }
 
             if viewModel.cards.isEmpty && !viewModel.isLoading {
@@ -124,6 +132,70 @@ private struct MetricCardView: View {
                 .font(.subheadline.bold().monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+            Text(title).font(.caption2).foregroundStyle(Color.ftTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - Program uyumu
+private struct AdherenceCard: View {
+    let programName: String
+    let weeks: [WeekAdherence]
+
+    private var visible: [WeekAdherence] { Array(weeks.suffix(8)) }
+
+    var body: some View {
+        let current = weeks.last
+        let average = AdherenceCalculator.averagePercent(visible)
+        let streak = AdherenceCalculator.completeWeekStreak(weeks)
+
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Program Uyumu", systemImage: "calendar.badge.checkmark")
+                    .font(.headline)
+                    .foregroundStyle(Color.ftExercise)
+                Spacer()
+                Text(programName).font(.caption).foregroundStyle(Color.ftTextSecondary).lineLimit(1)
+            }
+
+            Chart(visible) { week in
+                BarMark(
+                    x: .value("Hafta", week.weekStart, unit: .weekOfYear),
+                    y: .value("Uyum", week.ratio * 100)
+                )
+                .foregroundStyle(week.isComplete ? Color.ftSuccess : (week.isCurrent ? Color.ftExercise.opacity(0.5) : Color.ftExercise))
+                .cornerRadius(4)
+            }
+            .chartYScale(domain: 0...100)
+            .chartYAxis {
+                AxisMarks(values: [0, 50, 100]) { value in
+                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                    AxisValueLabel { Text("%\(value.as(Int.self) ?? 0)") }.foregroundStyle(Color.ftTextSecondary)
+                }
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { _ in
+                    AxisValueLabel(format: .dateTime.day().month(.abbreviated)).foregroundStyle(Color.ftTextSecondary)
+                }
+            }
+            .environment(\.locale, Locale(identifier: "tr_TR"))
+            .frame(height: 130)
+            .accessibilityLabel("Son \(visible.count) haftanın program uyumu")
+
+            HStack(spacing: 8) {
+                stat("Bu hafta", current.map { "\($0.done)/\($0.planned)" } ?? "—")
+                stat("Ortalama", average.map { "%\($0)" } ?? "—")
+                stat("Seri", "\(streak) hafta")
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func stat(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value).font(.subheadline.bold().monospacedDigit())
             Text(title).font(.caption2).foregroundStyle(Color.ftTextSecondary)
         }
         .frame(maxWidth: .infinity)

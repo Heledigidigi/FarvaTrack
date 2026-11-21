@@ -99,7 +99,9 @@ struct ExerciseListView: View {
                     initialExercises: TrainingViewModel.templateExercises(from: workout)
                 )
             }
-            .fullScreenCover(isPresented: $showLive) {
+            .fullScreenCover(isPresented: $showLive, onDismiss: {
+                Task { await training.refreshReminders() }
+            }) {
                 LiveWorkoutView(exerciseViewModel: viewModel)
             }
             .sheet(item: $composerTarget) { target in
@@ -135,6 +137,7 @@ struct ExerciseListView: View {
             }
             await viewModel.syncAll()
             await training.syncAll()
+            await training.refreshReminders()
         }
     }
 
@@ -162,6 +165,7 @@ struct ExerciseListView: View {
         })
         do {
             try viewModel.save(session.draft(asPlanned: true))
+            Task { await training.refreshReminders() }
         } catch {
             viewModel.errorMessage = AppError.map(error).errorDescription
         }

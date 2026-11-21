@@ -63,6 +63,38 @@ protocol WeighInReminderScheduling {
     func cancelWeighInReminder() async
 }
 
+/// Program günlerinde antrenman hatırlatıcısı (cihaza özel ayar).
+struct WorkoutReminderSettings: Codable, Equatable {
+    var isEnabled = false
+    var hour = 18
+    var minute = 0
+
+    private static let key = "workoutReminderSettings"
+
+    static func load(defaults: UserDefaults = .standard) -> WorkoutReminderSettings {
+        guard let data = defaults.data(forKey: key),
+              let settings = try? JSONDecoder().decode(WorkoutReminderSettings.self, from: data) else {
+            return WorkoutReminderSettings()
+        }
+        return settings
+    }
+
+    func save(defaults: UserDefaults = .standard) {
+        defaults.set(try? JSONEncoder().encode(self), forKey: Self.key)
+    }
+}
+
+/// Haftanın bir günü için hatırlatıcı içeriği. `weekday`: Calendar biçimi (1 = Pazar … 7 = Cumartesi).
+struct WorkoutReminderSlot: Equatable {
+    let weekday: Int
+    let body: String
+}
+
+protocol WorkoutReminderScheduling {
+    func scheduleWorkoutReminders(_ slots: [WorkoutReminderSlot], hour: Int, minute: Int) async throws
+    func cancelWorkoutReminders() async
+}
+
 /// Canlı antrenmanda dinlenme bitince (uygulama arka plandayken de) haber verir.
 protocol RestTimerScheduling {
     func scheduleRestEnd(after seconds: TimeInterval, exerciseName: String) async
@@ -76,7 +108,7 @@ extension UNAuthorizationStatus {
 }
 
 // MARK: - Yerel bildirimler
-final class NotificationManager: NotificationScheduling, SleepReminderScheduling, WeighInReminderScheduling, RestTimerScheduling {
+final class NotificationManager: NotificationScheduling, SleepReminderScheduling, WeighInReminderScheduling, RestTimerScheduling, WorkoutReminderScheduling {
     static let shared = NotificationManager()
     private init() {}
 
@@ -85,6 +117,7 @@ final class NotificationManager: NotificationScheduling, SleepReminderScheduling
     private static let sleepReminderID = "sleep.reminder"
     private static let weighInReminderID = "weighin.reminder"
     private static let restTimerID = "workout.rest"
+    private static let workoutPrefix = "workout.reminder."
 
     private static let waterMessages = [
         "Bir bardak su içmeye ne dersin?",
@@ -196,5 +229,30 @@ final class NotificationManager: NotificationScheduling, SleepReminderScheduling
     func cancelRestEnd() async {
         center.removePendingNotificationRequests(withIdentifiers: [Self.restTimerID])
         center.removeDeliveredNotifications(withIdentifiers: [Self.restTimerID])
+    }
+
+    // MARK: Antrenman hatırlatıcısı
+    func scheduleWorkoutReminders(_ slots: [WorkoutReminderSlot], hour: Int, minute: Int) async throws {
+        await cancelWorkoutReminders()
+        for slot in slots {
+            let content = UNMutableNotificationContent()
+            content.title = "Antrenman günü 💪"
+            content.body = slot.body
+            content.sound = .default
+            content.userInfo = ["url": "farvatrack://exercise"]
+
+            var components = DateComponents()
+            components.weekday = slot.weekday
+            components.hour = hour
+            components.minute = minute
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            try await center.add(UNNotificationRequest(identifier: "\(Self.workoutPrefix)\(slot.weekday)", content: content, trigger: trigger))
+        }
+    }
+
+    func cancelWorkoutReminders() async {
+        let pending = await center.pendingNotificationRequests()
+        let ids = pending.map(\.identifier).filter { $0.hasPrefix(Self.workoutPrefix) }
+        center.removePendingNotificationRequests(withIdentifiers: ids)
     }
 }

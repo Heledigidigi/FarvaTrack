@@ -112,6 +112,7 @@ struct LiveWorkoutView: View {
                     HStack {
                         Label(item.exercise.name, systemImage: item.exercise.category.systemImage)
                             .foregroundStyle(item.isComplete ? Color.ftSuccess : Color.ftTextSecondary)
+                        ExerciseGuideButton(key: item.exercise.exerciseKey, name: item.exercise.name, category: item.exercise.category)
                         Spacer()
                         if item.exercise.mode == .sets {
                             Text("Dinlenme \(item.exercise.restSeconds) sn")

@@ -190,7 +190,8 @@ final class BodyMetricsViewModelTests: XCTestCase {
         XCTAssertThrowsError(try sut.saveMeasurement([.waist: 5]))
 
         let older = Calendar.current.date(byAdding: .day, value: -30, to: .now)!
-        try sut.saveMeasurement([.waist: 90, .hip: 100], date: older)
+        try sut.saveMeasurement([.waist: 90, .wrist: 17], date: older)
+        XCTAssertThrowsError(try sut.saveMeasurement([.wrist: 45]), "bilek aralık dışı")
         try sut.saveMeasurement([.waist: 87.54])
 
         let all = try context.fetch(FetchDescriptor<MeasurementEntry>())
@@ -198,8 +199,8 @@ final class BodyMetricsViewModelTests: XCTestCase {
         let changes = BodyMetricsViewModel.latestChanges(all)
         XCTAssertEqual(changes[.waist]?.value ?? 0, 87.5, accuracy: 0.001)
         XCTAssertEqual(changes[.waist]?.change ?? 0, -2.5, accuracy: 0.001)
-        XCTAssertEqual(changes[.hip]?.value, 100)
-        XCTAssertNil(changes[.hip]?.change)
+        XCTAssertEqual(changes[.wrist]?.value, 17)
+        XCTAssertNil(changes[.wrist]?.change)
         XCTAssertNil(changes[.neck])
     }
 
