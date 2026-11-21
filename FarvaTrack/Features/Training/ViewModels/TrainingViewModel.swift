@@ -18,6 +18,14 @@ final class TrainingViewModel {
     @ObservationIgnored private let calendar: Calendar
 
     static let nameLength = 2...40
+    private static let turkish = Locale(identifier: "tr_TR")
+
+    /// Türkçe büyük/küçük harf kuralıyla (İ ↔ i, I ↔ ı) ad karşılaştırması.
+    static func sameName(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.compare(rhs, options: .caseInsensitive, range: nil, locale: turkish) == .orderedSame
+    }
+
+    private static func key(_ name: String) -> String { name.lowercased(with: turkish) }
     static let maxExercises = 20
 
     init(sync: TrainingSyncing = FirestoreTrainingSyncService(), defaults: UserDefaults = .standard, calendar: Calendar = .current) {
@@ -93,7 +101,7 @@ final class TrainingViewModel {
             throw AppError.invalidInput("Set, tekrar ve süre değerlerini kontrol et.")
         }
         let taken = templates().contains {
-            $0.id != editing?.id && $0.name.caseInsensitiveCompare(cleanName) == .orderedSame
+            $0.id != editing?.id && Self.sameName($0.name, cleanName)
         }
         guard !taken else { throw AppError.invalidInput("Bu isimde bir şablon zaten var.") }
 
@@ -246,16 +254,16 @@ final class TrainingViewModel {
     @discardableResult
     func adopt(_ preset: PresetProgram) throws -> TrainingProgram {
         guard context != nil, userID != nil else { throw AppError.notAuthenticated }
-        var takenNames = Set(templates().map { $0.name.lowercased() })
+        var takenNames = Set(templates().map { Self.key($0.name) })
         var ids: [String] = []
         for day in preset.days {
             var name = day.name
             var counter = 2
-            while takenNames.contains(name.lowercased()) {
+            while takenNames.contains(Self.key(name)) {
                 name = "\(day.name) \(counter)"
                 counter += 1
             }
-            takenNames.insert(name.lowercased())
+            takenNames.insert(Self.key(name))
             let template = try saveTemplate(name: name, exercises: day.exercises)
             ids.append(template.id.uuidString)
         }
@@ -263,8 +271,8 @@ final class TrainingViewModel {
         let weekly = preset.weeklyLayout.map { index in index.map { ids[$0] } ?? "" }
         var programName = preset.name
         var counter = 2
-        let programNames = Set(programs().map { $0.name.lowercased() })
-        while programNames.contains(programName.lowercased()) {
+        let programNames = Set(programs().map { Self.key($0.name) })
+        while programNames.contains(Self.key(programName)) {
             programName = "\(preset.name) \(counter)"
             counter += 1
         }
