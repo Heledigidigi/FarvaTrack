@@ -93,11 +93,18 @@ struct RGBABuffer: Equatable {
         )
     }
 
+    /// Görüntü, baytların sahibi olan bir veri sağlayıcıyla oluşturulur.
+    /// (`CGBitmapContext.makeImage()` belleği kopyalamadan paylaşabildiği için geçici dizinin
+    /// belleğinden üretilen görüntü, dizi serbest kalınca boşalmış belleğe işaret edebilirdi.)
     func makeImage() -> CGImage? {
-        var copy = pixels
-        return copy.withUnsafeMutableBytes { raw in
-            RGBABuffer.makeContext(raw.baseAddress, width: width, height: height)?.makeImage()
-        }
+        guard width > 0, height > 0,
+              let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        return CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
+        )
     }
 
     var alphaMask: StickerMask {
