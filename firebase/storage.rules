@@ -12,7 +12,7 @@ service firebase.storage {
     }
 
     // MARK: Sohbet medyası (Aşama 8B)
-    // chats/{chatId}/media/{messageId}/thumb.jpg ve original.<uzantı>
+    // chats/{chatId}/media/{messageId}/thumb.jpg, original.<uzantı> ve voice.m4a (8C)
     // Üyelik Firestore'daki sohbet belgesinden okunur (konsol, Storage'ın Firestore'a erişim iznini ister).
     function chatMembers(chatId) {
       return firestore.get(/databases/(default)/documents/chats/$(chatId)).data.members;
@@ -37,6 +37,11 @@ service firebase.storage {
           (fileName.matches('original[.][a-z0-9]{2,5}')
             && request.resource.size < 2 * 1024 * 1024 * 1024
             && request.resource.contentType.matches('(image|video)/.+'))
+          ||
+          // Sesli mesaj (8C): AAC .m4a, en fazla 50 MB.
+          (fileName == 'voice.m4a'
+            && request.resource.size < 50 * 1024 * 1024
+            && request.resource.contentType.matches('audio/(mp4|aac|x-m4a|m4a)'))
         );
 
       // Yarıda kalıp baştan yüklenen dosya: yalnızca ilk yükleyen üzerine yazabilir.

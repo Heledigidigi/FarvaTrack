@@ -44,6 +44,9 @@ final class ChatMessageRecord {
     var localThumbnailName: String?
     /// Gönderen cihazda medya yüklemesinin aşaması.
     var uploadStageRaw: String?
+    /// `ChatAudio` JSON'u (sesli mesajlarda).
+    var audioData: Data?
+    var listenedAt: Date?
 
     init(dto: ChatMessageDTO, ownerID: String, chatID: String, sendState: ChatSendState) {
         self.key = ChatMessageRecord.key(ownerID: ownerID, messageID: dto.id)
@@ -68,6 +71,8 @@ final class ChatMessageRecord {
         self.localOriginalName = nil
         self.localThumbnailName = nil
         self.uploadStageRaw = nil
+        self.audioData = dto.audio.flatMap { try? JSONEncoder().encode($0) }
+        self.listenedAt = dto.listenedAt
     }
 
     static func key(ownerID: String, messageID: String) -> String { "\(ownerID)|\(messageID)" }
@@ -89,6 +94,11 @@ final class ChatMessageRecord {
         set { mediaData = newValue.flatMap { try? JSONEncoder().encode($0) } }
     }
 
+    var audio: ChatAudio? {
+        get { audioData.flatMap { try? JSONDecoder().decode(ChatAudio.self, from: $0) } }
+        set { audioData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     var uploadStage: ChatUploadStage? {
         get { uploadStageRaw.flatMap(ChatUploadStage.init(rawValue:)) }
         set { uploadStageRaw = newValue?.rawValue }
@@ -108,7 +118,7 @@ final class ChatMessageRecord {
         ChatMessageDTO(
             id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
             readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
-            deleted: deletedForEveryone, media: media
+            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt
         )
     }
 
@@ -123,6 +133,8 @@ final class ChatMessageRecord {
         editedAt = dto.editedAt
         deletedForEveryone = dto.deleted
         media = dto.media
+        audio = dto.audio
+        listenedAt = dto.listenedAt
         applyReply(dto.replyTo)
     }
 
@@ -143,6 +155,8 @@ enum ChatOperationKind: String, Codable {
     case create, edit, deleteForEveryone, react, markRead
     /// Fotoğraf/video orijinalinin yüklenmesi; sıralı kuyruğu bekletmemek için ayrı, paralel çalışır.
     case uploadOriginal
+    /// Alıcı sesli mesajı dinledi.
+    case markListened
 }
 
 /// Çevrimdışı ya da hata nedeniyle sunucuya yazılamayan işlemler; sırayla yeniden denenir.
@@ -215,6 +229,8 @@ struct ChatMessageExport: Codable, Equatable {
     var reactions: [String: String]
     /// Medya mesajlarında Storage yolu ve boyutu (dosyanın kendisi dışa aktarılmaz).
     var media: ChatMedia?
+    var audio: ChatAudio?
+    var listenedAt: Date?
 
     init(record: ChatMessageRecord) {
         id = record.messageID
@@ -229,5 +245,7 @@ struct ChatMessageExport: Codable, Equatable {
         replyToID = record.replyToID
         reactions = record.reactions
         media = record.media
+        audio = record.audio
+        listenedAt = record.listenedAt
     }
 }

@@ -18,6 +18,9 @@ struct ChatMessageItem: Identifiable, Equatable {
 
     var id: String { message.id }
 
+    /// Sesli mesaj karşı tarafça dinlendi mi.
+    var isListened: Bool { message.listenedAt != nil }
+
     /// Gönderen tarafta yükleme sürüyor mu (iptal düğmesi için).
     var isUploading: Bool { isMine && message.media != nil && status == .sending }
 
@@ -362,12 +365,13 @@ final class ChatViewModel {
 
         for dto in items {
             if let record = cachedRecord(for: dto.id) {
-                if dto.deleted, !record.deletedForEveryone, record.media != nil {
+                if dto.deleted, !record.deletedForEveryone, record.media != nil || record.audio != nil {
                     // Karşı taraf herkesten sildi: indirilmiş dosyalar da kaldırılır.
                     removeLocalFiles(of: record)
                 }
                 if pending.contains(dto.id) {
                     if let readAt = dto.readAt { record.readAt = readAt }
+                    if let listenedAt = dto.listenedAt { record.listenedAt = listenedAt }
                     var merged = dto.reactions
                     merged[userID] = record.reactions[userID]
                     record.reactions = merged
@@ -442,7 +446,7 @@ final class ChatViewModel {
             canEdit: canEdit,
             uploadProgress: status == .sending ? uploadProgress[dto.id] : nil,
             localThumbnailURL: dto.media == nil || dto.deleted ? nil : localThumbnailURL(for: record),
-            localOriginalURL: dto.media == nil || dto.deleted ? nil : localOriginalURL(for: record)
+            localOriginalURL: (dto.media == nil && dto.audio == nil) || dto.deleted ? nil : localOriginalURL(for: record)
         )
     }
 
@@ -590,6 +594,7 @@ final class ChatViewModel {
         uploadProgress[item.id] = nil
 
         let media = record.media
+        let audioPath = record.audio?.path
         let thumbnailUploaded = (record.uploadStage.map { $0 >= .original } ?? true)
         removeLocalFiles(of: record)
 
@@ -605,12 +610,14 @@ final class ChatViewModel {
             record.deletedForEveryone = true
             record.text = ""
             record.media = nil
+            record.audio = nil
             record.uploadStage = nil
             record.localOriginalName = nil
             record.localThumbnailName = nil
             removeOperations(for: item.id, kinds: [.edit, .react, .uploadOriginal])
             // Storage'daki dosyalar, mesaj silindikten sonra kaldırılır (yollar işlemde saklanır).
-            let paths = media.map { [$0.thumbnailPath, $0.originalPath] } ?? []
+            var paths = media.map { [$0.thumbnailPath, $0.originalPath] } ?? []
+            if let audioPath { paths.append(audioPath) }
             enqueue(.deleteForEveryone, messageID: item.id, text: paths.isEmpty ? nil : paths.joined(separator: "\n"))
         }
         save()
@@ -819,6 +826,20 @@ final class ChatViewModel {
                         cachedRecord(for: messageID)?.uploadStage = .original
                         save()
                     }
+                    if let audio = record.audio, record.uploadStage == .original {
+                        // Sesli mesaj küçüktür: dosya önce yüklenir, mesaj hazır olarak yazılır (dinleyen hemen çalabilir).
+                        guard let name = record.localOriginalName, files.exists(files.outgoingURL(named: name)) else {
+                            throw AppError.storage("Ses kaydı cihazda bulunamadı.")
+                        }
+                        try await mediaStore.upload(
+                            fileURL: files.outgoingURL(named: name), to: audio.path,
+                            contentType: audio.contentType, senderID: operation.ownerID,
+                            progress: { [weak self] value in self?.setAudioProgress(value, for: messageID) }
+                        )
+                        cachedRecord(for: messageID)?.uploadStage = .done
+                        uploadProgress[messageID] = nil
+                        save()
+                    }
                     guard let fresh = cachedRecord(for: messageID), !fresh.deletedForEveryone else {
                         finish(batchIDs, kind: kind, messageID: messageID, succeeded: true)
                         continue
@@ -840,6 +861,9 @@ final class ChatViewModel {
                     batchIDs = reads.map(\.id)
                     let readAt = cachedRecord(for: messageID)?.readAt ?? operation.createdAt
                     try await sync.markRead(messageIDs: reads.map(\.messageID), chatID: chatID, at: readAt)
+                case .markListened:
+                    let listenedAt = cachedRecord(for: messageID)?.listenedAt ?? operation.createdAt
+                    try await sync.markListened(messageID: messageID, chatID: chatID, at: listenedAt)
                 case .uploadOriginal:
                     continue
                 }
@@ -872,6 +896,7 @@ final class ChatViewModel {
         }
         if kind == .create, let record = cachedRecord(for: messageID), !hasPendingCreate(messageID) {
             record.sendState = succeeded ? .sent : .failed
+            if succeeded, record.audio != nil { moveOutgoingToCache(record) }
         }
         save()
         reloadMessages()
@@ -1030,10 +1055,10 @@ final class ChatViewModel {
 
     /// Yükleme bitince dosyalar silinmeyi bekleyen klasörden önbelleğe taşınır (görüntüleyici yine anında açılır).
     private func moveOutgoingToCache(_ record: ChatMessageRecord) {
-        guard let media = record.media else { return }
+        guard let ext = originalExtension(of: record) else { return }
         let fm = FileManager.default
         if let name = record.localOriginalName {
-            let target = files.cachedOriginalURL(messageID: record.messageID, fileExtension: media.fileExtension)
+            let target = files.cachedOriginalURL(messageID: record.messageID, fileExtension: ext)
             try? fm.removeItem(at: target)
             try? fm.moveItem(at: files.outgoingURL(named: name), to: target)
         }
@@ -1044,6 +1069,88 @@ final class ChatViewModel {
         }
         record.localOriginalName = nil
         record.localThumbnailName = nil
+    }
+
+    // MARK: Sesli mesaj
+
+    /// Kaydı biten sesi gönderir: dosya hemen yüklenir, ardından mesaj yazılır.
+    func sendVoice(_ voice: RecordedVoice) {
+        guard let context, let userID, let chatID = room?.id else {
+            files.remove([voice.fileURL])
+            return
+        }
+        let messageID = makeID()
+        let fileName = "\(messageID).\(ChatAudioPath.fileExtension)"
+        let destination = files.outgoingURL(named: fileName)
+        do {
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.moveItem(at: voice.fileURL, to: destination)
+        } catch {
+            errorMessage = "Ses kaydı kaydedilemedi."
+            files.remove([voice.fileURL])
+            return
+        }
+        let audio = ChatAudio(
+            path: ChatAudioPath.voice(chatID: chatID, messageID: messageID),
+            contentType: ChatAudioPath.contentType,
+            byteSize: ChatMediaProcessor.fileSize(destination),
+            duration: voice.duration,
+            waveform: voice.waveform
+        )
+        let dto = ChatMessageDTO(
+            id: messageID, senderID: userID, type: .audio, text: "", createdAt: clock(),
+            replyTo: replyingTo.map { ChatReplyReference.make(from: $0.message) },
+            audio: audio
+        )
+        replyingTo = nil
+        let record = ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending)
+        record.localOriginalName = fileName
+        record.uploadStage = .original
+        context.insert(record)
+        enqueue(.create, messageID: messageID)
+        save()
+        reloadMessages()
+        scheduleFlush()
+    }
+
+    private func setAudioProgress(_ value: Double, for messageID: String) {
+        uploadProgress[messageID] = value
+        if let index = messages.firstIndex(where: { $0.id == messageID }) {
+            messages[index].uploadProgress = value
+        }
+    }
+
+    /// Çalmak için ses dosyası: cihazda yoksa indirilir (bir kez).
+    func loadAudio(for item: ChatMessageItem) async throws -> URL {
+        if let url = item.localOriginalURL { return url }
+        guard let audio = item.message.audio, !item.message.deleted else {
+            throw AppError.storage("Bu mesajda ses yok.")
+        }
+        let destination = files.cachedOriginalURL(messageID: item.id, fileExtension: ChatAudioPath.fileExtension)
+        if files.exists(destination) { return destination }
+        downloadProgress[item.id] = 0
+        defer { downloadProgress[item.id] = nil }
+        try await mediaStore.download(path: audio.path, to: destination, progress: { [weak self] value in
+            self?.downloadProgress[item.id] = value
+        })
+        reloadMessages()
+        return destination
+    }
+
+    /// Alıcı sesli mesajı çalmaya başladı: "dinlendi" bilgisi gönderilir (okundu da sayılır).
+    func markListened(_ messageID: String) {
+        guard let record = cachedRecord(for: messageID), record.senderID != userID,
+              record.audio != nil, record.listenedAt == nil, !record.deletedForEveryone else { return }
+        let now = clock()
+        record.listenedAt = now
+        if record.readAt == nil {
+            record.readAt = now
+            enqueue(.markRead, messageID: messageID)
+        }
+        enqueue(.markListened, messageID: messageID)
+        save()
+        reloadMessages()
+        scheduleFlush()
     }
 
     // MARK: Medya: gösterme
@@ -1060,9 +1167,16 @@ final class ChatViewModel {
         if let name = record.localOriginalName, files.exists(files.outgoingURL(named: name)) {
             return files.outgoingURL(named: name)
         }
-        guard let media = record.media else { return nil }
-        let cached = files.cachedOriginalURL(messageID: record.messageID, fileExtension: media.fileExtension)
+        guard let ext = originalExtension(of: record) else { return nil }
+        let cached = files.cachedOriginalURL(messageID: record.messageID, fileExtension: ext)
         return files.exists(cached) ? cached : nil
+    }
+
+    /// Orijinal dosyanın uzantısı: fotoğraf/videoda kaydedilen, seste `m4a`.
+    private func originalExtension(of record: ChatMessageRecord) -> String? {
+        if let media = record.media { return media.fileExtension }
+        if record.audio != nil { return ChatAudioPath.fileExtension }
+        return nil
     }
 
     /// Karşı tarafın gönderdiği önizlemeyi indirir (bir kez; sonra önbellekten).
@@ -1104,8 +1218,8 @@ final class ChatViewModel {
 
     private func removeLocalFiles(of record: ChatMessageRecord) {
         var urls: [URL] = [files.cachedThumbnailURL(messageID: record.messageID)]
-        if let media = record.media {
-            urls.append(files.cachedOriginalURL(messageID: record.messageID, fileExtension: media.fileExtension))
+        if let ext = originalExtension(of: record) {
+            urls.append(files.cachedOriginalURL(messageID: record.messageID, fileExtension: ext))
         }
         if let name = record.localOriginalName { urls.append(files.outgoingURL(named: name)) }
         if let name = record.localThumbnailName { urls.append(files.outgoingURL(named: name)) }

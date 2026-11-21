@@ -11,6 +11,9 @@ struct ChatConversationView: View {
     /// Galeriden seçilenler; gönderim sayfası (Orijinal / Hızlı) bunlar için açılır.
     @State private var pickedMedia: [PickedMedia] = []
     @State private var viewerItem: ChatMessageItem?
+    /// Sesli mesaj kaydı ve oynatma (8C).
+    @State private var recorder = ChatVoiceRecorderModel()
+    @State private var audioPlayer = ChatAudioPlayer()
 
     private static let bottomID = "chat-bottom"
 
@@ -60,7 +63,9 @@ struct ChatConversationView: View {
                     viewModel: viewModel,
                     focused: $composerFocused,
                     onGallery: { showPicker = true },
-                    onCamera: { showCamera = true }
+                    onCamera: { showCamera = true },
+                    recorder: recorder,
+                    onVoice: { viewModel.sendVoice($0) }
                 )
             }
         }
@@ -97,6 +102,41 @@ struct ChatConversationView: View {
                     .padding(.top, 8)
                     .transition(.opacity)
             }
+        }
+        .onAppear {
+            audioPlayer.onStartedPlaying = { [weak vm = viewModel] id in vm?.markListened(id) }
+            recorder.onAutoFinish = { [weak vm = viewModel] voice in vm?.sendVoice(voice) }
+        }
+        .onDisappear {
+            // Sohbetten çıkınca çalma durur, yarım kayıt silinir.
+            audioPlayer.stop()
+            recorder.cancel()
+        }
+        .onChange(of: recorder.hint) { _, hint in
+            guard let hint else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                if recorder.hint == hint { recorder.hint = nil }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let hint = recorder.hint {
+                Text(hint)
+                    .font(.footnote.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.ftCardElevated, in: Capsule())
+                    .padding(.bottom, 90)
+                    .padding(.horizontal, 24)
+                    .transition(.opacity)
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+        .alert("Sesli mesaj", isPresented: Binding(get: { audioPlayer.errorMessage != nil }, set: { if !$0 { audioPlayer.errorMessage = nil } })) {
+            Button("Tamam", role: .cancel) {}
+        } message: {
+            Text(audioPlayer.errorMessage ?? "")
         }
         .searchable(text: $viewModel.searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Mesajlarda ara")
         .confirmationDialog(
@@ -179,8 +219,28 @@ struct ChatConversationView: View {
                 viewModel.cancelUpload(item)
                 Haptics.impact(.medium)
             },
-            onLoadThumbnail: { await viewModel.loadThumbnail(for: item) }
+            onLoadThumbnail: { await viewModel.loadThumbnail(for: item) },
+            player: audioPlayer,
+            onLoadAudio: { try await viewModel.loadAudio(for: item) },
+            onToggleAudio: { toggleAudio(item) }
         )
+    }
+
+    /// Sesli mesajı oynatır / duraklatır; dosya cihazda yoksa önce indirilir.
+    private func toggleAudio(_ item: ChatMessageItem) {
+        if audioPlayer.isCurrent(item.id) {
+            if let url = item.localOriginalURL { audioPlayer.toggle(id: item.id, url: url) }
+            else if audioPlayer.isPlaying { audioPlayer.pause() }
+            return
+        }
+        Task {
+            do {
+                let url = try await viewModel.loadAudio(for: item)
+                audioPlayer.toggle(id: item.id, url: url)
+            } catch {
+                audioPlayer.errorMessage = AppError.map(error).errorDescription
+            }
+        }
     }
 
     /// Gönderilmeden vazgeçilen geçici kopyalar silinir.

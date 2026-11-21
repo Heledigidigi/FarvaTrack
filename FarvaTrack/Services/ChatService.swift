@@ -49,6 +49,8 @@ protocol ChatSyncing: AnyObject {
     func deleteMessageForEveryone(id: String, chatID: String) async throws
     /// Medya bilgisini günceller (ör. orijinal yüklenince `status = ready`).
     func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws
+    /// Alıcı: sesli mesaj dinlendi.
+    func markListened(messageID: String, chatID: String, at: Date) async throws
     func setReaction(_ emoji: String?, messageID: String, chatID: String, userID: String) async throws
     func markRead(messageIDs: [String], chatID: String, at: Date) async throws
     func setTyping(_ isTyping: Bool, chatID: String, userID: String, at: Date) async throws
@@ -76,6 +78,8 @@ enum ChatField {
     static let editedAt = "editedAt"
     static let deleted = "deleted"
     static let media = "media"
+    static let audio = "audio"
+    static let listenedAt = "listenedAt"
 
     static let messageId = "messageId"
     static let preview = "preview"
@@ -272,8 +276,13 @@ final class ChatService: ChatSyncing {
         try await update(chatID: chatID, messageID: id, [
             ChatField.deleted: true,
             ChatField.text: "",
-            ChatField.media: FieldValue.delete()
+            ChatField.media: FieldValue.delete(),
+            ChatField.audio: FieldValue.delete()
         ])
+    }
+
+    func markListened(messageID: String, chatID: String, at: Date) async throws {
+        try await update(chatID: chatID, messageID: messageID, [ChatField.listenedAt: Timestamp(date: at)])
     }
 
     func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws {
@@ -334,6 +343,9 @@ final class ChatService: ChatSyncing {
                         if let media = ChatMediaFields.decode(document.data()[ChatField.media]) {
                             try? await Storage.storage().reference(withPath: media.originalPath).delete()
                             try? await Storage.storage().reference(withPath: media.thumbnailPath).delete()
+                        }
+                        if let audio = ChatAudioFields.decode(document.data()[ChatField.audio]) {
+                            try? await Storage.storage().reference(withPath: audio.path).delete()
                         }
                     }
                     let batch = try db.batch()
@@ -401,6 +413,8 @@ enum ChatFirestoreMapper {
             editedAt: date(data[ChatField.editedAt]),
             deleted: data[ChatField.deleted] as? Bool ?? false,
             media: ChatMediaFields.decode(data[ChatField.media]),
+            audio: ChatAudioFields.decode(data[ChatField.audio]),
+            listenedAt: date(data[ChatField.listenedAt]),
             hasPendingWrites: hasPendingWrites
         )
     }
@@ -424,6 +438,9 @@ enum ChatFirestoreMapper {
         }
         if let media = message.media {
             fields[ChatField.media] = ChatMediaFields.encode(media)
+        }
+        if let audio = message.audio {
+            fields[ChatField.audio] = ChatAudioFields.encode(audio)
         }
         return fields
     }

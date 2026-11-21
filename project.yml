@@ -44,7 +44,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_NSHealthShareUsageDescription: "FarvaTrack, günlük adım, yürüme mesafesi ve aktif enerji verilerini Sağlık uygulamasından okuyarak hedeflerindeki ilerlemeni gösterir. Bu veriler yalnızca cihazında gösterilir ve sunucularımıza gönderilmez."
         INFOPLIST_KEY_NSCameraUsageDescription: "Sohbette fotoğraf çekip video kaydedebilmen için kamera kullanılır."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Sohbette kaydettiğin videolara ses eklenebilmesi için mikrofon kullanılır."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Sohbette sesli mesaj kaydedebilmen ve videolarına ses eklenebilmesi için mikrofon kullanılır."
         INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Sohbetteki fotoğraf ve videoları Fotoğraflar'a orijinal kalitesinde kaydedebilmen için."
     dependencies:
       - target: FarvaTrackWidget

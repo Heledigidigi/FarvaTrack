@@ -17,6 +17,10 @@ struct ChatBubbleView: View {
     var onOpenMedia: () -> Void = {}
     var onCancelUpload: () -> Void = {}
     var onLoadThumbnail: () async -> Void = {}
+    /// Sesli mesaj: çalar (8C).
+    var player: ChatAudioPlayer?
+    var onLoadAudio: () async throws -> URL = { throw AppError.storage("Ses yok") }
+    var onToggleAudio: () -> Void = {}
 
     private var message: ChatMessageDTO { item.message }
     private var canCopy: Bool { !message.deleted && message.type == .text }
@@ -46,7 +50,9 @@ struct ChatBubbleView: View {
                 quote(reply)
             }
 
-            if let media = message.media, !message.deleted {
+            if let audio = message.audio, !message.deleted, let player {
+                ChatVoiceBubbleContent(item: item, audio: audio, player: player, onLoad: onLoadAudio, onToggle: onToggleAudio)
+            } else if let media = message.media, !message.deleted {
                 ChatMediaBubbleContent(
                     item: item, media: media,
                     onOpen: { item.status == .failed ? onRetry() : onOpenMedia() },
@@ -79,6 +85,7 @@ struct ChatBubbleView: View {
     private var accessibilityHintText: String {
         if item.status == .failed { return "Tekrar göndermek için iki kez dokun" }
         if message.media != nil, !message.deleted, !item.isUploading { return "Açmak için eylemler menüsünden Aç'ı seç" }
+        if message.audio != nil, !message.deleted, !item.isUploading { return "Çalmak için eylemler menüsünden Oynat'ı seç" }
         return "Seçenekler için eylemler menüsünü kullan"
     }
 
@@ -226,6 +233,12 @@ struct ChatBubbleView: View {
             if message.media != nil, !item.isUploading, item.status != .failed {
                 Button("Aç", action: onOpenMedia)
             }
+            if message.audio != nil, !item.isUploading, item.status != .failed {
+                Button(player?.isCurrent(item.id) == true && player?.isPlaying == true ? "Duraklat" : "Oynat", action: onToggleAudio)
+                if player?.isCurrent(item.id) == true, let player {
+                    Button("Hızı değiştir, şu an \(player.rate.title)") { player.cycleRate() }
+                }
+            }
             if item.isUploading { Button("Gönderimi iptal et", action: onCancelUpload) }
             Button("Yanıtla", action: onReply)
             ForEach(ChatLimits.quickReactions, id: \.self) { emoji in
@@ -252,7 +265,13 @@ struct ChatBubbleView: View {
         if let reply = message.replyTo, !message.deleted {
             parts.append("\(name(for: reply.senderID)) kişisine yanıt: \(reply.preview)")
         }
-        if let media = message.media, !message.deleted {
+        if let audio = message.audio, !message.deleted {
+            var description = "Sesli mesaj, \(audio.formattedDuration)"
+            if item.isUploading { description += ", gönderiliyor" }
+            if item.isMine, item.isListened { description += ", dinlendi" }
+            if !item.isMine, !item.isListened { description += ", dinlenmedi" }
+            parts.append(description)
+        } else if let media = message.media, !message.deleted {
             var description = message.type == .video ? "Video" : "Fotoğraf"
             if let duration = media.formattedDuration { description += ", \(duration)" }
             if item.isUploading {
@@ -280,6 +299,8 @@ struct ChatComposer: View {
     var focused: FocusState<Bool>.Binding
     var onGallery: () -> Void = {}
     var onCamera: () -> Void = {}
+    var recorder: ChatVoiceRecorderModel?
+    var onVoice: (RecordedVoice) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -294,6 +315,10 @@ struct ChatComposer: View {
             }
 
             HStack(alignment: .bottom, spacing: 8) {
+                if let recorder, recorder.isActive {
+                    // Kayıt sürerken yazı alanının yerinde süre ve canlı dalga formu.
+                    VoiceRecordingBar(recorder: recorder)
+                } else {
                 if viewModel.editing == nil {
                     Button(action: onGallery) {
                         Image(systemName: "photo.on.rectangle.angled")
@@ -326,7 +351,13 @@ struct ChatComposer: View {
                     .foregroundStyle(Color.ftAccentLight)
                     .accessibilityLabel("Kamera")
                     .accessibilityHint("Fotoğraf çek ya da video kaydet")
-                } else {
+                }
+                }
+
+                if viewModel.editing == nil, viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let recorder {
+                    // Mikrofon düğmesi hep aynı yerde kalır: kayıt sürerken hareket kesilmesin.
+                    VoiceMicButton(recorder: recorder, onVoice: onVoice)
+                } else if viewModel.editing != nil || !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Button {
                     viewModel.send()
                     Haptics.impact(.light)

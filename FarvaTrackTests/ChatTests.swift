@@ -75,6 +75,12 @@ final class MockChatSync: ChatSyncing {
         deletions.append(id)
     }
 
+    private(set) var listens: [String] = []
+    func markListened(messageID: String, chatID: String, at: Date) async throws {
+        try write()
+        listens.append(messageID)
+    }
+
     func updateMedia(_ media: ChatMedia, messageID: String, chatID: String) async throws {
         try write()
         mediaUpdates.append((messageID, media))
