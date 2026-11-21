@@ -162,12 +162,12 @@ final class FirebaseManager: FirebaseServicing {
     func saveUser(_ user: AppUser) async throws {
         try ensureConfigured()
         do {
-            // Senkron `setData` bilerek kullanılıyor: yazma önce yerel önbelleğe gider,
+            // Tamamlanma beklenmiyor: yazma önce yerel önbelleğe gider,
             // internet yokken bloklamaz ve bağlantı gelince otomatik eşitlenir.
             let fields = try UserDocumentEncoder.fields(for: user, deleteMarker: FieldValue.delete())
             db.collection(Constants.Collection.users)
                 .document(user.id)
-                .setData(fields, merge: true)
+                .setData(fields, merge: true, completion: nil)
         } catch {
             throw AppError.map(error)
         }
