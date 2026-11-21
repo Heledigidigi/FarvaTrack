@@ -32,7 +32,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8D tamam; 8E–8H planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8E tamam; 8F–8H planlandı |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -76,7 +76,11 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Kenar kontur (beyaz çerçeve) ve kırpma; şeffaf PNG/WebP olarak kaydetme.
 - Kişisel sticker kütüphanesi, Firestore/Storage ile iki cihaz arasında senkron.
 
-**8E: Sticker gönderme + serbest yerleştirme**
+**8E: Sticker gönderme + serbest yerleştirme** (Tamamlandı)
+- Uygulandığı haliyle: yazma alanındaki gülen yüz artık `ChatStickerPanel` açar (Son kullanılanlar `StickerRecents` + Kütüphanem; dokun = gönder, uzun bas = "Sohbete yerleştir"; + → `StickerLibraryView`). Sticker mesajı `type: sticker`, `sticker {path, width, height}`; PNG `chats/{chatId}/media/{messageId}/sticker.png`'ye mesajdan önce yüklenir. Alıcı uzun basıp "Kütüphaneme kaydet" (`StickerLibraryViewModel.addPNG`).
+- Yerleştirme `chats/{chatId}/placements/{id}`: `senderId, anchorMessageId, x (genişliğe oran 0–1), y (bağlı mesajın dikey ortasına göre pt), scale (0,3–3; genişliğin %32'si × scale), rotation (rad), z, sticker`. Saf dönüşüm `PlacementGeometry` (en yakın mesaj, içerik ↔ bağlı konum, görünen bölgenin ortası) + `PlacementTransform` (sürükle/büyüt/döndür) testli.
+- Çizim: mesaj çerçeveleri `MessageFramePreference` ile içerik koordinatında; yerleştirmeler `overlayPreferenceValue` ile içeriğe çizilir, mesajla birlikte kayar. Taslak modunda kaydırma kapalı; yalnızca yerleştiren taşır / öne-arkaya alır / siler (kurallar da). SwiftData `ChatPlacementRecord` (çevrimdışı, bekleyen yerel değişiklik kazanır).
+- Test notu: arka planda süren görevler kapanmış bellek içi veritabanına erişip başka testlerde çökme yapıyordu; veritabanı kullanan test sınıflarında `tearDown` görevleri bekler. `RGBABuffer.makeImage()` veri sağlayıcıyla (paylaşılan bellek yok).
 - Sticker panelinden gönderme; karşı tarafın sticker'ı kendi kütüphanesine kaydedebilmesi.
 - Instagram gibi sohbet üzerinde serbest yerleştirme: büyütme, döndürme, sürükleme (iki parmak hareketleri).
 - Yerleştirilen sticker'ın konumu/ölçeği/açısı mesajla birlikte saklanır, iki tarafta da aynı görünür.
