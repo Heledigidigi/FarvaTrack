@@ -32,7 +32,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8C tamam; 8D–8H planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8D tamam; 8E–8H planlandı |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -65,7 +65,12 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Düşük gecikme için sıkıştırılmış ses (AAC) ve anında gönderim; dinlendi bilgisi.
 - Mikrofon izni ve sessiz mod/kulaklık geçişleri.
 
-**8D: Sticker oluşturucu**
+**8D: Sticker oluşturucu** (Tamamlandı)
+- Uygulandığı haliyle: modül `Features/Stickers`. Sohbette yazma alanındaki gülen yüz → `StickerLibraryView` (kütüphane) → fotoğraf seç → `StickerEditorView`. Gönderme ve serbest yerleştirme 8E'de.
+- Arka plan `VisionStickerSegmenter` (`VNGenerateForegroundInstanceMaskRequest`, cihazda; simülatörde desteklenmez → fotoğrafın tamamıyla başlanır ve uyarı gösterilir). Çalışma görüntüsü en fazla 1024 px.
+- Saf, test edilen maske mantığı `StickerMask.swift`: fırça (silgi/onar, yarıçap, yumuşaklık: sert çekirdek + smoothstep), boşluksuz çizgi, sınır kutusu, 2 geçişli chamfer mesafe alanı → kontur, `StickerGeometry` (fırça 70 pt yukarıda, ekran↔piksel dönüşümü, 512 sığdırma), `UndoStack` (30 adım).
+- Tuval `StickerCanvas` (UIKit hareketleri: tek parmak fırça / "Gezin", iki parmak yakınlaştır-kaydır; ikinci parmak gelince yarım darbe iptal), büyüteç, yazı/emoji katmanları. `StickerRenderer`: maske × fotoğraf + katmanlar → kırp → 512'ye sığdır → beyaz kontur (yazılar dahil) → şeffaf PNG.
+- Kütüphane: SwiftData `StickerRecord` + PNG Application Support/Stickers; `StickerLibraryViewModel` senkronu (bekleyen silmeler `PendingDeletionStore` "Sticker", yüklemeler, diğer cihazdan indirme/silme). Firestore `users/{uid}/stickers/{id}`, Storage `users/{uid}/stickers/{id}.png` (yalnızca sahibi, PNG, < 2 MB).
 - Fotoğraftan otomatik arka plan kaldırma (Vision, cihaz üzerinde).
 - Silgi ve onarma kalemleri; dokunduğun yerin biraz üstünde çalışan ofsetli fırça ve fırça boyutu ayarı.
 - Kenar kontur (beyaz çerçeve) ve kırpma; şeffaf PNG/WebP olarak kaydetme.
