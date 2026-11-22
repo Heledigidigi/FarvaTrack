@@ -28,6 +28,8 @@ struct ChatBubbleView: View {
     var bubbleStyle: BubbleStyle?
     var bubbleAssets: BubbleAssets = .empty
     var bubbleCacheOwner: String = ""
+    /// Arama satırı (8H): geri ara. `nil` = gösterilmez (ör. not sohbeti).
+    var onCallBack: (() -> Void)?
 
     private var message: ChatMessageDTO { item.message }
 
@@ -82,7 +84,9 @@ struct ChatBubbleView: View {
                 quote(reply)
             }
 
-            if let sticker = message.sticker, !message.deleted {
+            if let call = message.call, !message.deleted {
+                callRow(call)
+            } else if let sticker = message.sticker, !message.deleted {
                 ChatStickerBubbleContent(item: item, sticker: sticker, onLoad: onLoadSticker)
             } else if let audio = message.audio, !message.deleted, let player {
                 ChatVoiceBubbleContent(item: item, audio: audio, player: player, onLoad: onLoadAudio, onToggle: onToggleAudio)
@@ -120,6 +124,33 @@ struct ChatBubbleView: View {
         if message.media != nil, !message.deleted, !item.isUploading { return "Açmak için eylemler menüsünden Aç'ı seç" }
         if message.audio != nil, !message.deleted, !item.isUploading { return "Çalmak için eylemler menüsünden Oynat'ı seç" }
         return "Seçenekler için eylemler menüsünü kullan"
+    }
+
+    /// Sohbetteki arama geçmişi satırı: yön, sonuç, süre ve geri ara.
+    private func callRow(_ call: ChatCallInfo) -> some View {
+        let missed = call.outcome != .answered
+        return HStack(spacing: 10) {
+            Image(systemName: item.isMine ? "phone.arrow.up.right.fill" : (missed ? "phone.arrow.down.left.fill" : "phone.arrow.down.left.fill"))
+                .foregroundStyle(missed && !item.isMine ? Color.ftDanger : .white)
+                .font(.body)
+                .accessibilityHidden(true)
+            Text(item.displayText)
+                .font(.body)
+                .foregroundStyle(.white)
+            if let onCallBack {
+                Button {
+                    Haptics.impact(.light)
+                    onCallBack()
+                } label: {
+                    Image(systemName: "phone.fill")
+                        .font(.footnote.bold())
+                        .padding(7)
+                        .background(Color.white.opacity(0.18), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Geri ara")
+            }
+        }
     }
 
     private var messageText: some View {
@@ -234,6 +265,9 @@ struct ChatBubbleView: View {
             }
             if message.sticker != nil, !item.isMine {
                 Button { onSaveSticker() } label: { Label("Kütüphaneme kaydet", systemImage: "square.and.arrow.down") }
+            }
+            if message.call != nil, let onCallBack {
+                Button { onCallBack() } label: { Label("Geri ara", systemImage: "phone.fill") }
             }
             Button { onReply() } label: { Label("Yanıtla", systemImage: "arrowshape.turn.up.left") }
 

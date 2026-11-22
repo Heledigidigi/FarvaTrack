@@ -18,9 +18,27 @@ export function notificationBody(message) {
     if (!text) return null;
     return text.length > MAX_BODY ? `${text.slice(0, MAX_BODY - 1)}…` : text;
   }
+  if (message.type === 'call') return callSummary(message.call);
   const placeholder = PLACEHOLDERS[message.type] || 'Yeni mesaj';
   const caption = String(message.text || '').trim();
   return caption ? `${placeholder}: ${caption.slice(0, 80)}` : placeholder;
+}
+
+/** Arama satırı bildirimi (alıcının gözünden; uygulamadaki `CallFormat.summary` ile aynı). */
+export function callSummary(call) {
+  switch (call?.outcome) {
+    case 'answered': {
+      const total = Math.max(0, Math.round(Number(call.duration) || 0));
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = String(total % 60).padStart(2, '0');
+      return `📞 Sesli arama · ${h > 0 ? `${h}:${String(m).padStart(2, '0')}` : m}:${s}`;
+    }
+    case 'declined': return '📞 Reddedilen arama';
+    case 'busy': return '📞 Hat meşguldü';
+    case 'failed': return '📞 Arama bağlanamadı';
+    default: return '📞 Cevapsız arama';
+  }
 }
 
 /**

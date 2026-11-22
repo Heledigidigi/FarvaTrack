@@ -3,6 +3,15 @@
 <plist version="1.0">
 <dict>
 	<!-- Diğer anahtarlar project.yml'deki INFOPLIST_KEY_* ayarlarından üretilip bu dosyayla birleştirilir. -->
+	<!-- Sesli arama (8H): arka planda ses ve VoIP push. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>voip</string>
+		<string>remote-notification</string>
+	</array>
+	<key>FTVoIPPushEnabled</key>
+	<string>$(VOIP_PUSH)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

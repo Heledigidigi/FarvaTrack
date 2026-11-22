@@ -14,6 +14,8 @@ struct PushDevice: Equatable {
     var token: String
     var muted: Bool
     var appVersion: String
+    /// PushKit VoIP belirteci (8H): kilit ekranında arama çalsın diye. Yoksa alan silinir.
+    var voipToken: String? = nil
 }
 
 protocol PushDeviceStoring: AnyObject {
@@ -35,6 +37,7 @@ final class PushDeviceService: PushDeviceStoring {
                 "platform": "ios",
                 "muted": device.muted,
                 "appVersion": device.appVersion,
+                "voipToken": device.voipToken ?? FieldValue.delete(),
                 "updatedAt": FieldValue.serverTimestamp()
             ], merge: true)
         } catch {
@@ -123,6 +126,7 @@ final class PushManager {
     @ObservationIgnored private let appVersion: String
     @ObservationIgnored private(set) var userID: String?
     @ObservationIgnored private var token: String?
+    @ObservationIgnored private(set) var voipToken: String?
 
     static let mutedKey = "push.muted"
     static let deviceIDKey = "push.deviceID"
@@ -175,6 +179,12 @@ final class PushManager {
         await saveDevice()
     }
 
+    /// PushKit VoIP belirteci geldi / geçersizleşti (8H).
+    func voipTokenReceived(_ token: String?) async {
+        voipToken = token
+        await saveDevice()
+    }
+
     /// Oturum kapanırken: belirteç silinir (bu cihaza artık bildirim gitmez; sunucu eski kaydı ilk gönderimde temizler).
     func stop() async {
         if let userID { try? await devices.delete(deviceID: deviceID, userID: userID) }
@@ -191,7 +201,8 @@ final class PushManager {
 
     private func saveDevice() async {
         guard let userID, let token else { return }
-        try? await devices.save(PushDevice(id: deviceID, token: token, muted: muted, appVersion: appVersion), userID: userID)
+        try? await devices.save(PushDevice(id: deviceID, token: token, muted: muted, appVersion: appVersion, voipToken: voipToken),
+                                userID: userID)
     }
 
     var statusText: String {

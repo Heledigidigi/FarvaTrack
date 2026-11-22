@@ -34,6 +34,7 @@ struct ChatMessageItem: Identifiable, Equatable {
 
     var displayText: String {
         if message.deleted { return "Bu mesaj silindi" }
+        if let call = message.call { return CallFormat.summary(call, isMine: isMine) }
         return message.type == .text ? message.text : message.type.placeholder
     }
 

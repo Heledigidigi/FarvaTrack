@@ -51,6 +51,8 @@ final class ChatMessageRecord {
     var stickerData: Data?
     /// `ChatBubbleRef` JSON'u (8F).
     var bubbleData: Data?
+    /// `ChatCallInfo` JSON'u (8H, arama satırı).
+    var callData: Data?
     /// Alıcı cihaz: orijal indirildi ve sunucuya "aldım" denildi (bulut temizliği buna bakar).
     var originalAcked: Bool = false
     /// Alıcı cihaz: otomatik Fotoğraflar'a kaydetme denendi (bir kez).
@@ -85,6 +87,7 @@ final class ChatMessageRecord {
         self.listenedAt = dto.listenedAt
         self.stickerData = dto.sticker.flatMap { try? JSONEncoder().encode($0) }
         self.bubbleData = dto.bubble.flatMap { try? JSONEncoder().encode($0) }
+        self.callData = dto.call.flatMap { try? JSONEncoder().encode($0) }
     }
 
     static func key(ownerID: String, messageID: String) -> String { "\(ownerID)|\(messageID)" }
@@ -116,6 +119,11 @@ final class ChatMessageRecord {
         set { stickerData = newValue.flatMap { try? JSONEncoder().encode($0) } }
     }
 
+    var call: ChatCallInfo? {
+        get { callData.flatMap { try? JSONDecoder().decode(ChatCallInfo.self, from: $0) } }
+        set { callData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     var bubble: ChatBubbleRef? {
         get { bubbleData.flatMap { try? JSONDecoder().decode(ChatBubbleRef.self, from: $0) } }
         set { bubbleData = newValue.flatMap { try? JSONEncoder().encode($0) } }
@@ -140,7 +148,7 @@ final class ChatMessageRecord {
         ChatMessageDTO(
             id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
             readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
-            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker, bubble: bubble
+            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker, bubble: bubble, call: call
         )
     }
 
@@ -159,6 +167,7 @@ final class ChatMessageRecord {
         listenedAt = dto.listenedAt
         sticker = dto.sticker
         bubble = dto.bubble
+        call = dto.call
         applyReply(dto.replyTo)
     }
 
@@ -260,6 +269,7 @@ struct ChatMessageExport: Codable, Equatable {
     var audio: ChatAudio?
     var listenedAt: Date?
     var sticker: ChatSticker?
+    var call: ChatCallInfo?
 
     init(record: ChatMessageRecord) {
         id = record.messageID
@@ -277,5 +287,6 @@ struct ChatMessageExport: Codable, Equatable {
         audio = record.audio
         listenedAt = record.listenedAt
         sticker = record.sticker
+        call = record.call
     }
 }

@@ -6,6 +6,8 @@ name: Medya sunucusu (Cloudflare)
 #   CLOUDFLARE_ACCOUNT_ID  Cloudflare panelinde hesap kimliği
 #   GOOGLE_SERVICE_INFO_PLIST (zaten var) → Firebase proje kimliği buradan okunur.
 #   FIREBASE_SERVICE_ACCOUNT (isteğe bağlı, 8G) → Firebase servis hesabı JSON'u; push bildirimi gönderimi için Worker secret'ı olur.
+#   TURN_KEY_ID, TURN_KEY_API_TOKEN (isteğe bağlı, 8H) → Cloudflare Realtime TURN anahtarı.
+#   APNS_KEY_P8, APNS_KEY_ID, APPLE_TEAM_ID (isteğe bağlı, 8H) → kilit ekranında arama için VoIP push.
 
 on:
   push:
@@ -74,17 +76,26 @@ jobs:
             npx --yes wrangler@4 r2 bucket create farvatrack-media
           fi
 
-      - name: Bildirim icin servis hesabi (FIREBASE_SERVICE_ACCOUNT)
+      - name: Worker secret'lari (bildirim, TURN, VoIP)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
+          TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
+          APNS_KEY_P8: ${{ secrets.APNS_KEY_P8 }}
+          APNS_KEY_ID: ${{ secrets.APNS_KEY_ID }}
+          APNS_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$SA" ]; then
-            echo "::warning::FIREBASE_SERVICE_ACCOUNT secret'i yok; push bildirimleri gonderilmeyecek (sunucu yine calisir)."
-            exit 0
-          fi
-          printf '%s' "$SA" | npx --yes wrangler@4 secret put FIREBASE_SERVICE_ACCOUNT
+          # Her biri isteğe bağlı: eksik olan özellik sessizce kapalı kalır (sunucu yine çalışır).
+          for name in FIREBASE_SERVICE_ACCOUNT TURN_KEY_ID TURN_KEY_API_TOKEN APNS_KEY_P8 APNS_KEY_ID APNS_TEAM_ID; do
+            value="${!name}"
+            if [ -z "$value" ]; then
+              echo "::notice::$name yok; ilgili özellik kapalı."
+              continue
+            fi
+            printf '%s' "$value" | npx --yes wrangler@4 secret put "$name"
+          done
 
       - name: Dagit
         env:

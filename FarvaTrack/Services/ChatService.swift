@@ -92,6 +92,7 @@ enum ChatField {
     static let listenedAt = "listenedAt"
     static let sticker = "sticker"
     static let bubble = "bubble"
+    static let call = "call"
     static let updatedAt = "updatedAt"
 
     static let messageId = "messageId"
@@ -411,6 +412,13 @@ final class ChatService: ChatSyncing {
                     page.documents.forEach { batch.deleteDocument($0.reference) }
                     try await batch.commit()
                 }
+                // Arama sinyalleşme belgeleri (8H) ve ICE adayları.
+                let calls = try await room.reference.collection(CallField.collection).getDocuments()
+                for call in calls.documents {
+                    let candidates = try await call.reference.collection(CallField.candidates).getDocuments()
+                    for candidate in candidates.documents { try await candidate.reference.delete() }
+                    try await call.reference.delete()
+                }
                 // Sohbet üstüne bırakılan sticker'lar (belge + dosya).
                 let placements = try await room.reference.collection(Constants.Collection.chatPlacements).getDocuments()
                 for placement in placements.documents {
@@ -479,6 +487,7 @@ enum ChatFirestoreMapper {
             listenedAt: date(data[ChatField.listenedAt]),
             sticker: ChatStickerFields.decode(data[ChatField.sticker]),
             bubble: ChatBubbleRefFields.decode(data[ChatField.bubble]),
+            call: ChatCallFields.decode(data[ChatField.call]),
             hasPendingWrites: hasPendingWrites
         )
     }
@@ -512,6 +521,9 @@ enum ChatFirestoreMapper {
         if let bubble = message.bubble {
             fields[ChatField.bubble] = ChatBubbleRefFields.encode(bubble)
         }
+        if let call = message.call {
+            fields[ChatField.call] = ChatCallFields.encode(call)
+        }
         return fields
     }
 
@@ -520,7 +532,7 @@ enum ChatFirestoreMapper {
             ChatField.messageId: message.id,
             ChatField.senderId: message.senderID,
             ChatField.type: message.type.rawValue,
-            ChatField.preview: ChatText.preview(message.type == .text ? message.text : message.type.placeholder, limit: ChatLimits.replyPreviewLength),
+            ChatField.preview: ChatText.preview(message.call.map { CallFormat.summary($0, isMine: false) } ?? (message.type == .text ? message.text : message.type.placeholder), limit: ChatLimits.replyPreviewLength),
             ChatField.createdAt: Timestamp(date: message.createdAt)
         ]
     }

@@ -58,6 +58,23 @@ struct MainTabView: View {
         .environment(liveWorkout)
         .environment(chatHub)
         .environment(chatHub.partner)
+        .environment(CallManager.shared)
+        // Sesli arama (8H): uygulama içi arama ekranı.
+        .fullScreenCover(isPresented: Binding(get: { CallManager.shared.isPresenting }, set: { _ in })) {
+            CallView()
+                .environment(CallManager.shared)
+                .preferredColorScheme(.dark)
+        }
+        .alert("Arama", isPresented: Binding(get: { CallManager.shared.errorMessage != nil && !CallManager.shared.isPresenting },
+                                             set: { if !$0 { CallManager.shared.errorMessage = nil } })) {
+            Button("Tamam", role: .cancel) {}
+        } message: {
+            Text(CallManager.shared.errorMessage ?? "")
+        }
+        // Karşılıklı sohbet odası hazır olunca gelen aramalar dinlenir.
+        .onChange(of: chatHub.partner.room?.id, initial: true) { _, chatID in
+            CallManager.shared.watch(chatID: chatID, partnerName: chatHub.partner.partnerName)
+        }
         .overlay(alignment: .top) {
             if let banner = chatHub.banner {
                 ChatBannerView(banner: banner) {
@@ -101,6 +118,7 @@ struct MainTabView: View {
                 Task { await PushManager.shared.start(userID: user.id) }
             } else {
                 chatHub.reset()
+                CallManager.shared.stop()
                 Task { await PushManager.shared.stop() }
             }
         }

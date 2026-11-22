@@ -38,6 +38,12 @@ protocol ChatNotifying: AnyObject {
     func notify(chatID: String, messageID: String) async throws
 }
 
+/// Sesli arama (8H): TURN/STUN sunucuları ve karşı tarafı çaldırma (VoIP push ya da bildirim).
+protocol CallServerProviding: AnyObject {
+    func iceServers() async throws -> [IceServer]
+    func ring(chatID: String, callID: String) async throws
+}
+
 /// Bulut depolama özeti.
 struct MediaUsage: Codable, Equatable {
     var usedBytes: Int64
@@ -327,6 +333,22 @@ final class MediaServerClient: ChatMediaStoring {
 
     func publicURL(for path: String) -> URL? {
         baseURL?.appendingPathComponent("v1/public").appendingPathComponent(path)
+    }
+}
+
+extension MediaServerClient: CallServerProviding {
+    private struct IceResponse: Decodable { var iceServers: [IceServer] }
+
+    /// TURN kimlik bilgileri sunucuda üretilir (kısa ömürlü); uygulamaya gömülmez.
+    func iceServers() async throws -> [IceServer] {
+        let data = try await send(makeRequest("GET", "v1/turn"))
+        let servers = try JSONDecoder().decode(IceResponse.self, from: data).iceServers.filter { !$0.urls.isEmpty }
+        return servers.isEmpty ? IceServer.fallback : servers
+    }
+
+    func ring(chatID: String, callID: String) async throws {
+        let body = try JSONEncoder().encode(["chatId": chatID, "callId": callID])
+        _ = try await send(makeRequest("POST", "v1/call", headers: ["Content-Type": "application/json"]), body: body)
     }
 }
 

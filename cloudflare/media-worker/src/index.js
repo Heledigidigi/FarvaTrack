@@ -14,11 +14,15 @@
 //   POST   /v1/cleanup                       temizliği hemen çalıştır
 //   GET    /v1/public/profile_images/<uid>/<ad>.jpg   profil fotoğrafı (herkese açık, tahmin edilemez ad)
 //   POST   /v1/notify  {chatId, messageId}   gönderen, yazdığı mesaj için karşı tarafa FCM bildirimi ister (8G)
+//   GET    /v1/turn                          sesli arama için STUN/TURN sunucuları (kısa ömürlü kimlik bilgisi, 8H)
+//   POST   /v1/call    {chatId, callId}      arayan, aranan kişiyi çaldırır: VoIP push (APNs) ya da FCM bildirimi (8H)
 // Zamanlanmış görev (cron) her gün temizliği çalıştırır.
 
 import { verifyIdToken } from './auth.js';
 import { accessToken, firestore, parseServiceAccount } from './google.js';
 import { buildFcmMessage, isDeadToken, notificationBody, unreadCount } from './push.js';
+import { apnsConfig, sendVoIP } from './apns.js';
+import { iceServers } from './turn.js';
 import {
   ACK_PREFIX, CLEANUP, authorize, chatIdFor, chatIdContains, parsePath, parsePrefix, selectForCleanup, uploadLimit,
 } from './rules.js';
@@ -66,6 +70,7 @@ const defaultDeps = {
     const sa = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT);
     return sa ? accessToken(sa) : null;
   },
+  sendVoIP: (config, token, payload) => sendVoIP(config, token, payload),
 };
 
 // Aynı mesaj için tekrar gelen istekler (yeniden deneme) çift bildirim üretmesin (en iyi çaba, Worker örneği başına).
@@ -125,6 +130,53 @@ async function notify(env, deps, uid, body) {
     }
   }
   return json({ sent, removed, badge });
+}
+
+/** Arayan, çalan aramasını karşı tarafa duyurur. VoIP belirteci ve APNs anahtarı varsa kilit ekranında çalar. */
+async function ring(env, deps, uid, body) {
+  const chatId = String(body?.chatId || '');
+  const callId = String(body?.callId || '');
+  if (!ID.test(chatId) || !ID.test(callId)) return fail(400, 'Geçersiz istek');
+  if (!chatIdContains(chatId, uid)) return fail(403, 'İzin yok');
+  const key = `call:${chatId}/${callId}`;
+  if (recentNotifications.has(key)) return json({ sent: 0, reason: 'duplicate' });
+
+  const token = await deps.googleToken(env);
+  if (!token) return json({ sent: 0, reason: 'not_configured' });
+  const db = firestore(env.FIREBASE_PROJECT_ID, token, deps.fetch);
+  const chat = await db.get(`chats/${chatId}`);
+  if (!(chat?.members || []).includes(uid)) return fail(403, 'İzin yok');
+  const call = await db.get(`chats/${chatId}/calls/${callId}`);
+  if (!call) return fail(404, 'Arama bulunamadı');
+  if (call.callerId !== uid) return fail(403, 'İzin yok');
+  if (call.status !== 'ringing') return json({ sent: 0, reason: 'not_ringing' });
+  recentNotifications.set(key, Date.now());
+
+  const recipient = call.calleeId;
+  const callerName = (chat.names && chat.names[uid]) || 'FarvaTrack';
+  const devices = (await db.list(`users/${recipient}/devices`)).filter((d) => !d.muted);
+  const apns = apnsConfig(env);
+  let voip = 0;
+  let alerts = 0;
+  for (const device of devices) {
+    if (apns && typeof device.voipToken === 'string' && device.voipToken) {
+      const result = await deps.sendVoIP(apns, device.voipToken, { callId, chatId, callerName, aps: {} });
+      if (result.ok) { voip += 1; continue; }
+    }
+    if (typeof device.token !== 'string' || !device.token) continue;
+    const payload = buildFcmMessage({ token: device.token, title: callerName, body: '📞 Seni arıyor', chatId, messageId: callId, type: 'call', badge: undefined });
+    payload.message.data.kind = 'call';
+    payload.message.data.callId = callId;
+    delete payload.message.apns.payload.aps.badge;
+    payload.message.apns.payload.aps.category = 'CHAT_CALL';
+    const response = await deps.fetch(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (response.ok) alerts += 1;
+  }
+  return json({ sent: voip + alerts, voip, alerts });
 }
 
 /** Testler için. */
@@ -237,6 +289,14 @@ export async function handle(request, env, deps = defaultDeps) {
   const key = url.searchParams.get('p') || '';
 
   if (path === '/v1/usage' && method === 'GET') return json(await usage(env));
+  if (path === '/v1/turn' && method === 'GET') {
+    const result = await iceServers(env, deps.fetch);
+    return json({ iceServers: result.iceServers, source: result.source });
+  }
+  if (path === '/v1/call' && method === 'POST') {
+    const body = await request.json().catch(() => null);
+    return ring(env, deps, uid, body);
+  }
   if (path === '/v1/notify' && method === 'POST') {
     const body = await request.json().catch(() => null);
     return notify(env, deps, uid, body);

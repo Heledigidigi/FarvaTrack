@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Birim testleri uygulamayı barındırıcı olarak açar; orada HealthKit gözlemcisi gereksiz.
         let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         if !isRunningTests {
+            // Kilit ekranında arama (8H): yalnızca VOIP_PUSH build ayarı açıksa kaydolunur.
+            VoIPPushRegistrar.shared.start()
             // Yeni adım verisi geldiğinde (uygulama kapalıyken bile) widget'ı güncelle.
             HealthKitManager.shared.startBackgroundDelivery {
                 await StepsWidgetRefresher.refresh()
@@ -45,8 +47,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     // MARK: - Bildirimler
 
+    /// Sohbet mesajı ya da (VoIP push yokken) gelen arama bildirimi.
     private static func isChat(_ userInfo: [AnyHashable: Any]) -> Bool {
-        userInfo["kind"] as? String == "chat"
+        ["chat", "call"].contains(userInfo["kind"] as? String ?? "")
     }
 
     /// Uygulama açıkken: hatırlatıcılar banner olarak görünür; sohbet bildirimleri yerine

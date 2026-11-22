@@ -347,7 +347,8 @@ struct ChatConversationView: View {
             onToggleAudio: { toggleAudio(item) },
             bubbleStyle: style,
             bubbleAssets: style.map { bubbleStore.assets(for: $0, ownerID: sender) } ?? .empty,
-            bubbleCacheOwner: owner
+            bubbleCacheOwner: owner,
+            onCallBack: viewModel.kind == .partner ? { CallLauncher.call(viewModel) } : nil
         )
         .task(id: item.message.bubble) {
             await bubbleStore.ensure(item.message.bubble, ownerID: sender)

@@ -52,7 +52,7 @@ service cloud.firestore {
         allow read, delete: if isOwner(userId);
         allow write: if isOwner(userId)
           && deviceId.matches('^[A-Za-z0-9-]{1,64}$')
-          && request.resource.data.keys().hasOnly(['token', 'platform', 'muted', 'appVersion', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['token', 'platform', 'muted', 'appVersion', 'voipToken', 'updatedAt'])
           && request.resource.data.token is string
           && request.resource.data.token.size() < 4096
           && request.resource.data.muted is bool;
@@ -112,7 +112,16 @@ service cloud.firestore {
       let stickerOk = data.type == 'sticker'
         ? (data.sticker is map && data.sticker.path == folder + 'sticker.png')
         : !('sticker' in data);
-      return mediaOk && audioOk && stickerOk;
+      // Arama satırı (8H): sonuç ve süre.
+      let callOk = data.type == 'call'
+        ? (data.call is map
+            && data.call.keys().hasOnly(['callId', 'outcome', 'duration'])
+            && data.call.callId is string
+            && data.call.outcome in ['answered', 'missed', 'declined', 'busy', 'failed']
+            && data.call.duration is number
+            && data.call.duration >= 0)
+        : !('call' in data);
+      return mediaOk && audioOk && stickerOk && callOk;
     }
 
     // Sohbet üstüne bırakılan sticker (8E): konum en yakın mesaja bağlı; dosya bu yerleştirmenin klasöründe.
@@ -194,7 +203,7 @@ service cloud.firestore {
         allow read: if isChatMember(chatId);
 
         allow create: if isChatMember(chatId)
-          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio', 'sticker', 'bubble'])
+          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio', 'sticker', 'bubble', 'call'])
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.type in ['text', 'image', 'video', 'audio', 'sticker', 'call']
           && request.resource.data.text is string
@@ -252,6 +261,40 @@ service cloud.firestore {
           && resource.data.senderId == request.auth.uid
           && validPlacement(chatId, placementId, request.resource.data);
         allow delete: if isChatMember(chatId) && resource.data.senderId == request.auth.uid;
+      }
+
+      // Sesli arama sinyalleşmesi (8H): teklif/yanıt SDP'leri, durum ve ICE adayları.
+      // Arayan oluşturur; iki taraf da durumu ilerletir; yalnızca arayan teklif, aranan yanıt yazar.
+      match /calls/{callId} {
+        allow read: if isChatMember(chatId);
+        allow create: if isChatMember(chatId)
+          && request.resource.data.keys().hasOnly(['callerId', 'calleeId', 'status', 'offer', 'offerVersion', 'answerVersion', 'createdAt'])
+          && request.resource.data.callerId == request.auth.uid
+          && request.resource.data.calleeId != request.auth.uid
+          && request.resource.data.calleeId in chatDoc(chatId).data.members
+          && request.resource.data.status == 'ringing'
+          && request.resource.data.offer is map
+          && request.resource.data.offer.sdp is string
+          && request.resource.data.offer.sdp.size() < 20000;
+        allow update: if isChatMember(chatId)
+          && request.auth.uid in [resource.data.callerId, resource.data.calleeId]
+          && request.resource.data.callerId == resource.data.callerId
+          && request.resource.data.calleeId == resource.data.calleeId
+          && onlyChanges(['status', 'offer', 'offerVersion', 'answer', 'answerVersion', 'answeredAt', 'endedAt', 'endedBy'])
+          && request.resource.data.status in ['ringing', 'accepted', 'declined', 'busy', 'missed', 'ended', 'failed']
+          && (!('offer' in request.resource.data.diff(resource.data).affectedKeys()) || request.auth.uid == resource.data.callerId)
+          && (!('answer' in request.resource.data.diff(resource.data).affectedKeys()) || request.auth.uid == resource.data.calleeId);
+        allow delete: if isChatMember(chatId);
+
+        match /candidates/{candidateId} {
+          allow read: if isChatMember(chatId);
+          allow create: if isChatMember(chatId)
+            && request.resource.data.keys().hasOnly(['from', 'candidate', 'sdpMid', 'sdpMLineIndex', 'offerVersion', 'createdAt'])
+            && request.resource.data.from == request.auth.uid
+            && request.resource.data.candidate is string
+            && request.resource.data.candidate.size() < 2000;
+          allow delete: if isChatMember(chatId);
+        }
       }
     }
   }

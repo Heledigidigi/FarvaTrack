@@ -167,6 +167,14 @@ struct ChatRoomContent: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if viewModel.phase == .ready, viewModel.kind == .partner {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { CallLauncher.call(viewModel) } label: { Image(systemName: "phone.fill") }
+                        .accessibilityLabel("Sesli ara")
+                        .accessibilityHint("\(viewModel.partnerName) adlı kişiyi sesli arar")
+                        .disabled(CallManager.shared.phase.isActive)
+                }
+            }
             if viewModel.phase == .ready {
                 ToolbarItem(placement: .primaryAction) {
                     Button { showBubbles = true } label: { Image(systemName: "paintpalette") }
