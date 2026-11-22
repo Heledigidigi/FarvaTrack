@@ -100,6 +100,11 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Dokuz dilimli (9-slice) ölçekleme: mesaj uzayıp kısaldıkça baloncuğun şekli bozulmaz.
 - Seçilen özel baloncuk karşı tarafa da aynen görünür (tasarım verisi mesajla/kullanıcı profiliyle senkron).
 
+**Kendine not sohbeti** (8F sonrası ek, tamamlandı)
+- Kullanıcı kendi davet kodunu kendine yapıştırınca `uid_uid` odası açılır (`members: [uid, uid]`); karşılıklı sohbetle aynı altyapı ve özellikler, yalnızca alıcı yine kendisi. `ChatRoomKind` (`.partner`/`.personal`, `ChatRoomKind.of(room, userID:)`), `ChatViewModel(kind:)`; `observeRoom(userID:kind:)` kullanıcının odalarını dinleyip türe göre seçer. `ChatRoomCache` anahtarı türe göre (karşılıklı eski anahtarla). Bekleyen işlemler (`pendingOperations`) odaya göre ayrılır.
+- `ChatHub` (MainTabView): iki model, rozet toplamı, görünürlük (yalnızca açık konuşma okundu sayar). Sohbet sekmesi: not sohbeti yoksa eskisi gibi doğrudan karşılıklı sohbet / eşleşme (sol üst menü → "Kendime not sohbeti aç"), varsa `ChatRoomListView` (iki satır) → `ChatRoomContent`. Eşleşme ekranı `ChatPairingView(purpose:)`, "Panodan yapıştır" düğmesi.
+- Not sohbetinde "yazıyor" gönderilmez; orijal yüklenince kendi `/v1/ack`'i atılır (Worker `uid_uid` odasında gönderene izin verir), bulut temizliği uygulanır. Firestore kuralları: kodun sahibi de kullanabilir; oda `members[0] < members[1]` ya da iki üye de kendisi.
+
 **8G: Push bildirimleri**
 - APNs kaydı ve cihaz belirtecinin Firestore'a yazılması; Cloud Functions ile yeni mesajda bildirim gönderimi.
 - Bildirimde yanıtlama ve okundu işaretleme (bildirim eylemleri); sessize alma ayarı.
