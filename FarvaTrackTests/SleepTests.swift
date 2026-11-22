@@ -7,8 +7,8 @@ final class MockSleepSync: SleepSyncing {
     private(set) var uploaded: [SleepDTO] = []
     private(set) var deleted: [String] = []
 
-    func upload(_ entry: SleepDTO, userID: String) async throws { uploaded.append(entry) }
-    func deleteEntry(id: String, userID: String) async throws { deleted.append(id) }
+    func upload(_ entry: SleepDTO, userID: String) async throws { mockLock.withLock { uploaded.append(entry) } }
+    func deleteEntry(id: String, userID: String) async throws { mockLock.withLock { deleted.append(id) } }
     func fetchEntries(userID: String, since: Date) async throws -> [SleepDTO] { remote }
 }
 

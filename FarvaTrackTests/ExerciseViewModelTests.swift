@@ -7,8 +7,8 @@ final class MockWorkoutSync: WorkoutSyncing {
     private(set) var uploaded: [WorkoutDTO] = []
     private(set) var deleted: [String] = []
 
-    func upload(_ workout: WorkoutDTO, userID: String) async throws { uploaded.append(workout) }
-    func deleteWorkout(id: String, userID: String) async throws { deleted.append(id) }
+    func upload(_ workout: WorkoutDTO, userID: String) async throws { mockLock.withLock { uploaded.append(workout) } }
+    func deleteWorkout(id: String, userID: String) async throws { mockLock.withLock { deleted.append(id) } }
     func fetchWorkouts(userID: String) async throws -> [WorkoutDTO] { remote }
 }
 

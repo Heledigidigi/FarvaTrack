@@ -10,8 +10,8 @@ final class MockWasteSync: WasteSyncing {
     private(set) var deleted: [String] = []
     private(set) var dailyUploads: [WasteDailyDTO] = []
 
-    func uploadEntry(_ entry: WasteDTO, userID: String) async throws { uploaded.append(entry) }
-    func deleteEntry(id: String, userID: String) async throws { deleted.append(id) }
+    func uploadEntry(_ entry: WasteDTO, userID: String) async throws { mockLock.withLock { uploaded.append(entry) } }
+    func deleteEntry(id: String, userID: String) async throws { mockLock.withLock { deleted.append(id) } }
     func fetchEntries(userID: String, since: Date) async throws -> [WasteDTO] { remote }
     func uploadDaily(_ daily: WasteDailyDTO, userID: String) async throws {
         if failDaily { throw AppError.network }

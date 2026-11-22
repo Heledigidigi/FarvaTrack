@@ -10,11 +10,11 @@ final class MockTrainingSync: TrainingSyncing {
     private(set) var deletedTemplates: [String] = []
     private(set) var deletedPrograms: [String] = []
 
-    func uploadTemplate(_ dto: WorkoutTemplateDTO, userID: String) async throws { uploadedTemplates.append(dto) }
-    func deleteTemplate(id: String, userID: String) async throws { deletedTemplates.append(id) }
+    func uploadTemplate(_ dto: WorkoutTemplateDTO, userID: String) async throws { mockLock.withLock { uploadedTemplates.append(dto) } }
+    func deleteTemplate(id: String, userID: String) async throws { mockLock.withLock { deletedTemplates.append(id) } }
     func fetchTemplates(userID: String) async throws -> [WorkoutTemplateDTO] { remoteTemplates }
-    func uploadProgram(_ dto: TrainingProgramDTO, userID: String) async throws { uploadedPrograms.append(dto) }
-    func deleteProgram(id: String, userID: String) async throws { deletedPrograms.append(id) }
+    func uploadProgram(_ dto: TrainingProgramDTO, userID: String) async throws { mockLock.withLock { uploadedPrograms.append(dto) } }
+    func deleteProgram(id: String, userID: String) async throws { mockLock.withLock { deletedPrograms.append(id) } }
     func fetchPrograms(userID: String) async throws -> [TrainingProgramDTO] { remotePrograms }
 }
 
@@ -434,8 +434,8 @@ final class ManualStepTests: XCTestCase {
         var remote: [ManualStepDTO] = []
         private(set) var uploaded: [ManualStepDTO] = []
         private(set) var deleted: [String] = []
-        func upload(_ entry: ManualStepDTO, userID: String) async throws { uploaded.append(entry) }
-        func delete(id: String, userID: String) async throws { deleted.append(id) }
+        func upload(_ entry: ManualStepDTO, userID: String) async throws { mockLock.withLock { uploaded.append(entry) } }
+        func delete(id: String, userID: String) async throws { mockLock.withLock { deleted.append(id) } }
         func fetch(userID: String, since: Date) async throws -> [ManualStepDTO] { remote }
     }
 

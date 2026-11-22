@@ -10,12 +10,12 @@ final class MockBodyMetricsSync: BodyMetricsSyncing {
     private(set) var deletedWeights: [String] = []
     private(set) var deletedMeasurements: [String] = []
 
-    func uploadWeight(_ entry: WeightDTO, userID: String) async throws { uploadedWeights.append(entry) }
-    func deleteWeight(id: String, userID: String) async throws { deletedWeights.append(id) }
+    func uploadWeight(_ entry: WeightDTO, userID: String) async throws { mockLock.withLock { uploadedWeights.append(entry) } }
+    func deleteWeight(id: String, userID: String) async throws { mockLock.withLock { deletedWeights.append(id) } }
     func fetchWeights(userID: String, since: Date) async throws -> [WeightDTO] { remoteWeights }
 
-    func uploadMeasurement(_ entry: MeasurementDTO, userID: String) async throws { uploadedMeasurements.append(entry) }
-    func deleteMeasurement(id: String, userID: String) async throws { deletedMeasurements.append(id) }
+    func uploadMeasurement(_ entry: MeasurementDTO, userID: String) async throws { mockLock.withLock { uploadedMeasurements.append(entry) } }
+    func deleteMeasurement(id: String, userID: String) async throws { mockLock.withLock { deletedMeasurements.append(id) } }
     func fetchMeasurements(userID: String, since: Date) async throws -> [MeasurementDTO] { remoteMeasurements }
 }
 

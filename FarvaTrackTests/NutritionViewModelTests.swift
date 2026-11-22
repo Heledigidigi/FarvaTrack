@@ -7,8 +7,8 @@ final class MockMealSync: MealSyncing {
     private(set) var uploaded: [MealDTO] = []
     private(set) var deleted: [String] = []
 
-    func upload(_ meal: MealDTO, userID: String) async throws { uploaded.append(meal) }
-    func deleteMeal(id: String, userID: String) async throws { deleted.append(id) }
+    func upload(_ meal: MealDTO, userID: String) async throws { mockLock.withLock { uploaded.append(meal) } }
+    func deleteMeal(id: String, userID: String) async throws { mockLock.withLock { deleted.append(id) } }
     func fetchMeals(userID: String, since: Date) async throws -> [MealDTO] { remote }
 }
 

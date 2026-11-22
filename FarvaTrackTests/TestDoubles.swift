@@ -22,7 +22,7 @@ final class MockNotificationScheduler: NotificationScheduling, SleepReminderSche
         return grantOnRequest
     }
 
-    func scheduleWaterReminders(settings: WaterReminderSettings) async throws { waterScheduled = settings }
+    func scheduleWaterReminders(settings: WaterReminderSettings) async throws { mockLock.withLock { waterScheduled = settings } }
     func cancelWaterReminders() async { waterCancelled = true }
 
     func scheduleSleepReminder(hour: Int, minute: Int, bedtimeText: String) async throws {
@@ -64,3 +64,7 @@ func utcCalendar() -> Calendar {
     calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
     return calendar
 }
+
+/// Sahte servislerin yalıtımsız async metotları genel yürütücüde, birden çok görevden aynı anda çalışabilir.
+/// Kayıt dizilerine yazım bu kilitle yapılır; yoksa eşzamanlı ekleme yığını bozup testleri rastgele çökertir.
+let mockLock = NSRecursiveLock()

@@ -209,7 +209,7 @@ final class MockLibrarySync: LibrarySyncing {
     private(set) var uploaded: [LibraryItemDTO] = []
     private(set) var deleted: [String] = []
 
-    func upload(_ item: LibraryItemDTO, userID: String) async throws { uploaded.append(item) }
+    func upload(_ item: LibraryItemDTO, userID: String) async throws { mockLock.withLock { uploaded.append(item) } }
     func delete(id: String, userID: String) async throws {
         deleted.append(id)
         remote.removeAll { $0.id == id }
