@@ -34,7 +34,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8G tamam; 8H planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8H tamam |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -115,7 +115,13 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Rozet sayısı ve uygulama açıkken bildirim yerine uygulama içi gösterim.
 - Ücretsiz imzada APNs yokken düzgün geri düşme (yalnızca uygulama açıkken anlık dinleyici).
 
-**8H: Sesli arama**
+**8H: Sesli arama** (Tamamlandı)
+- Uygulandığı haliyle: modül `Features/Calls`. WebRTC `stasel/WebRTC` (SPM, `branch: latest`); `CallMediaEngine` protokolü, canlı `WebRTCEngine` (yalnızca ses, unified plan, `gatherContinually`, AEC/NS/AGC/HPF kısıtları, `RTCAudioSession.useManualAudio` → ses CallKit etkinleştirince açılır), paket yoksa `UnavailableCallEngine`. SDP `CallAudioTuning.tune`: Opus en önde, `maxaveragebitrate=64000; useinbandfec=1; usedtx=0; stereo=0; minptime=10` (saf, testli).
+- Sinyalleşme `CallSignaling`/`CallSignalingService`: `chats/{chatId}/calls/{callId}` `{callerId, calleeId, status (ringing/accepted/declined/busy/missed/ended/failed), offer, answer, offerVersion, answerVersion, createdAt, answeredAt, endedAt, endedBy}` + `candidates/{id}` `{from, candidate, sdpMid, sdpMLineIndex, offerVersion}`. Kurallar: arayan oluşturur ve teklif yazar, aranan yanıt yazar, ikisi durumu ilerletir.
+- `CallManager` (`@MainActor @Observable`, `.shared`; tüm bağımlılıklar enjekte, testli): `CallPhase` + saf `CallStateMachine`; giden (CallKit start → TURN `/v1/turn` → teklif → belge → `/v1/call` çaldırma), gelen (`watch(chatID:)` ile çalan aramalar dinlenir; uygulama açıkken CallKit'e bildirilir; başka arama sürerken `busy`), 45 sn çalma → cevapsız, bağlanma 30 sn; uzak adaylar yanıt uygulanana kadar bekletilir. Yeniden bağlanma: ICE `disconnected` 2 sn sürerse, `failed` ya da ağ değişince (`NWPathMonitor`) arayan `offerVersion`'ı artırıp ICE restart teklifi yazar, aranan yeni teklife yanıt verir; 30 sn'de düzelmezse biter; süre sıfırlanmaz. Kalite: 2 sn'de bir `getStats` → `CallStatsParser` → `CallQuality` (RTT/kayıp/titreşim, 3 çubuk; TURN aktarımı gösterilir).
+- CallKit `CallKitSystem` (`CallSystemUI`): sistem ekranı, sessiz, beklet; uygulama içi düğmeler CXTransaction ile; hoparlör `overrideOutputAudioPort`, Bluetooth `allowBluetooth`. PushKit `VoIPPushRegistrar`: `VOIP_PUSH` build ayarı (Info.plist `FTVoIPPushEnabled`; varsayılan NO, TestFlight `vars.VOIP_PUSH || YES`) YES ise kaydolur, VoIP belirteci `devices.voipToken`; her VoIP push'ta hemen CallKit'e bildirilir (`handleVoIPPush`, arama bitmişse cevapsız olarak kapatılır). `UIBackgroundModes`: audio, voip, remote-notification.
+- Sohbette arama satırı: arama bitince yalnızca arayan `call-{callId}` kimlikli `type: call` mesajı yazar, `call {callId, outcome: answered/missed/declined/busy/failed, duration}` (`ChatCallInfo`, `CallFormat.summary`: "📞 Sesli arama · 2:34", "📞 Cevapsız arama"…); baloncukta yön simgesi ve "Geri ara"; bildirimi de 8G yoluyla. Arama düğmesi sohbet araç çubuğunda (yalnızca karşılıklı sohbet), mikrofon izni önce sorulur. Arama ekranı `CallView` (`MainTabView` fullScreenCover).
+- Worker: `/v1/turn` (`src/turn.js`: Cloudflare Realtime TURN `TURN_KEY_ID` + `TURN_KEY_API_TOKEN` → kısa ömürlü kimlik, 53. port ayıklanır; yoksa `TURN_URLS`/`TURN_USERNAME`/`TURN_CREDENTIAL`; yoksa yalnızca STUN), `/v1/call` (`src/apns.js`: `APNS_KEY_P8`, `APNS_KEY_ID`, `APNS_TEAM_ID` ile ES256 JWT, `apns-push-type: voip`, üretim → `BadDeviceToken` ise sandbox; VoIP yoksa FCM "📞 Seni arıyor", `data.kind = call`).
 - Yüksek kaliteli, düşük gecikmeli sesli arama (WebRTC; sinyalleşme Firestore üzerinden, gerekirse TURN sunucusu).
 - CallKit ile sistem arama ekranı; PushKit VoIP bildirimiyle kilitliyken gelen arama.
 - Hoparlör, sessiz, Bluetooth kulaklık geçişleri; arama süresi ve kalite göstergesi.

@@ -69,6 +69,16 @@ Bildirimleri medya sunucusu Firebase Cloud Messaging ile gönderir (Cloud Functi
 2. Ücretli Apple Developer hesabı gelince: developer.apple.com → **Keys → +** → *Apple Push Notifications service (APNs)* anahtarı oluştur, `.p8` dosyasını indir. Firebase konsolu → **Project settings → Cloud Messaging → Apple app configuration → APNs Authentication Key**'e yükle (Key ID ve Team ID ile).
 3. TestFlight iş akışı push yetkisini kendiliğinden açar (`PUSH_NOTIFICATIONS=YES`; kapatmak için GitHub değişkeni `PUSH_NOTIFICATIONS=NO`). Sideloadly ile kurulan ücretsiz imzalı sürümde push yoktur; uygulama açıkken mesajlar uygulama içi şeritle görünür.
 
+### Sesli arama (8H)
+
+Arama doğrudan iki telefon arasında (WebRTC) kurulur. İki taraf da farklı ve kısıtlı ağlardaysa (ör. bazı mobil operatörler) ses bir **TURN** aktarma sunucusu üzerinden geçer. Önerilen: **Cloudflare Realtime TURN**, her ay ilk 1.000 GB ücretsiz (iki kişilik sesli aramada pratikte hiç dolmaz), zaten kullandığın Cloudflare hesabında.
+
+1. Cloudflare paneli → **Realtime** (eski adı *Calls*) → **TURN Server** → **Create** → ad ver. Çıkan **Turn Token ID** ve **API Token**'ı kopyala (token bir kez gösterilir).
+2. GitHub → **Settings → Secrets and variables → Actions → Secrets**: `TURN_KEY_ID` ve `TURN_KEY_API_TOKEN`.
+3. **Actions → Medya sunucusu (Cloudflare) → Run workflow**. Uygulama her aramada sunucudan kısa ömürlü TURN bilgisi alır; bilgiler koda gömülmez. TURN ayarlanmadıysa yalnızca ücretsiz STUN kullanılır (çoğu ağda yine bağlanır).
+
+Kilit ekranında çalan arama (PushKit VoIP) ücretli Apple Developer hesabı ister. Hesap gelince: 8G'deki `.p8` APNs anahtarını GitHub'a da ekle: `APNS_KEY_P8` (dosyanın tüm içeriği), `APNS_KEY_ID`; Team ID `APPLE_TEAM_ID` secret'ından okunur. Sonra Worker iş akışını yeniden çalıştır. TestFlight iş akışı `VOIP_PUSH=YES` ile derler (kapatmak için GitHub değişkeni `VOIP_PUSH=NO`). Sideloadly kurulumunda uygulama yalnızca açıkken arama alır.
+
 ## IPA'yı telefona kurma
 
 Actions'ın ürettiği IPA ad-hoc imzalıdır (yetkiler gömülü, sertifika yok); telefona kurulurken yeniden imzalanması gerekir. Ücretsiz Apple ID ile Windows veya Mac'ten [Sideloadly](https://sideloadly.io) kullanarak kurabilirsin; ücretsiz hesapla imzalanan uygulama 7 gün çalışır ve Apple ile giriş, App Groups gibi bazı yetenekler çalışmayabilir. Kalıcı dağıtım (TestFlight) için ücretli Apple Developer Program üyeliği ve imzalama ayarı gerekir.
