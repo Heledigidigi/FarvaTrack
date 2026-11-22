@@ -34,7 +34,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8F tamam; 8G–8H planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8G tamam; 8H planlandı |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -105,7 +105,11 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - `ChatHub` (MainTabView): iki model, rozet toplamı, görünürlük (yalnızca açık konuşma okundu sayar). Sohbet sekmesi: not sohbeti yoksa eskisi gibi doğrudan karşılıklı sohbet / eşleşme (sol üst menü → "Kendime not sohbeti aç"), varsa `ChatRoomListView` (iki satır) → `ChatRoomContent`. Eşleşme ekranı `ChatPairingView(purpose:)`, "Panodan yapıştır" düğmesi.
 - Not sohbetinde "yazıyor" gönderilmez; orijal yüklenince kendi `/v1/ack`'i atılır (Worker `uid_uid` odasında gönderene izin verir), bulut temizliği uygulanır. Firestore kuralları: kodun sahibi de kullanabilir; oda `members[0] < members[1]` ya da iki üye de kendisi.
 
-**8G: Push bildirimleri**
+**8G: Push bildirimleri** (Tamamlandı)
+- Uygulandığı haliyle: Cloud Functions yerine (Blaze gerektirmesin diye) bildirimi medya sunucusu gönderir. Mesaj Firestore'a yazılınca (`ChatViewModel` kuyruğu `.create` başarılı → `notifyRecipient`) uygulama `POST /v1/notify {chatId, messageId}` çağırır (`ChatNotifying`, `MediaServerClient`; ağ hatasında bir kez daha). Worker (`src/google.js` servis hesabı OAuth JWT + Firestore REST, `src/push.js` saf içerik): istekte bulunanın odanın üyesi ve mesajın göndereni olduğunu doğrular, karşı tarafın `users/{uid}/devices` kayıtlarından sessize alınmamışlara FCM HTTP v1 ile gönderir (başlık gönderenin adı; metin türe göre "📷 Fotoğraf", "🎤 Sesli mesaj"…; rozet = son 50 mesajda okunmamış; `category: CHAT_MESSAGE`, `thread-id: chatId`, `data.kind = chat`), geçersiz belirteci siler, aynı mesajı 10 dk içinde ikinci kez göndermez. Not sohbetinde bildirim yok. Secret `FIREBASE_SERVICE_ACCOUNT` (yoksa sessizce atlanır).
+- Uygulama: `PushManager` (+ `PushSystem`, `PushDeviceStoring` protokolleri): oturum açılınca izin + APNs kaydı, FCM belirteci `users/{uid}/devices/{cihazId}` (`token, platform, muted, appVersion, updatedAt`); oturum kapanınca kayıt ve FCM belirteci silinir. `AppDelegate`: `MessagingDelegate`, APNs belirteci, kayıt hatası → `.unavailable` (ücretsiz imza). Push yetkisi `PUSH_NOTIFICATIONS` build ayarıyla (`Config/FarvaTrack-push-NO/YES.entitlements`; varsayılan NO, TestFlight `vars.PUSH_NOTIFICATIONS || YES`); sideload IPA kendi entitlements dosyasını kullanır.
+- Bildirim eylemleri `ChatNotificationAction` (Yanıtla metin girişli, Okundu işaretle) → `ChatQuickActions` (uygulamayı açmadan doğrudan `ChatSyncing` ile yazar, yanıtta okundu da işaretler). Dokununca `PushManager.pendingChatID` → `ChatHub.open` → ilgili sohbet.
+- Uygulama açıkken sohbet push'u gösterilmez (`willPresent` → []); yerine anlık dinleyiciden gelen yeni mesaj (`ChatViewModel.onIncoming`, son 2 dk, önbellekte olmayan) `ChatHub.banner` → `ChatBannerView` şeridi (4 sn, dokun = aç, yukarı kaydır = kapat); açık konuşmada ve arka planda şerit yok. Uygulama simgesi rozeti `ChatHub.unreadCount` (`setBadgeCount`). Ayarlar → Sohbet → "Sohbet bildirimleri" (cihaz bazında sessize alma) ve durum metni.
 - APNs kaydı ve cihaz belirtecinin Firestore'a yazılması; Cloud Functions ile yeni mesajda bildirim gönderimi.
 - Bildirimde yanıtlama ve okundu işaretleme (bildirim eylemleri); sessize alma ayarı.
 - Rozet sayısı ve uygulama açıkken bildirim yerine uygulama içi gösterim.

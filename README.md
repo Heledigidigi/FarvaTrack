@@ -61,6 +61,14 @@ Kurulum (bir kez):
 
 Worker kodu değişip `main`'e girince iş akışı kendiliğinden yeniden dağıtır.
 
+### Push bildirimleri (8G)
+
+Bildirimleri medya sunucusu Firebase Cloud Messaging ile gönderir (Cloud Functions/Blaze gerekmez).
+
+1. Firebase konsolu → **Project settings → Service accounts → Generate new private key**. İnen JSON dosyasının tüm içeriğini GitHub'da `FIREBASE_SERVICE_ACCOUNT` secret'ı olarak ekle, sonra **Actions → Medya sunucusu (Cloudflare) → Run workflow**.
+2. Ücretli Apple Developer hesabı gelince: developer.apple.com → **Keys → +** → *Apple Push Notifications service (APNs)* anahtarı oluştur, `.p8` dosyasını indir. Firebase konsolu → **Project settings → Cloud Messaging → Apple app configuration → APNs Authentication Key**'e yükle (Key ID ve Team ID ile).
+3. TestFlight iş akışı push yetkisini kendiliğinden açar (`PUSH_NOTIFICATIONS=YES`; kapatmak için GitHub değişkeni `PUSH_NOTIFICATIONS=NO`). Sideloadly ile kurulan ücretsiz imzalı sürümde push yoktur; uygulama açıkken mesajlar uygulama içi şeritle görünür.
+
 ## IPA'yı telefona kurma
 
 Actions'ın ürettiği IPA ad-hoc imzalıdır (yetkiler gömülü, sertifika yok); telefona kurulurken yeniden imzalanması gerekir. Ücretsiz Apple ID ile Windows veya Mac'ten [Sideloadly](https://sideloadly.io) kullanarak kurabilirsin; ücretsiz hesapla imzalanan uygulama 7 gün çalışır ve Apple ile giriş, App Groups gibi bazı yetenekler çalışmayabilir. Kalıcı dağıtım (TestFlight) için ücretli Apple Developer Program üyeliği ve imzalama ayarı gerekir.
