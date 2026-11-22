@@ -176,7 +176,7 @@ service cloud.firestore {
 
       // Oda, davet kodu aynı toplu yazımda kullanılarak açılır; üyeler kodun sahibi ve kullananıdır.
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt', 'inviteCode', 'typing', 'lastMessage'])
+        && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt', 'inviteCode', 'typing', 'lastMessage', 'photos', 'presence'])
         && request.resource.data.members is list
         && request.resource.data.members.size() == 2
         // Karşılıklı sohbet (küçük uid önce) ya da kendine not sohbeti (iki üye de kendisi).
@@ -187,12 +187,21 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/chatInvites/$(request.resource.data.inviteCode)).data.redeemedBy == request.auth.uid
         && getAfter(/databases/$(database)/documents/chatInvites/$(request.resource.data.inviteCode)).data.ownerId in request.resource.data.members;
 
-      // Üyeler değişmez; yalnızca son mesaj ve kendi "yazıyor" alanı güncellenir.
+      // Üyeler değişmez; yalnızca son mesaj ve kendi "yazıyor", profil fotoğrafı ve çevrimiçi alanları güncellenir.
       allow update: if signedIn()
         && request.auth.uid in resource.data.members
         && request.resource.data.members == resource.data.members
-        && onlyChanges(['lastMessage', 'typing'])
+        && onlyChanges(['lastMessage', 'typing', 'photos', 'presence'])
         && request.resource.data.get('typing', {}).diff(resource.data.get('typing', {})).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.get('photos', {}).diff(resource.data.get('photos', {})).affectedKeys().hasOnly([request.auth.uid])
+        && (!(request.auth.uid in request.resource.data.get('photos', {}))
+            || (request.resource.data.photos[request.auth.uid] is string
+                && request.resource.data.photos[request.auth.uid].size() < 1024))
+        && request.resource.data.get('presence', {}).diff(resource.data.get('presence', {})).affectedKeys().hasOnly([request.auth.uid])
+        && (!(request.auth.uid in request.resource.data.get('presence', {}))
+            || (request.resource.data.presence[request.auth.uid].keys().hasOnly(['online', 'at'])
+                && request.resource.data.presence[request.auth.uid].online is bool
+                && request.resource.data.presence[request.auth.uid].at is timestamp))
         && (!('lastMessage' in request.resource.data.diff(resource.data).affectedKeys())
             || request.resource.data.lastMessage.senderId == request.auth.uid);
 
@@ -234,6 +243,12 @@ service cloud.firestore {
             && resource.data.get('readAt', null) == null
             && onlyChanges(['readAt'])
             && request.resource.data.readAt is timestamp)
+          ||
+          // Alıcı: mesaj cihazına ulaştı (bir kez).
+          (resource.data.senderId != request.auth.uid
+            && resource.data.get('deliveredAt', null) == null
+            && onlyChanges(['deliveredAt'])
+            && request.resource.data.deliveredAt is timestamp)
           ||
           // Alıcı: sesli mesajı bir kez "dinlendi" işaretler.
           (resource.data.senderId != request.auth.uid

@@ -88,6 +88,13 @@ final class ChatViewModel {
     var searchQuery = "" {
         didSet { if searchQuery != oldValue { updateSearch() } }
     }
+    /// Konuşma içinde bul (Ctrl+F): alttaki arama çubuğu açık mı.
+    private(set) var isFinding = false
+    var findQuery = "" {
+        didSet { if findQuery != oldValue { updateFind() } }
+    }
+    /// Eşleşen mesajlar ve seçili olan.
+    private(set) var find = ChatFindState()
     var errorMessage: String?
 
     var hasError: Bool {
@@ -107,6 +114,12 @@ final class ChatViewModel {
     private var context: ModelContext?
     private(set) var userID: String?
     private var userName = ""
+    /// Kendi profil fotoğrafım (karşı taraf görsün diye odaya yazılır).
+    private(set) var userPhotoURL: String?
+    /// Odaya en son yazılan (ya da yazılmakta olan) fotoğraf adresi; aynısı tekrar yazılmaz.
+    @ObservationIgnored private var syncedPhoto: (chatID: String, url: String?)?
+    /// Bu oturumda "iletildi" yazılması istenmiş mesajlar.
+    @ObservationIgnored private var deliveryRequested: Set<String> = []
     private var roomSubscription: ChatSubscription?
     private var messagesSubscription: ChatSubscription?
     private var placementsSubscription: ChatSubscription?
@@ -190,6 +203,25 @@ final class ChatViewModel {
         return room.isTyping(other, now: now)
     }
 
+    /// Başlıkta, listede ve profilde gösterilen fotoğraf (not sohbetinde kendi fotoğrafım).
+    var partnerPhotoURL: String? {
+        if kind == .personal { return userPhotoURL }
+        guard let room, let other = otherMemberID else { return nil }
+        return room.photoURL(of: other)
+    }
+
+    /// Karşı tarafın çevrimiçi durumu (not sohbetinde yok).
+    var partnerPresence: ChatPresenceStatus {
+        guard kind == .partner, let room, let other = otherMemberID else { return .unknown }
+        return ChatPresenceStatus.of(room.presence[other], now: now)
+    }
+
+    /// Başlık altındaki satır: yazıyor… / çevrimiçi / son görülme.
+    var partnerSubtitle: String? {
+        if isPartnerTyping { return "yazıyor…" }
+        return partnerPresence.text(now: now)
+    }
+
     var canSend: Bool {
         ChatText.sanitizedOutgoing(draft) != nil && room != nil
     }
@@ -203,12 +235,15 @@ final class ChatViewModel {
     func configure(context: ModelContext, user: AppUser) {
         if userID == user.id, self.context != nil {
             userName = user.displayName
+            userPhotoURL = user.photoURL
+            syncMyPhoto()
             return
         }
         reset()
         self.context = context
         self.userID = user.id
         self.userName = user.displayName
+        self.userPhotoURL = user.photoURL
 
         if let cached = roomCache.load(userID: user.id) {
             room = cached
@@ -267,6 +302,12 @@ final class ChatViewModel {
         remoteExhausted = false
         hasMoreOlder = false
         lastTypingSentAt = nil
+        userPhotoURL = nil
+        syncedPhoto = nil
+        deliveryRequested = []
+        isFinding = false
+        findQuery = ""
+        find.clear()
         phase = .idle
     }
 
@@ -313,6 +354,7 @@ final class ChatViewModel {
             invite = nil
             phase = .ready
             now = clock()
+            syncMyPhoto()
             if changed {
                 displayLimit = ChatLimits.pageSize
                 remoteExhausted = false
@@ -415,6 +457,7 @@ final class ChatViewModel {
         if displayLimit == ChatLimits.pageSize { remoteExhausted = items.count < ChatLimits.pageSize }
         upsert(items, chatID: chatID)
         reloadMessages()
+        markDelivered(items, chatID: chatID)
         if let onIncoming, !isVisible {
             for id in fresh {
                 if let item = messages.first(where: { $0.id == id }) { onIncoming(item) }
@@ -422,6 +465,71 @@ final class ChatViewModel {
         }
         markVisibleAsRead()
         scheduleOriginalFetch()
+    }
+
+    /// Gelen mesajlar bu cihaza ulaştı: gönderen "İletildi" zamanını görsün (her mesaj için bir kez, en iyi çaba).
+    private func markDelivered(_ items: [ChatMessageDTO], chatID: String) {
+        guard kind == .partner, let userID else { return }
+        let ids = items.filter {
+            $0.senderID != userID && $0.deliveredAt == nil && $0.readAt == nil && !$0.deleted
+                && !$0.hasPendingWrites && !deliveryRequested.contains($0.id)
+        }.map(\.id)
+        guard !ids.isEmpty else { return }
+        deliveryRequested.formUnion(ids)
+        let sync = sync
+        let at = clock()
+        Task { [weak self] in
+            do {
+                try await sync.markDelivered(messageIDs: ids, chatID: chatID, at: at)
+            } catch {
+                // Bir sonraki dinleyici güncellemesinde yeniden denenir.
+                self?.deliveryRequested.subtract(ids)
+            }
+        }
+    }
+
+    // MARK: Profil fotoğrafı ve çevrimiçi bilgisi
+
+    /// Profil fotoğrafımı odaya yazar (profiller birbirine kapalı; karşı taraf odadan okur).
+    private func syncMyPhoto() {
+        guard kind == .partner, let userID, let room, room.members.contains(userID) else { return }
+        let trimmed = userPhotoURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let desired: String? = trimmed.isEmpty ? nil : trimmed
+        guard room.photoURL(of: userID) != desired else {
+            syncedPhoto = (room.id, desired)
+            return
+        }
+        if let synced = syncedPhoto, synced.chatID == room.id, synced.url == desired { return }
+        syncedPhoto = (room.id, desired)
+        let sync = sync
+        let chatID = room.id
+        Task { [weak self] in
+            do {
+                try await sync.updateMemberPhoto(desired, chatID: chatID, userID: userID)
+            } catch {
+                // Çevrimdışı: oda bir sonraki güncellemede yeniden denenir.
+                if self?.syncedPhoto?.chatID == chatID { self?.syncedPhoto = nil }
+            }
+        }
+    }
+
+    /// Uygulama öne gelince / dakikada bir `online = true`, arka plana geçince `online = false`.
+    /// Yazılabildiyse `true` (oda henüz yoksa ya da ağ yoksa `false`).
+    @discardableResult
+    func updatePresence(online: Bool) async -> Bool {
+        guard kind == .partner, let userID, let chatID = room?.id else { return false }
+        do {
+            try await sync.setPresence(ChatPresence(online: online, at: clock()), chatID: chatID, userID: userID)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Mesaj bilgisi ekranı (gönderildi / iletildi / görüldü).
+    func info(for item: ChatMessageItem) -> ChatMessageInfo {
+        let current = messages.first { $0.id == item.id } ?? item
+        return ChatMessageInfo(message: current.message, isMine: current.isMine, isSending: current.status == .sending)
     }
 
     /// Mesaj sunucuya yazılınca karşı tarafın cihazlarına bildirim istenir (en iyi çaba; ağ yoksa bir kez daha denenir).
@@ -501,6 +609,7 @@ final class ChatViewModel {
         unreadCount = (try? context.fetchCount(unread)) ?? 0
 
         if !searchQuery.isEmpty { updateSearch() }
+        if isFinding, !findQuery.isEmpty { updateFind() }
     }
 
     private func makeItem(_ record: ChatMessageRecord, pendingCreates: Set<String>) -> ChatMessageItem {
@@ -823,6 +932,59 @@ final class ChatViewModel {
 
     /// Profil sayfasındaki aramadan seçilen mesaj: konuşma ekranı görünce oraya kayar.
     var pendingJumpMessageID: String?
+
+    // MARK: Konuşmada bul (Ctrl+F)
+
+    /// Profildeki "Ara": konuşmaya dönülür, altta arama çubuğu açılır.
+    func beginFind() {
+        isFinding = true
+        updateFind()
+    }
+
+    func endFind() {
+        isFinding = false
+        findQuery = ""
+        find.clear()
+    }
+
+    /// Bir önceki (daha eski) eşleşme; gösterim penceresi gerekirse genişler.
+    func findOlder() -> String? {
+        guard let id = find.older() else { return nil }
+        return reveal(messageID: id) ? id : nil
+    }
+
+    /// Bir sonraki (daha yeni) eşleşme.
+    func findNewer() -> String? {
+        guard let id = find.newer() else { return nil }
+        return reveal(messageID: id) ? id : nil
+    }
+
+    /// Seçili eşleşmeyi ekrana getirir (sorgu değişince en yenisi seçilir).
+    func revealCurrentFind() -> String? {
+        guard let id = find.current else { return nil }
+        return reveal(messageID: id) ? id : nil
+    }
+
+    /// Arama ölçütleri profildeki aramayla aynı (`ChatText.fuzzyScore`); sıralama tarihe göre (eskiden yeniye).
+    private func updateFind() {
+        guard isFinding, let context, let userID, let chatID = room?.id,
+              !findQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            find.update(matches: [])
+            return
+        }
+        let descriptor = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate {
+                $0.ownerID == userID && $0.chatID == chatID && !$0.hiddenForMe && !$0.deletedForEveryone
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .forward)]
+        )
+        let query = findQuery
+        let ids = ((try? context.fetch(descriptor)) ?? []).compactMap { record -> String? in
+            guard !record.text.isEmpty, ChatText.fuzzyScore(record.text, query: query) != nil else { return nil }
+            return record.messageID
+        }
+        find.update(matches: ids)
+    }
 
     // MARK: Paylaşılanlar (profil sayfası)
 

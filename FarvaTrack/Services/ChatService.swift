@@ -63,6 +63,12 @@ protocol ChatSyncing: AnyObject {
     func deletePlacement(id: String, chatID: String) async throws
     func setReaction(_ emoji: String?, messageID: String, chatID: String, userID: String) async throws
     func markRead(messageIDs: [String], chatID: String, at: Date) async throws
+    /// Alıcı: mesajlar cihaza ulaştı (her mesaj için bir kez).
+    func markDelivered(messageIDs: [String], chatID: String, at: Date) async throws
+    /// Üyenin odadaki profil fotoğrafı (`nil`: kaldırıldı). Profiller birbirine kapalı olduğundan odaya yazılır.
+    func updateMemberPhoto(_ photoURL: String?, chatID: String, userID: String) async throws
+    /// Çevrimiçi / son görülme bilgisi.
+    func setPresence(_ presence: ChatPresence, chatID: String, userID: String) async throws
     func setTyping(_ isTyping: Bool, chatID: String, userID: String, at: Date) async throws
 
     /// Hesap silinirken: kullanıcının sohbetleri, mesajları ve davetleri.
@@ -83,6 +89,11 @@ enum ChatField {
     static let type = "type"
     static let text = "text"
     static let readAt = "readAt"
+    static let deliveredAt = "deliveredAt"
+    static let photos = "photos"
+    static let presence = "presence"
+    static let online = "online"
+    static let at = "at"
     static let replyTo = "replyTo"
     static let reactions = "reactions"
     static let editedAt = "editedAt"
@@ -327,6 +338,44 @@ final class ChatService: ChatSyncing {
         }
     }
 
+    func markDelivered(messageIDs: [String], chatID: String, at: Date) async throws {
+        guard !messageIDs.isEmpty else { return }
+        do {
+            let collection = try messages(chatID)
+            for chunk in stride(from: 0, to: messageIDs.count, by: 400).map({ Array(messageIDs[$0..<min($0 + 400, messageIDs.count)]) }) {
+                let batch = try db.batch()
+                for id in chunk {
+                    batch.updateData([ChatField.deliveredAt: Timestamp(date: at)], forDocument: collection.document(id))
+                }
+                try await batch.commit()
+            }
+        } catch {
+            throw AppError.map(error)
+        }
+    }
+
+    func updateMemberPhoto(_ photoURL: String?, chatID: String, userID: String) async throws {
+        do {
+            let value: Any = photoURL ?? FieldValue.delete()
+            try await chats().document(chatID).updateData(["\(ChatField.photos).\(userID)": value])
+        } catch {
+            throw AppError.map(error)
+        }
+    }
+
+    func setPresence(_ presence: ChatPresence, chatID: String, userID: String) async throws {
+        do {
+            try await chats().document(chatID).updateData([
+                "\(ChatField.presence).\(userID)": [
+                    ChatField.online: presence.online,
+                    ChatField.at: Timestamp(date: presence.at)
+                ]
+            ])
+        } catch {
+            throw AppError.map(error)
+        }
+    }
+
     func setTyping(_ isTyping: Bool, chatID: String, userID: String, at: Date) async throws {
         do {
             let value: Any = isTyping ? Timestamp(date: at) : FieldValue.delete()
@@ -488,6 +537,7 @@ enum ChatFirestoreMapper {
             sticker: ChatStickerFields.decode(data[ChatField.sticker]),
             bubble: ChatBubbleRefFields.decode(data[ChatField.bubble]),
             call: ChatCallFields.decode(data[ChatField.call]),
+            deliveredAt: date(data[ChatField.deliveredAt]),
             hasPendingWrites: hasPendingWrites
         )
     }
@@ -552,13 +602,19 @@ enum ChatFirestoreMapper {
             )
         }
         let typing = (data[ChatField.typing] as? [String: Any])?.compactMapValues { date($0) } ?? [:]
+        let presence = (data[ChatField.presence] as? [String: Any])?.compactMapValues { value -> ChatPresence? in
+            guard let map = value as? [String: Any], let at = date(map[ChatField.at]) else { return nil }
+            return ChatPresence(online: map[ChatField.online] as? Bool ?? false, at: at)
+        } ?? [:]
         return ChatRoomDTO(
             id: id,
             members: members,
             names: (data[ChatField.names] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:],
             createdAt: date(data[ChatField.createdAt]) ?? .now,
             lastMessage: last,
-            typing: typing
+            typing: typing,
+            photos: (data[ChatField.photos] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:],
+            presence: presence
         )
     }
 

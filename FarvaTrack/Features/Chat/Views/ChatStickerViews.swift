@@ -93,7 +93,7 @@ struct ChatStickerPanel: View {
                             .tint(Color.ftAccentLight)
                     }
                 }
-                .frame(maxWidth: .infinity, minHeight: 150)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 10) {
@@ -118,11 +118,13 @@ struct ChatStickerPanel: View {
                         }
                     }
                 }
-                .frame(height: 190)
+                // Panel klavye yüksekliğindedir; ızgara kalan alanı doldurur.
+                .frame(maxHeight: .infinity)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.top, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.ftCard)
         .onAppear { if recents.isEmpty { tab = .library } }
     }

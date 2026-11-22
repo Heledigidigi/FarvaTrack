@@ -30,6 +30,8 @@ struct ChatBubbleView: View {
     var bubbleCacheOwner: String = ""
     /// Arama satırı (8H): geri ara. `nil` = gösterilmez (ör. not sohbeti).
     var onCallBack: (() -> Void)?
+    /// Uzun bas → Bilgi (gönderildi / iletildi / görüldü).
+    var onInfo: () -> Void = {}
 
     private var message: ChatMessageDTO { item.message }
 
@@ -44,9 +46,9 @@ struct ChatBubbleView: View {
             let padding = BubbleLayout.contentPadding(for: style, mirrored: !item.isMine)
             return EdgeInsets(top: padding.top, leading: padding.leading, bottom: padding.bottom, trailing: padding.trailing)
         }
-        if isSticker { return EdgeInsets() }
-        let media = message.media != nil && !message.deleted
-        return EdgeInsets(top: media ? 4 : 8, leading: media ? 4 : 12, bottom: media ? 4 : 8, trailing: media ? 4 : 12)
+        // Sticker ve fotoğraf/video baloncuksuz, kenarlıksız.
+        if isSticker || isBorderlessMedia { return EdgeInsets() }
+        return EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12)
     }
 
     @ViewBuilder
@@ -86,21 +88,28 @@ struct ChatBubbleView: View {
 
             if let call = message.call, !message.deleted {
                 callRow(call)
-            } else if let sticker = message.sticker, !message.deleted {
-                ChatStickerBubbleContent(item: item, sticker: sticker, onLoad: onLoadSticker)
-            } else if let audio = message.audio, !message.deleted, let player {
-                ChatVoiceBubbleContent(item: item, audio: audio, player: player, onLoad: onLoadAudio, onToggle: onToggleAudio)
-            } else if let media = message.media, !message.deleted {
+            } else if isBorderlessMedia, let media = message.media {
                 ChatMediaBubbleContent(
                     item: item, media: media,
                     onOpen: { item.status == .failed ? onRetry() : onOpenMedia() },
                     onCancelUpload: onCancelUpload, onLoadThumbnail: onLoadThumbnail
                 )
+                .overlay(alignment: .bottomTrailing) {
+                    if hasFooter {
+                        footer.padding(6)
+                    }
+                }
+            } else if let sticker = message.sticker, !message.deleted {
+                ChatStickerBubbleContent(item: item, sticker: sticker, onLoad: onLoadSticker)
+            } else if let audio = message.audio, !message.deleted, let player {
+                ChatVoiceBubbleContent(item: item, audio: audio, player: player, onLoad: onLoadAudio, onToggle: onToggleAudio)
             } else {
                 messageText
             }
 
-            footer
+            if hasFooter, !isBorderlessMedia {
+                footer
+            }
         }
         .padding(contentInsets)
         .background { bubbleBackground }
@@ -166,8 +175,16 @@ struct ChatBubbleView: View {
     /// Sticker baloncuksuz gösterilir.
     private var isSticker: Bool { message.sticker != nil && !message.deleted }
 
+    /// Fotoğraf ve video da baloncuksuz: kenarlık ve arka plan yok, durum simgesi fotoğrafın köşesinde.
+    private var isBorderlessMedia: Bool { message.media != nil && !message.deleted }
+
+    /// Saat baloncukta yazmaz (sohbeti sola kaydırınca görünür); "düzenlendi" ve gönderim durumu kalır.
+    private var hasFooter: Bool {
+        (message.editedAt != nil && !message.deleted) || (item.status != nil && !message.deleted)
+    }
+
     private var bubbleColor: Color {
-        if isSticker { return .clear }
+        if isSticker || isBorderlessMedia { return .clear }
         if message.deleted { return Color.ftCard }
         return item.isMine ? Color.ftAccent : Color.ftCardElevated
     }
@@ -197,23 +214,22 @@ struct ChatBubbleView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 4) {
+        let floating = isSticker || isBorderlessMedia
+        return HStack(spacing: 4) {
             if message.editedAt != nil, !message.deleted {
                 Text("düzenlendi")
             }
-            Text(message.createdAt.formatted(date: .omitted, time: .shortened))
             if let status = item.status, !message.deleted {
                 Image(systemName: status.systemImage)
                     .foregroundStyle(statusColor(status))
             }
         }
         .font(.caption2)
-        .foregroundStyle(Color.white.opacity(0.65))
-        .padding(.horizontal, message.media != nil && !message.deleted ? 6 : (isSticker ? 7 : 0))
-        .padding(.vertical, isSticker ? 2 : 0)
-        .padding(.bottom, message.media != nil && !message.deleted ? 2 : 0)
-        // Sticker baloncuksuz: saat okunabilsin diye küçük kapsül.
-        .background(isSticker ? Color.black.opacity(0.4) : .clear, in: Capsule())
+        .foregroundStyle(Color.white.opacity(floating ? 0.9 : 0.65))
+        .padding(.horizontal, floating ? 7 : 0)
+        .padding(.vertical, floating ? 3 : 0)
+        // Baloncuksuz içerikte (sticker, fotoğraf) okunabilsin diye küçük kapsül.
+        .background(floating ? Color.black.opacity(0.45) : .clear, in: Capsule())
     }
 
     private func statusColor(_ status: ChatMessageStatus) -> Color {
@@ -290,6 +306,7 @@ struct ChatBubbleView: View {
             if item.status == .failed {
                 Button { onRetry() } label: { Label("Tekrar gönder", systemImage: "arrow.clockwise") }
             }
+            Button { onInfo() } label: { Label("Bilgi", systemImage: "info.circle") }
         }
 
         Divider()
@@ -325,6 +342,7 @@ struct ChatBubbleView: View {
             if canCopy { Button("Kopyala", action: onCopy) }
             if item.canEdit { Button("Düzenle", action: onEdit) }
             if item.status == .failed { Button("Tekrar gönder", action: onRetry) }
+            Button("Bilgi", action: onInfo)
         }
         Button("Benden sil", action: onDeleteForMe)
         if item.isMine, !message.deleted {
@@ -377,6 +395,8 @@ struct ChatBubbleView: View {
 struct ChatComposer: View {
     @Bindable var viewModel: ChatViewModel
     var focused: FocusState<Bool>.Binding
+    /// Açık panelin düğmesi klavye simgesine döner (dokununca klavyeye geçilir).
+    var activePanel: ChatInputPanel = .none
     var onGallery: () -> Void = {}
     var onCamera: () -> Void = {}
     var onStickers: () -> Void = {}
@@ -402,21 +422,22 @@ struct ChatComposer: View {
                 } else {
                 if viewModel.editing == nil {
                     Button(action: onGallery) {
-                        Image(systemName: "photo.on.rectangle.angled")
+                        Image(systemName: activePanel == .gallery ? "keyboard" : "photo.on.rectangle.angled")
                             .font(.system(size: 22))
                             .frame(width: 36, height: 40)
                     }
                     .foregroundStyle(Color.ftAccentLight)
-                    .accessibilityLabel("Galeriden fotoğraf veya video seç")
+                    .accessibilityLabel(activePanel == .gallery ? "Klavyeye dön" : "Galeri")
+                    .accessibilityHint(activePanel == .gallery ? "" : "Son fotoğraf ve videoları klavyenin yerinde gösterir")
 
                     Button(action: onStickers) {
-                        Image(systemName: "face.smiling")
+                        Image(systemName: activePanel == .stickers ? "keyboard" : "face.smiling")
                             .font(.system(size: 22))
                             .frame(width: 32, height: 40)
                     }
                     .foregroundStyle(Color.ftAccentLight)
-                    .accessibilityLabel("Sticker'larım")
-                    .accessibilityHint("Fotoğraftan sticker oluştur")
+                    .accessibilityLabel(activePanel == .stickers ? "Klavyeye dön" : "Sticker'larım")
+                    .accessibilityHint(activePanel == .stickers ? "" : "Sticker panelini klavyenin yerinde açar")
                 }
 
                 TextField("Mesaj", text: $viewModel.draft, axis: .vertical)

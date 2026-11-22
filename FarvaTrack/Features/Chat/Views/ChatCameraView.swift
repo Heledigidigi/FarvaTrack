@@ -528,7 +528,7 @@ struct ChatCameraView: View {
     private func send(_ media: PickedMedia, edited: UIImage?) {
         Haptics.impact(.medium)
         var outgoing = media
-        if let edited, let url = Self.writeEdited(edited) {
+        if let edited, let url = ChatEditedImage.write(edited) {
             try? FileManager.default.removeItem(at: media.fileURL)
             outgoing = PickedMedia(fileURL: url, kind: .image)
         }
@@ -543,7 +543,7 @@ struct ChatCameraView: View {
         var url = media.fileURL
         var temporary: URL?
         if let edited {
-            guard let written = Self.writeEdited(edited) else { return "Kaydedilemedi" }
+            guard let written = ChatEditedImage.write(edited) else { return "Kaydedilemedi" }
             url = written
             temporary = written
         }
@@ -561,18 +561,6 @@ struct ChatCameraView: View {
         }
     }
 
-    /// Düzenlenen fotoğraf HEIC olarak (desteklenmiyorsa JPEG) geçici klasöre yazılır.
-    private static func writeEdited(_ image: UIImage) -> URL? {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ChatPicked", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        if let data = image.heicData() {
-            let url = directory.appendingPathComponent("\(UUID().uuidString).heic")
-            if (try? data.write(to: url)) != nil { return url }
-        }
-        guard let data = image.jpegData(compressionQuality: 0.95) else { return nil }
-        let url = directory.appendingPathComponent("\(UUID().uuidString).jpg")
-        return (try? data.write(to: url)) != nil ? url : nil
-    }
 }
 
 /// Kamerada çekilen videonun sessiz döngülü önizlemesi.

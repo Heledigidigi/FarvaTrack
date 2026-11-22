@@ -1,0 +1,498 @@
+import SwiftUI
+import UIKit
+import Photos
+
+// MARK: - Yazma alanının altındaki paneller
+
+/// Klavyenin yerini alan paneller: sticker ve galeri. Klavye ↔ panel geçişinde yazma alanı yerinden oynamaz.
+enum ChatInputPanel: Equatable {
+    case none, stickers, gallery
+}
+
+/// Panellerin yerleşimi (saf, testli).
+///
+/// Yazma alanının alt kenarı her zaman `max(klavye, panel)` yüksekliğindedir: klavye inerken altından aynı
+/// yükseklikte panel çıkar; klavye çıkarken panelin üstüne gelir. Bu yüzden ne klavye ne panel için
+/// ayrı bir "içeri gir" animasyonu gerekir.
+enum ChatPanelLayout {
+    /// Klavye hiç açılmadıysa tahmin (klasik iPhone klavyesi, öneri çubuğu ve ev çubuğu dahil).
+    static let defaultKeyboardHeight: CGFloat = 336
+    static let keyboardHeightKey = "chat.keyboardHeight"
+
+    /// Yazma alanının altına eklenecek boşluk. `bottomInset`: o anki alt güvenli alan
+    /// (klavye açıkken klavye yüksekliği, kapalıyken ev çubuğu).
+    static func spacer(panel: ChatInputPanel, keyboardHeight: CGFloat, bottomInset: CGFloat) -> CGFloat {
+        guard panel != .none else { return 0 }
+        return max(0, keyboardHeight - bottomInset)
+    }
+
+    /// Galeri büyütülürken panel yüksekliği; parmak bırakılınca nereye oturacağı.
+    enum GallerySnap: Equatable { case collapsed, expanded, closed }
+
+    static func gallerySnap(height: CGFloat, predictedHeight: CGFloat, collapsed: CGFloat, expanded: CGFloat) -> GallerySnap {
+        let target = predictedHeight
+        if target < collapsed * 0.6 { return .closed }
+        if target > collapsed + (expanded - collapsed) * 0.4 { return .expanded }
+        return .collapsed
+    }
+}
+
+/// Klavye yüksekliğini öğrenir ve saklar; panel her zaman son görülen klavye yüksekliğinde açılır.
+@MainActor @Observable
+final class ChatKeyboardObserver {
+    private(set) var isVisible = false
+    /// Ekranın altından ölçülen klavye yüksekliği (ev çubuğu dahil).
+    private(set) var height: CGFloat
+    /// Klavye tamamen açıldığında (panel o zaman kaldırılır).
+    @ObservationIgnored var onDidShow: (() -> Void)?
+
+    @ObservationIgnored private var tokens: [NSObjectProtocol] = []
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        let saved = defaults.double(forKey: ChatPanelLayout.keyboardHeightKey)
+        height = saved > 150 ? saved : ChatPanelLayout.defaultKeyboardHeight
+    }
+
+    func start() {
+        guard tokens.isEmpty else { return }
+        let center = NotificationCenter.default
+        tokens.append(center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
+            let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+            MainActor.assumeIsolated { self?.update(endFrame: frame) }
+        })
+        tokens.append(center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.isVisible = false }
+        })
+        tokens.append(center.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onDidShow?() }
+        })
+    }
+
+    func stop() {
+        for token in tokens { NotificationCenter.default.removeObserver(token) }
+        tokens = []
+    }
+
+    private func update(endFrame: CGRect?) {
+        guard let endFrame else { return }
+        let screen = UIScreen.main.bounds.height
+        let overlap = max(0, screen - endFrame.minY)
+        // Donanım klavyesindeki küçük çubuk ya da kapanış (ekran dışı) yüksekliği saklanmaz.
+        if overlap > 150 {
+            isVisible = true
+            if abs(overlap - height) > 0.5 {
+                height = overlap
+                defaults.set(Double(overlap), forKey: ChatPanelLayout.keyboardHeightKey)
+            }
+        } else if overlap < 1 {
+            isVisible = false
+        }
+    }
+}
+
+// MARK: - Galeri paneli
+
+/// Klavye yüksekliğinde açılan son fotoğraf/videolar ızgarası (WhatsApp gibi). Üstteki tutamaçtan yukarı
+/// çekilince büyür, aşağı çekilince kapanır. Seçilenlerin orijinal dosyası gönderilir.
+struct ChatGalleryPanel: View {
+    /// Kapalı (klavye) yüksekliği ve tam ekrana yakın yüksekliği.
+    let collapsedHeight: CGFloat
+    let expandedHeight: CGFloat
+    let bottomInset: CGFloat
+    @Binding var isExpanded: Bool
+    let onSend: ([PickedMedia]) -> Void
+    let onCamera: () -> Void
+    let onSystemPicker: () -> Void
+    let onClose: () -> Void
+
+    @State private var library = ChatGalleryLibrary()
+    @State private var selection: [String] = []
+    @State private var dragHeight: CGFloat?
+    @State private var isExporting = false
+
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
+
+    private var baseHeight: CGFloat { isExpanded ? expandedHeight : collapsedHeight }
+    private var height: CGFloat { dragHeight ?? baseHeight }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            content
+        }
+        .frame(height: height, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .background(Color.ftCard)
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: isExpanded || dragHeight != nil ? 16 : 0,
+                                          topTrailingRadius: isExpanded || dragHeight != nil ? 16 : 0,
+                                          style: .continuous))
+        .overlay(alignment: .bottom) {
+            if !selection.isEmpty { sendBar }
+        }
+        .task { await library.load() }
+        .onDisappear { library.stopCaching() }
+    }
+
+    // MARK: Tutamaç ve başlık (yukarı çekince büyür)
+
+    private var header: some View {
+        VStack(spacing: 6) {
+            Capsule()
+                .fill(Color.white.opacity(0.35))
+                .frame(width: 38, height: 5)
+                .padding(.top, 6)
+            HStack {
+                Button {
+                    Haptics.selection()
+                    onSystemPicker()
+                } label: {
+                    Label("Albümler", systemImage: "rectangle.stack")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(Color.ftAccentLight)
+                .accessibilityHint("Sistemin fotoğraf seçicisini açar")
+                Spacer()
+                Text(isExpanded ? "Galeri" : "Son öğeler")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button {
+                    if isExpanded {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) { isExpanded = false }
+                    } else {
+                        onClose()
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "xmark")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 30, height: 30)
+                        .background(Color.ftCardElevated, in: Circle())
+                }
+                .foregroundStyle(.white)
+                .accessibilityLabel(isExpanded ? "Galeriyi küçült" : "Galeriyi kapat")
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 6)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .gesture(resizeGesture)
+        .accessibilityElement(children: .contain)
+        .accessibilityAction(named: isExpanded ? "Galeriyi küçült" : "Galeriyi büyüt") {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) { isExpanded.toggle() }
+        }
+    }
+
+    private var resizeGesture: some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in
+                let proposed = baseHeight - value.translation.height
+                // Sınırların ötesinde direnç.
+                if proposed > expandedHeight {
+                    dragHeight = expandedHeight + (proposed - expandedHeight) * 0.2
+                } else {
+                    dragHeight = max(collapsedHeight * 0.35, proposed)
+                }
+            }
+            .onEnded { value in
+                let predicted = baseHeight - value.predictedEndTranslation.height
+                let snap = ChatPanelLayout.gallerySnap(height: dragHeight ?? baseHeight, predictedHeight: predicted,
+                                                       collapsed: collapsedHeight, expanded: expandedHeight)
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                    dragHeight = nil
+                    switch snap {
+                    case .expanded: isExpanded = true
+                    case .collapsed: isExpanded = false
+                    case .closed: isExpanded = false
+                    }
+                }
+                if snap == .closed { onClose() }
+                if snap == .expanded { Haptics.selection() }
+            }
+    }
+
+    // MARK: İçerik
+
+    @ViewBuilder
+    private var content: some View {
+        switch library.access {
+        case .unknown:
+            ProgressView().tint(Color.ftAccentLight).frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .denied:
+            VStack(spacing: 10) {
+                Image(systemName: "photo.on.rectangle.angled")
+                    .font(.largeTitle)
+                    .foregroundStyle(Color.ftTextSecondary)
+                    .accessibilityHidden(true)
+                Text("Galerini burada göstermek için Fotoğraflar erişimi gerekiyor.")
+                    .font(.footnote)
+                    .foregroundStyle(Color.ftTextSecondary)
+                    .multilineTextAlignment(.center)
+                HStack(spacing: 10) {
+                    Button("Ayarları aç") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+                    }
+                    .buttonStyle(.bordered)
+                    Button("Fotoğraf seç", action: onSystemPicker)
+                        .buttonStyle(.borderedProminent)
+                }
+                .tint(Color.ftAccentLight)
+                .font(.footnote.weight(.semibold))
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .authorized, .limited:
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 2) {
+                    cameraCell
+                    ForEach(library.assets, id: \.localIdentifier) { asset in
+                        ChatGalleryCell(
+                            asset: asset,
+                            library: library,
+                            selectionIndex: selection.firstIndex(of: asset.localIdentifier).map { $0 + 1 }
+                        )
+                        .onTapGesture { toggle(asset) }
+                    }
+                }
+                .padding(.bottom, selection.isEmpty ? bottomInset : bottomInset + 64)
+                if library.access == .limited {
+                    Text("Yalnızca izin verdiğin fotoğraflar gösteriliyor. Diğerleri için Albümler'i kullan.")
+                        .font(.caption)
+                        .foregroundStyle(Color.ftTextSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private var cameraCell: some View {
+        Button {
+            Haptics.impact(.light)
+            onCamera()
+        } label: {
+            ZStack {
+                Color.ftCardElevated
+                Image(systemName: "camera.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color.ftAccentLight)
+            }
+            .aspectRatio(1, contentMode: .fill)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Kamera")
+    }
+
+    private var sendBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                Haptics.selection()
+                selection.removeAll()
+            } label: {
+                Text("Temizle").font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(Color.ftTextSecondary)
+            Spacer()
+            Button {
+                send()
+            } label: {
+                HStack(spacing: 8) {
+                    if isExporting {
+                        ProgressView().tint(.white).controlSize(.small)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                    }
+                    Text("Gönder (\(selection.count))")
+                }
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(Color.ftAccent, in: Capsule())
+            }
+            .disabled(isExporting)
+            .accessibilityLabel("\(selection.count) öğeyi gönder")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, max(10, bottomInset))
+        .background(Color.ftCard.opacity(0.97))
+    }
+
+    private func toggle(_ asset: PHAsset) {
+        Haptics.selection()
+        if let index = selection.firstIndex(of: asset.localIdentifier) {
+            selection.remove(at: index)
+        } else if selection.count < 10 {
+            selection.append(asset.localIdentifier)
+        }
+    }
+
+    private func send() {
+        let ids = selection
+        isExporting = true
+        Task {
+            let picked = await library.export(ids)
+            isExporting = false
+            guard !picked.isEmpty else { return }
+            selection.removeAll()
+            Haptics.impact(.medium)
+            onSend(picked)
+        }
+    }
+}
+
+/// Izgaradaki tek öğe: küçük resim, video süresi ve seçim sırası.
+private struct ChatGalleryCell: View {
+    let asset: PHAsset
+    let library: ChatGalleryLibrary
+    let selectionIndex: Int?
+    @State private var image: UIImage?
+    @State private var requestID: PHImageRequestID?
+
+    var body: some View {
+        Color.ftCardElevated
+            .aspectRatio(1, contentMode: .fill)
+            .overlay {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill()
+                }
+            }
+            .clipped()
+            .overlay(alignment: .bottomLeading) {
+                if asset.mediaType == .video {
+                    Text(Duration.seconds(asset.duration).formatted(.time(pattern: .minuteSecond)))
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .shadow(radius: 2)
+                        .padding(5)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 1.5)
+                        .background(Circle().fill(selectionIndex == nil ? Color.black.opacity(0.2) : Color.ftAccent))
+                    if let selectionIndex {
+                        Text("\(selectionIndex)").font(.caption2.bold()).foregroundStyle(.white)
+                    }
+                }
+                .frame(width: 22, height: 22)
+                .padding(6)
+            }
+            .overlay {
+                if selectionIndex != nil {
+                    Rectangle().fill(Color.white.opacity(0.12)).allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .onAppear {
+                requestID = library.requestThumbnail(for: asset) { image = $0 }
+            }
+            .onDisappear {
+                if let requestID { library.cancel(requestID) }
+                requestID = nil
+            }
+            .accessibilityElement()
+            .accessibilityLabel(asset.mediaType == .video ? "Video" : "Fotoğraf")
+            .accessibilityValue(selectionIndex.map { "Seçildi, \($0). sırada" } ?? "")
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+// MARK: - Fotoğraf arşivi
+
+/// Galeri panelinin veri kaynağı: izin, son öğeler, küçük resimler ve orijinal dosyanın dışa aktarımı.
+@MainActor @Observable
+final class ChatGalleryLibrary {
+    enum Access: Equatable { case unknown, authorized, limited, denied }
+
+    private(set) var access: Access = .unknown
+    private(set) var assets: [PHAsset] = []
+
+    private let manager = PHCachingImageManager()
+    private let thumbnailSize: CGSize = {
+        let side = UIScreen.main.bounds.width / 3 * UIScreen.main.scale
+        return CGSize(width: side, height: side)
+    }()
+
+    /// Panelde en fazla bu kadar son öğe gösterilir; daha eskileri için sistem seçicisi.
+    static let limit = 600
+
+    func load() async {
+        var status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        if status == .notDetermined {
+            status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        }
+        switch status {
+        case .authorized: access = .authorized
+        case .limited: access = .limited
+        default:
+            access = .denied
+            return
+        }
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        options.predicate = NSPredicate(format: "mediaType == %d OR mediaType == %d",
+                                        PHAssetMediaType.image.rawValue, PHAssetMediaType.video.rawValue)
+        options.fetchLimit = Self.limit
+        let result = PHAsset.fetchAssets(with: options)
+        var items: [PHAsset] = []
+        items.reserveCapacity(result.count)
+        result.enumerateObjects { asset, _, _ in items.append(asset) }
+        assets = items
+    }
+
+    func requestThumbnail(for asset: PHAsset, handler: @escaping (UIImage?) -> Void) -> PHImageRequestID {
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .opportunistic
+        options.resizeMode = .fast
+        options.isNetworkAccessAllowed = true
+        return manager.requestImage(for: asset, targetSize: thumbnailSize, contentMode: .aspectFill, options: options) { image, _ in
+            DispatchQueue.main.async { handler(image) }
+        }
+    }
+
+    func cancel(_ id: PHImageRequestID) {
+        manager.cancelImageRequest(id)
+    }
+
+    func stopCaching() {
+        manager.stopCachingImagesForAllAssets()
+    }
+
+    /// Seçilenlerin orijinal dosyaları (HEIC/HEVC korunur; düzenlenmiş fotoğrafta düzenlenmiş hali) geçici klasöre.
+    func export(_ identifiers: [String]) async -> [PickedMedia] {
+        let fetched = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
+        var byID: [String: PHAsset] = [:]
+        fetched.enumerateObjects { asset, _, _ in byID[asset.localIdentifier] = asset }
+        var picked: [PickedMedia] = []
+        for id in identifiers {
+            guard let asset = byID[id], let media = await Self.exportOriginal(asset) else { continue }
+            picked.append(media)
+        }
+        return picked
+    }
+
+    private static func exportOriginal(_ asset: PHAsset) async -> PickedMedia? {
+        let kind: ChatMediaKind = asset.mediaType == .video ? .video : .image
+        let resources = PHAssetResource.assetResources(for: asset)
+        let preferred: [PHAssetResourceType] = kind == .video ? [.fullSizeVideo, .video] : [.fullSizePhoto, .photo]
+        guard let resource = preferred.lazy.compactMap({ type in resources.first { $0.type == type } }).first else { return nil }
+        var ext = (resource.originalFilename as NSString).pathExtension.lowercased()
+        if ext.isEmpty { ext = kind == .video ? "mov" : "jpg" }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ChatPicked", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("\(UUID().uuidString).\(ext)")
+        let options = PHAssetResourceRequestOptions()
+        options.isNetworkAccessAllowed = true
+        do {
+            try await PHAssetResourceManager.default().writeData(for: resource, toFile: url, options: options)
+            return PickedMedia(fileURL: url, kind: kind)
+        } catch {
+            return nil
+        }
+    }
+}

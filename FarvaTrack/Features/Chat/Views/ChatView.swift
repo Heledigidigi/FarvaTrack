@@ -143,6 +143,8 @@ struct ChatRoomContent: View {
         .background(Color.ftBackground.ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        // Geri düğmesinde yalnızca ok: "Sohbetler" yazısı gösterilmez (kaydırarak geri dönme korunur).
+        .toolbarRole(.editor)
         // Açık konuşmada (ve sticker panelinde) alttaki sekmeler gizlenir; geri dönünce görünür.
         .toolbar(viewModel.phase == .ready ? .hidden : .visible, for: .tabBar)
         .toolbar {
@@ -152,28 +154,29 @@ struct ChatRoomContent: View {
                     Button { showProfile = true } label: {
                         HStack(spacing: 8) {
                             if viewModel.kind == .partner {
-                                AvatarView(name: viewModel.partnerName, photoURL: nil)
-                                    .frame(width: 30, height: 30)
+                                PresenceAvatarView(name: viewModel.partnerName, photoURL: viewModel.partnerPhotoURL,
+                                                   presence: viewModel.partnerPresence, size: 32)
+                            } else if viewModel.partnerPhotoURL != nil {
+                                AvatarView(name: viewModel.partnerName, photoURL: viewModel.partnerPhotoURL)
+                                    .frame(width: 32, height: 32)
                             } else {
                                 Image(systemName: "note.text")
                                     .font(.footnote)
-                                    .frame(width: 30, height: 30)
+                                    .frame(width: 32, height: 32)
                                     .background(Color.ftCardElevated, in: Circle())
                             }
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(viewModel.partnerName)
                                     .font(.subheadline.weight(.semibold))
                                     .lineLimit(1)
-                                Text(viewModel.isPartnerTyping ? "yazıyor…" : "bilgi için dokun")
-                                    .font(.caption2)
-                                    .foregroundStyle(viewModel.isPartnerTyping ? Color.ftAccentLight : Color.ftTextSecondary)
+                                ChatPresenceSubtitle(viewModel: viewModel)
                             }
                         }
                         .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(viewModel.partnerName)
+                    .accessibilityLabel([viewModel.partnerName, viewModel.partnerSubtitle].compactMap { $0 }.joined(separator: ", "))
                     .accessibilityHint("Kişi bilgisini, medyayı ve aramayı açar")
                     .accessibilityAddTraits(.isButton)
                 }
@@ -188,10 +191,19 @@ struct ChatRoomContent: View {
             }
         }
         .navigationDestination(isPresented: $showProfile) {
-            ChatContactProfileView(viewModel: viewModel, showBubbles: $showBubbles) { messageID in
-                viewModel.pendingJumpMessageID = messageID
-                showProfile = false
-            }
+            ChatContactProfileView(
+                viewModel: viewModel,
+                showBubbles: $showBubbles,
+                onJump: { messageID in
+                    viewModel.pendingJumpMessageID = messageID
+                    showProfile = false
+                },
+                onFind: {
+                    // WhatsApp gibi: konuşmaya dönülür, altta arama çubuğu açılır.
+                    viewModel.beginFind()
+                    showProfile = false
+                }
+            )
         }
         .alert("Bir sorun oluştu", isPresented: $viewModel.hasError) {
             Button("Tamam", role: .cancel) {}
@@ -244,12 +256,30 @@ struct ChatRoomRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(viewModel.kind == .personal ? Color.ftCardElevated : Color.ftAccent, in: Circle())
-                .accessibilityHidden(true)
+            if viewModel.phase == .ready, viewModel.kind == .partner {
+                PresenceAvatarView(name: viewModel.partnerName, photoURL: viewModel.partnerPhotoURL,
+                                   presence: viewModel.partnerPresence, size: 46)
+                    .accessibilityHidden(true)
+            } else if viewModel.phase == .ready, viewModel.partnerPhotoURL != nil {
+                AvatarView(name: viewModel.partnerName, photoURL: viewModel.partnerPhotoURL)
+                    .frame(width: 46, height: 46)
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 18, height: 18)
+                            .background(Color.ftCardElevated, in: Circle())
+                            .overlay(Circle().strokeBorder(Color.ftBackground, lineWidth: 2))
+                    }
+                    .accessibilityHidden(true)
+            } else {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(viewModel.kind == .personal ? Color.ftCardElevated : Color.ftAccent, in: Circle())
+                    .accessibilityHidden(true)
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
@@ -297,6 +327,7 @@ struct ChatRoomRow: View {
     }
 
     private var subtitle: String {
+        if viewModel.isPartnerTyping { return "yazıyor…" }
         if let last = viewModel.messages.last {
             let prefix = last.isMine && viewModel.kind == .partner ? "Sen: " : ""
             return prefix + last.displayText
@@ -491,5 +522,28 @@ struct ChatPairingView: View {
                 Haptics.error()
             }
         }
+    }
+}
+
+// MARK: - Başlık altı: yazıyor / çevrimiçi / son görülme
+
+/// Sohbet başlığında adın altında: yeşil "çevrimiçi", gri "son görülme …", bordo "yazıyor…".
+struct ChatPresenceSubtitle: View {
+    let viewModel: ChatViewModel
+
+    var body: some View {
+        Group {
+            if viewModel.isPartnerTyping {
+                Text("yazıyor…").foregroundStyle(Color.ftAccentLight)
+            } else if let text = viewModel.partnerPresence.text(now: viewModel.now) {
+                Text(text).foregroundStyle(viewModel.partnerPresence.isOnline ? Color.ftOnline : Color.ftTextSecondary)
+            } else {
+                Text(viewModel.kind == .personal ? "kendine not" : "bilgi için dokun").foregroundStyle(Color.ftTextSecondary)
+            }
+        }
+        .font(.caption2)
+        .lineLimit(1)
+        .contentTransition(.opacity)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.partnerSubtitle)
     }
 }

@@ -25,6 +25,8 @@ final class ChatMessageRecord {
     var text: String
     var createdAt: Date
     var readAt: Date?
+    /// Alıcının cihazına ulaştığı an (Mesaj bilgisi ekranı için).
+    var deliveredAt: Date?
     var replyToID: String?
     var replyToSenderID: String?
     var replyToPreview: String?
@@ -70,6 +72,7 @@ final class ChatMessageRecord {
         self.text = dto.text
         self.createdAt = dto.createdAt
         self.readAt = dto.readAt
+        self.deliveredAt = dto.deliveredAt
         self.reactionsData = ChatMessageRecord.encode(dto.reactions)
         self.editedAt = dto.editedAt
         self.deletedForEveryone = dto.deleted
@@ -148,7 +151,8 @@ final class ChatMessageRecord {
         ChatMessageDTO(
             id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
             readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
-            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker, bubble: bubble, call: call
+            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker, bubble: bubble, call: call,
+            deliveredAt: deliveredAt
         )
     }
 
@@ -159,6 +163,8 @@ final class ChatMessageRecord {
         text = dto.text
         createdAt = dto.createdAt
         readAt = dto.readAt
+        // İletildi bilgisi bir kez yazılır; yerelde işaretlenmişse sunucudan gelmesi beklenirken silinmez.
+        deliveredAt = dto.deliveredAt ?? deliveredAt
         reactions = dto.reactions
         editedAt = dto.editedAt
         deletedForEveryone = dto.deleted
