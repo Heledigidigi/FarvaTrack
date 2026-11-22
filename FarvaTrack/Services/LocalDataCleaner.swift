@@ -5,7 +5,7 @@ import SwiftData
 @MainActor
 enum LocalDataCleaner {
     /// Bekleyen silme / gün kuyruklarının kapsamları (`pending<Scope>Deletes.<uid>`).
-    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library", "Template", "Program", "ManualStep", StickerLibraryViewModel.deletionScope]
+    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library", "Template", "Program", "ManualStep", StickerLibraryViewModel.deletionScope, BubbleStyleStore.deletionScope]
 
     static func purge(ownerID: String, context: ModelContext, defaults: UserDefaults = .standard) throws {
         try delete(Workout.self, context: context) { $0.ownerID == ownerID }
@@ -24,6 +24,7 @@ enum LocalDataCleaner {
         try delete(ChatMessageRecord.self, context: context) { $0.ownerID == ownerID }
         try delete(ChatPendingOperation.self, context: context) { $0.ownerID == ownerID }
         try delete(ChatPlacementRecord.self, context: context) { $0.ownerID == ownerID }
+        try delete(BubbleStyleRecord.self, context: context) { $0.cacheOwnerID == ownerID }
         for sticker in try context.fetch(FetchDescriptor<StickerRecord>()) where sticker.ownerID == ownerID {
             StickerFiles.live.remove(sticker.id)
             context.delete(sticker)
@@ -37,6 +38,8 @@ enum LocalDataCleaner {
         UserDefaultsLiveSessionStore(defaults: defaults).clear(userID: ownerID)
         ChatRoomCache(defaults: defaults).clear(userID: ownerID)
         StickerRecents(defaults: defaults, userID: ownerID).clear()
+        defaults.removeObject(forKey: "chat.bubble.selected.\(ownerID)")
+        BubbleFiles.live.removeAll()
         // Sohbet fotoğraf/videoları (gönderilmeyi bekleyenler ve indirilenler).
         ChatMediaFiles.live.removeAll()
     }

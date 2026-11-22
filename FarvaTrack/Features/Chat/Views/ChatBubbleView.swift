@@ -24,8 +24,37 @@ struct ChatBubbleView: View {
     var player: ChatAudioPlayer?
     var onLoadAudio: () async throws -> URL = { throw AppError.storage("Ses yok") }
     var onToggleAudio: () -> Void = {}
+    /// Gönderenin baloncuk stili (8F); `nil` = varsayılan.
+    var bubbleStyle: BubbleStyle?
+    var bubbleAssets: BubbleAssets = .empty
+    var bubbleCacheOwner: String = ""
 
     private var message: ChatMessageDTO { item.message }
+
+    /// Stil yalnızca metin ve sesli mesajlarda uygulanır (fotoğraf, video, sticker kendi görünümünü korur).
+    private var appliedStyle: BubbleStyle? {
+        guard let bubbleStyle, !message.deleted, message.media == nil, message.sticker == nil else { return nil }
+        return bubbleStyle
+    }
+
+    private var contentInsets: EdgeInsets {
+        if let style = appliedStyle {
+            let padding = BubbleLayout.contentPadding(for: style, mirrored: !item.isMine)
+            return EdgeInsets(top: padding.top, leading: padding.leading, bottom: padding.bottom, trailing: padding.trailing)
+        }
+        if isSticker { return EdgeInsets() }
+        let media = message.media != nil && !message.deleted
+        return EdgeInsets(top: media ? 4 : 8, leading: media ? 4 : 12, bottom: media ? 4 : 8, trailing: media ? 4 : 12)
+    }
+
+    @ViewBuilder
+    private var bubbleBackground: some View {
+        if let style = appliedStyle {
+            BubbleBackgroundView(style: style, assets: bubbleAssets, mirrored: !item.isMine, cacheOwner: bubbleCacheOwner)
+        } else {
+            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(bubbleColor)
+        }
+    }
     private var canCopy: Bool { !message.deleted && message.type == .text }
 
     var body: some View {
@@ -69,9 +98,8 @@ struct ChatBubbleView: View {
 
             footer
         }
-        .padding(.horizontal, isSticker ? 0 : (message.media != nil && !message.deleted ? 4 : 12))
-        .padding(.vertical, isSticker ? 0 : (message.media != nil && !message.deleted ? 4 : 8))
-        .background(bubbleColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(contentInsets)
+        .background { bubbleBackground }
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Color.ftAccentLight, lineWidth: isHighlighted ? 2 : 0)
@@ -98,7 +126,7 @@ struct ChatBubbleView: View {
             Text(item.displayText)
                 .font(.body)
                 .italic(message.deleted || message.type != .text)
-                .foregroundStyle(message.deleted ? Color.white.opacity(0.6) : .white)
+                .foregroundStyle(message.deleted ? Color.white.opacity(0.6) : (appliedStyle.map { Color(hex: $0.textColorHex) } ?? .white))
                 .multilineTextAlignment(.leading)
                 .frame(alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)

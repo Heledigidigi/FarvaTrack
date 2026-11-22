@@ -221,6 +221,8 @@ final class FirebaseManager: FirebaseServicing {
 
         // Sticker PNG'leri (belgeleri yukarıda alt koleksiyonlarla silindi).
         try? await StickerService().purge(userID: uid)
+        // Baloncuk çizimleri ve sticker süslemeleri.
+        try? await BubbleService().purge(userID: uid)
 
         // Profil fotoğrafı yoksa ya da Storage kurulmadıysa hata yok sayılır.
         try? await storage.reference().child("\(Constants.StoragePath.profileImages)/\(uid).jpg").delete()

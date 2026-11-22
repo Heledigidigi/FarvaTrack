@@ -98,7 +98,7 @@ final class AccountManagementTests: XCTestCase {
             MealEntry.self, CustomFood.self, FavoriteFood.self, WaterEntry.self,
             SleepEntry.self, WeightEntry.self, MeasurementEntry.self, WasteEntry.self,
             WorkoutTemplate.self, TrainingProgram.self, ManualStepEntry.self,
-            ChatMessageRecord.self, ChatPendingOperation.self, StickerRecord.self, ChatPlacementRecord.self,
+            ChatMessageRecord.self, ChatPendingOperation.self, StickerRecord.self, ChatPlacementRecord.self, BubbleStyleRecord.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
         sut = AuthViewModel(service: service, modelContext: container.mainContext)

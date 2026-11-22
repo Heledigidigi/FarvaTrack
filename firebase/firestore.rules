@@ -10,6 +10,13 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    // İstek sahibi ile `otherId` arasında sohbet odası var mı (oda kimliği: küçük uid _ büyük uid).
+    function sharesChatWith(otherId) {
+      let me = request.auth.uid;
+      let chatId = me < otherId ? me + '_' + otherId : otherId + '_' + me;
+      return signedIn() && exists(/databases/$(database)/documents/chats/$(chatId));
+    }
+
     function isAdmin() {
       return signedIn() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin';
@@ -40,6 +47,16 @@ service cloud.firestore {
       match /manualSteps/{id}  { allow read, write: if isOwner(userId); }
       // Kişisel sticker kütüphanesi (8D): yalnızca sahibi.
       match /stickers/{id}     { allow read, write: if isOwner(userId); }
+      // Baloncuk stilleri (8F): sahibi yazar; sohbet arkadaşı (aralarında sohbet odası olan) okuyabilir.
+      match /bubbles/{id} {
+        allow read: if isOwner(userId) || sharesChatWith(userId);
+        allow write: if isOwner(userId)
+          && request.resource.data.keys().hasOnly(['json', 'version', 'updatedAt'])
+          && request.resource.data.json is string
+          && request.resource.data.json.size() < 20000
+          && request.resource.data.version is int;
+        allow delete: if isOwner(userId);
+      }
 
       // Biyolojik atık: tek tek kayıtlar (saatleriyle) yalnızca sahibine açıktır.
       match /waste/{id}        { allow read, write: if isOwner(userId); }
@@ -165,14 +182,21 @@ service cloud.firestore {
         allow read: if isChatMember(chatId);
 
         allow create: if isChatMember(chatId)
-          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio', 'sticker'])
+          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio', 'sticker', 'bubble'])
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.type in ['text', 'image', 'video', 'audio', 'sticker', 'call']
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 4000
           && request.resource.data.createdAt is timestamp
           && request.resource.data.deleted == false
-          && validMedia(chatId, messageId, request.resource.data);
+          && validMedia(chatId, messageId, request.resource.data)
+          // Baloncuk başvurusu (8F): stil gönderenindir, `users/{senderId}/bubbles/{id}`.
+          && (!('bubble' in request.resource.data)
+              || (request.resource.data.bubble is map
+                  && request.resource.data.bubble.keys().hasOnly(['id', 'version'])
+                  && request.resource.data.bubble.id is string
+                  && request.resource.data.bubble.id.size() <= 64
+                  && request.resource.data.bubble.version is int));
 
         // Gönderen: metni düzenler ya da herkesten siler (silinmiş mesaj bir daha değişmez).
         // Alıcı: yalnızca bir kez okundu bilgisini yazar.

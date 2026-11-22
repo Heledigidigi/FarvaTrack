@@ -90,6 +90,7 @@ enum ChatField {
     static let audio = "audio"
     static let listenedAt = "listenedAt"
     static let sticker = "sticker"
+    static let bubble = "bubble"
     static let updatedAt = "updatedAt"
 
     static let messageId = "messageId"
@@ -491,6 +492,7 @@ enum ChatFirestoreMapper {
             audio: ChatAudioFields.decode(data[ChatField.audio]),
             listenedAt: date(data[ChatField.listenedAt]),
             sticker: ChatStickerFields.decode(data[ChatField.sticker]),
+            bubble: ChatBubbleRefFields.decode(data[ChatField.bubble]),
             hasPendingWrites: hasPendingWrites
         )
     }
@@ -520,6 +522,9 @@ enum ChatFirestoreMapper {
         }
         if let sticker = message.sticker {
             fields[ChatField.sticker] = ChatStickerFields.encode(sticker)
+        }
+        if let bubble = message.bubble {
+            fields[ChatField.bubble] = ChatBubbleRefFields.encode(bubble)
         }
         return fields
     }

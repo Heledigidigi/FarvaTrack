@@ -33,6 +33,8 @@ struct DataExport: Codable {
     var stickers: [StickerDTO]
     /// Sohbet üstüne yerleştirilen sticker'lar (konum bilgileri).
     var chatPlacements: [ChatPlacementExport]
+    /// Kendi tasarladığım baloncuk stilleri (JSON).
+    var bubbleStyles: [BubbleStyleExport]
 }
 
 @MainActor
@@ -61,7 +63,8 @@ enum DataExporter {
             manualSteps: try fetch(FetchDescriptor<ManualStepEntry>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.day)])).map(\.dto),
             chatMessages: try fetch(FetchDescriptor<ChatMessageRecord>(predicate: #Predicate { $0.ownerID == owner && !$0.hiddenForMe }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatMessageExport.init(record:)),
             stickers: try fetch(FetchDescriptor<StickerRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(\.dto),
-            chatPlacements: try fetch(FetchDescriptor<ChatPlacementRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatPlacementExport.init(record:))
+            chatPlacements: try fetch(FetchDescriptor<ChatPlacementRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatPlacementExport.init(record:)),
+            bubbleStyles: try fetch(FetchDescriptor<BubbleStyleRecord>(predicate: #Predicate { $0.cacheOwnerID == owner && $0.styleOwnerID == owner }, sortBy: [SortDescriptor(\.updatedAt)])).map(BubbleStyleExport.init(record:))
         )
     }
 

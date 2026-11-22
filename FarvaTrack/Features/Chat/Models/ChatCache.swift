@@ -49,6 +49,8 @@ final class ChatMessageRecord {
     var listenedAt: Date?
     /// `ChatSticker` JSON'u (sticker mesajlarında).
     var stickerData: Data?
+    /// `ChatBubbleRef` JSON'u (8F).
+    var bubbleData: Data?
 
     init(dto: ChatMessageDTO, ownerID: String, chatID: String, sendState: ChatSendState) {
         self.key = ChatMessageRecord.key(ownerID: ownerID, messageID: dto.id)
@@ -76,6 +78,7 @@ final class ChatMessageRecord {
         self.audioData = dto.audio.flatMap { try? JSONEncoder().encode($0) }
         self.listenedAt = dto.listenedAt
         self.stickerData = dto.sticker.flatMap { try? JSONEncoder().encode($0) }
+        self.bubbleData = dto.bubble.flatMap { try? JSONEncoder().encode($0) }
     }
 
     static func key(ownerID: String, messageID: String) -> String { "\(ownerID)|\(messageID)" }
@@ -107,6 +110,11 @@ final class ChatMessageRecord {
         set { stickerData = newValue.flatMap { try? JSONEncoder().encode($0) } }
     }
 
+    var bubble: ChatBubbleRef? {
+        get { bubbleData.flatMap { try? JSONDecoder().decode(ChatBubbleRef.self, from: $0) } }
+        set { bubbleData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     var uploadStage: ChatUploadStage? {
         get { uploadStageRaw.flatMap(ChatUploadStage.init(rawValue:)) }
         set { uploadStageRaw = newValue?.rawValue }
@@ -126,7 +134,7 @@ final class ChatMessageRecord {
         ChatMessageDTO(
             id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
             readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
-            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker
+            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker, bubble: bubble
         )
     }
 
@@ -144,6 +152,7 @@ final class ChatMessageRecord {
         audio = dto.audio
         listenedAt = dto.listenedAt
         sticker = dto.sticker
+        bubble = dto.bubble
         applyReply(dto.replyTo)
     }
 

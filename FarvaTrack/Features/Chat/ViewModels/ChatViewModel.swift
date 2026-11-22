@@ -81,6 +81,8 @@ final class ChatViewModel {
     private(set) var placements: [ChatPlacementItem] = []
 
     var draft = ""
+    /// Seçilen baloncuk stili; metin ve sesli mesajlara eklenir (8F). `nil` = varsayılan.
+    var outgoingBubble: ChatBubbleRef?
     var inviteCodeInput = ""
     var searchQuery = "" {
         didSet { if searchQuery != oldValue { updateSearch() } }
@@ -500,7 +502,8 @@ final class ChatViewModel {
             type: .text,
             text: text,
             createdAt: clock(),
-            replyTo: replyingTo.map { ChatReplyReference.make(from: $0.message) }
+            replyTo: replyingTo.map { ChatReplyReference.make(from: $0.message) },
+            bubble: outgoingBubble
         )
         context.insert(ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending))
         enqueue(.create, messageID: dto.id)
@@ -1113,7 +1116,8 @@ final class ChatViewModel {
         let dto = ChatMessageDTO(
             id: messageID, senderID: userID, type: .audio, text: "", createdAt: clock(),
             replyTo: replyingTo.map { ChatReplyReference.make(from: $0.message) },
-            audio: audio
+            audio: audio,
+            bubble: outgoingBubble
         )
         replyingTo = nil
         let record = ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending)

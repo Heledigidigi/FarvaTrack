@@ -34,7 +34,8 @@ struct FarvaTrackApp: App {
                 ChatMessageRecord.self,
                 ChatPendingOperation.self,
                 StickerRecord.self,
-                ChatPlacementRecord.self
+                ChatPlacementRecord.self,
+                BubbleStyleRecord.self
             )
         } catch {
             fatalError("SwiftData ModelContainer oluşturulamadı: \(error)")

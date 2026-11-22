@@ -20,6 +20,7 @@ struct ChatConversationView: View {
     @State private var metrics = ChatScrollMetrics()
     @State private var toast: String?
     @Environment(AuthViewModel.self) private var auth
+    @Environment(BubbleStyleStore.self) private var bubbleStore
     @Environment(\.modelContext) private var modelContext
     /// Sesli mesaj kaydı ve oynatma (8C).
     @State private var recorder = ChatVoiceRecorderModel()
@@ -177,6 +178,8 @@ struct ChatConversationView: View {
                 Task { await viewModel.sendMedia([media], quality: quality) }
             }
         }
+        .onAppear { viewModel.outgoingBubble = bubbleStore.selectedRef }
+        .onChange(of: bubbleStore.selectedRef) { _, ref in viewModel.outgoingBubble = ref }
         .sheet(isPresented: $showStickers, onDismiss: { stickerLibrary.reload() }) {
             StickerLibraryView(library: stickerLibrary)
         }
@@ -292,7 +295,12 @@ struct ChatConversationView: View {
     }
 
     private func bubble(for item: ChatMessageItem, proxy: ScrollViewProxy) -> some View {
-        ChatBubbleView(
+        // Gönderenin baloncuk stili; karşı tarafınki gerekirse indirilir (önbellek sürümü eskiyse yenisi).
+        _ = bubbleStore.revision
+        let sender = item.message.senderID
+        let style = bubbleStore.style(for: item.message.bubble, ownerID: sender)
+        let owner = style?.isPreset == true ? "preset" : sender
+        return ChatBubbleView(
             item: item,
             currentUserID: viewModel.userID ?? "",
             partnerName: viewModel.partnerName,
@@ -336,8 +344,14 @@ struct ChatConversationView: View {
             onSaveSticker: { saveMessageStickerToLibrary(item) },
             player: audioPlayer,
             onLoadAudio: { try await viewModel.loadAudio(for: item) },
-            onToggleAudio: { toggleAudio(item) }
+            onToggleAudio: { toggleAudio(item) },
+            bubbleStyle: style,
+            bubbleAssets: style.map { bubbleStore.assets(for: $0, ownerID: sender) } ?? .empty,
+            bubbleCacheOwner: owner
         )
+        .task(id: item.message.bubble) {
+            await bubbleStore.ensure(item.message.bubble, ownerID: sender)
+        }
     }
 
     /// Sesli mesajı oynatır / duraklatır; dosya cihazda yoksa önce indirilir.

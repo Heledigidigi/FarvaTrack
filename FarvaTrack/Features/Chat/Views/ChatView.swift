@@ -3,6 +3,11 @@ import SwiftUI
 /// Sohbet sekmesinin kökü: eşleşme yoksa davet ekranı, varsa konuşma.
 struct ChatView: View {
     @Environment(ChatViewModel.self) private var viewModel
+    @Environment(AuthViewModel.self) private var auth
+    @Environment(\.modelContext) private var modelContext
+    /// Baloncuk stilleri (8F): hazırlar, kendi tasarımlarım, karşı taraftan indirilenler.
+    @State private var bubbleStore = BubbleStyleStore()
+    @State private var showBubbles = false
 
     var body: some View {
         @Bindable var viewModel = viewModel
@@ -23,11 +28,29 @@ struct ChatView: View {
             .background(Color.ftBackground.ignoresSafeArea())
             .navigationTitle(viewModel.phase == .ready ? viewModel.partnerName : "Sohbet")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if viewModel.phase == .ready {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { showBubbles = true } label: { Image(systemName: "paintpalette") }
+                            .accessibilityLabel("Baloncuk seç")
+                            .accessibilityHint("Mesaj baloncuğunun görünümünü değiştir ya da kendi baloncuğunu tasarla")
+                    }
+                }
+            }
+            .sheet(isPresented: $showBubbles) {
+                BubblePickerView(store: bubbleStore)
+            }
             .alert("Bir sorun oluştu", isPresented: $viewModel.hasError) {
                 Button("Tamam", role: .cancel) {}
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
+        }
+        .environment(bubbleStore)
+        .task(id: auth.currentUser?.id) {
+            guard let userID = auth.currentUser?.id else { return }
+            bubbleStore.configure(context: modelContext, userID: userID)
+            await bubbleStore.syncAll()
         }
         .onAppear { viewModel.setVisible(true) }
         .onDisappear { viewModel.setVisible(false) }

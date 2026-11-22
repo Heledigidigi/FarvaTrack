@@ -17,6 +17,8 @@ enum Constants {
         static let manualSteps = "manualSteps"
         /// Kişisel sticker kütüphanesi (8D): belge + Storage'da `users/{uid}/stickers/{id}.png`.
         static let stickers = "stickers"
+        /// Baloncuk stilleri (8F): belge `json` + Storage `users/{uid}/bubbles/{id}/{asset}.png`.
+        static let bubbles = "bubbles"
 
         /// Sohbet: `chats/{chatId}/messages/{id}` ve `chatInvites/{code}` (kullanıcı altında değil, iki kişiye ortak).
         /// Hesap silinirken `ChatSyncing.purgeUserData` ile temizlenir.
@@ -27,7 +29,7 @@ enum Constants {
         static let chatPlacements = "placements"
 
         /// Hesap silinirken temizlenen `users/{uid}` alt koleksiyonları.
-        static let userSubcollections = [workouts, meals, water, sleep, weight, measurements, waste, wasteDaily, library, templates, programs, manualSteps, stickers]
+        static let userSubcollections = [workouts, meals, water, sleep, weight, measurements, waste, wasteDaily, library, templates, programs, manualSteps, stickers, bubbles]
     }
 
     enum StoragePath {

@@ -94,6 +94,8 @@ struct ChatMessageDTO: Equatable, Identifiable {
     var listenedAt: Date?
     /// Sticker mesajının PNG'si (8E).
     var sticker: ChatSticker?
+    /// Gönderenin seçtiği baloncuk stili ve sürümü (8F).
+    var bubble: ChatBubbleRef?
     /// Firestore'un yerel (henüz sunucuya ulaşmamış) yazımı mı; sunucuya yazılmaz.
     var hasPendingWrites: Bool = false
 
@@ -112,6 +114,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         audio: ChatAudio? = nil,
         listenedAt: Date? = nil,
         sticker: ChatSticker? = nil,
+        bubble: ChatBubbleRef? = nil,
         hasPendingWrites: Bool = false
     ) {
         self.id = id
@@ -128,6 +131,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         self.audio = audio
         self.listenedAt = listenedAt
         self.sticker = sticker
+        self.bubble = bubble
         self.hasPendingWrites = hasPendingWrites
     }
 }
