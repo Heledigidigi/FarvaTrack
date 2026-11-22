@@ -101,7 +101,7 @@ enum BubbleArtRenderer {
                 context.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center,
                                            endRadius: max(rect.width, rect.height) * 0.8, options: [.drawsAfterEndLocation])
             } else {
-                let radians = fill.angle * .pi / 180
+                let radians = CGFloat(fill.angle) * .pi / 180
                 let half = CGSize(width: cos(radians) * rect.width / 2, height: sin(radians) * rect.height / 2)
                 let start = CGPoint(x: rect.midX - half.width, y: rect.midY - half.height)
                 let end = CGPoint(x: rect.midX + half.width, y: rect.midY + half.height)
