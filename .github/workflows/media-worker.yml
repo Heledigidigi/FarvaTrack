@@ -5,6 +5,7 @@ name: Medya sunucusu (Cloudflare)
 #   CLOUDFLARE_API_TOKEN   "Edit Cloudflare Workers" şablonu + "Workers R2 Storage: Edit" izni
 #   CLOUDFLARE_ACCOUNT_ID  Cloudflare panelinde hesap kimliği
 #   GOOGLE_SERVICE_INFO_PLIST (zaten var) → Firebase proje kimliği buradan okunur.
+#   FIREBASE_SERVICE_ACCOUNT (isteğe bağlı, 8G) → Firebase servis hesabı JSON'u; push bildirimi gönderimi için Worker secret'ı olur.
 
 on:
   push:
@@ -72,6 +73,18 @@ jobs:
           else
             npx --yes wrangler@4 r2 bucket create farvatrack-media
           fi
+
+      - name: Bildirim icin servis hesabi (FIREBASE_SERVICE_ACCOUNT)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then
+            echo "::warning::FIREBASE_SERVICE_ACCOUNT secret'i yok; push bildirimleri gonderilmeyecek (sunucu yine calisir)."
+            exit 0
+          fi
+          printf '%s' "$SA" | npx --yes wrangler@4 secret put FIREBASE_SERVICE_ACCOUNT
 
       - name: Dagit
         env:

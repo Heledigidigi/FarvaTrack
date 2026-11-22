@@ -130,6 +130,10 @@ final class ChatViewModel {
     private let autoFetchOriginals: Bool
     private var originalFetchTask: Task<Void, Never>?
     private var originalFetchRequested = false
+    /// Karşı tarafa push bildirimi isteği (8G). `nil`: gönderilmez (testler, sunucusuz kurulum).
+    private let notifier: ChatNotifying?
+    /// Uygulama açıkken yeni gelen mesaj (uygulama içi bildirim şeridi için).
+    @ObservationIgnored var onIncoming: ((ChatMessageItem) -> Void)?
     /// Aynı orijal için eşzamanlı indirmeler (otomatik + görüntüleyici) tek indirmede birleşir.
     private var originalLoads: [String: Task<URL, Error>] = [:]
 
@@ -145,6 +149,7 @@ final class ChatViewModel {
         defaults: UserDefaults = .standard,
         photoSaver: PhotoLibrarySaving = PhotoLibrarySaver(),
         autoFetchOriginals: Bool = false,
+        notifier: ChatNotifying? = nil,
         clock: @escaping () -> Date = { .now },
         makeID: @escaping () -> String = { UUID().uuidString }
     ) {
@@ -155,6 +160,7 @@ final class ChatViewModel {
         self.defaults = defaults
         self.photoSaver = photoSaver
         self.autoFetchOriginals = autoFetchOriginals
+        self.notifier = notifier
         self.kind = kind
         self.roomCache = ChatRoomCache(defaults: defaults, kind: kind)
         self.clock = clock
@@ -398,12 +404,39 @@ final class ChatViewModel {
 
     func handleRemoteMessages(_ items: [ChatMessageDTO], chatID: String) {
         guard room?.id == chatID else { return }
+        // Önbellekte olmayan, az önce gelmiş karşı taraf mesajları: uygulama içi bildirim şeridi.
+        let current = clock()
+        let fresh = items.filter {
+            $0.senderID != userID && !$0.deleted && cachedRecord(for: $0.id) == nil
+                && abs(current.timeIntervalSince($0.createdAt)) < 120
+        }.sorted { $0.createdAt < $1.createdAt }.map(\.id)
         // Son sayfa bir sayfadan azsa sunucuda daha eski mesaj yoktur (sayfalama başlamadan önce geçerli).
         if displayLimit == ChatLimits.pageSize { remoteExhausted = items.count < ChatLimits.pageSize }
         upsert(items, chatID: chatID)
         reloadMessages()
+        if let onIncoming, !isVisible {
+            for id in fresh {
+                if let item = messages.first(where: { $0.id == id }) { onIncoming(item) }
+            }
+        }
         markVisibleAsRead()
         scheduleOriginalFetch()
+    }
+
+    /// Mesaj sunucuya yazılınca karşı tarafın cihazlarına bildirim istenir (en iyi çaba; ağ yoksa bir kez daha denenir).
+    private func notifyRecipient(chatID: String, messageID: String) {
+        guard kind == .partner, let notifier else { return }
+        Task {
+            for attempt in 0..<2 {
+                do {
+                    try await notifier.notify(chatID: chatID, messageID: messageID)
+                    return
+                } catch {
+                    guard attempt == 0, AppError.map(error) == .network else { return }
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                }
+            }
+        }
     }
 
     /// Sunucudan gelenleri önbelleğe yazar. Kuyrukta bekleyen yerel değişiklik varsa yerel hal kazanır;
@@ -899,6 +932,7 @@ final class ChatViewModel {
                         continue
                     }
                     try await sync.sendMessage(fresh.dto, chatID: chatID)
+                    notifyRecipient(chatID: chatID, messageID: messageID)
                 case .edit:
                     let text = operation.text ?? cachedRecord(for: messageID)?.text ?? ""
                     let editedAt = cachedRecord(for: messageID)?.editedAt ?? operation.createdAt

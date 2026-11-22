@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { handle, resetMembershipCache } from '../src/index.js';
+import { handle, resetMembershipCache, resetNotificationCache } from '../src/index.js';
 import { FakeBucket } from './fake-r2.js';
 
 let bucket, env, deps, rooms;
@@ -140,4 +140,84 @@ test('not sohbetinde gönderen kendi orijalini işaretleyebilir', async () => {
   assert.equal(ack.ignored, undefined);
   assert.ok(bucket.objects.has(`acks/${p}`));
   assert.equal((await call('GET', `/v1/o?p=${p}`, { uid: 'b' })).status, 403, 'başkası göremez');
+});
+
+// MARK: Bildirim (8G)
+
+
+function firestoreDoc(name, fields) {
+  const encode = (v) => {
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(encode) } };
+    if (v === null) return { nullValue: null };
+    if (typeof v === 'boolean') return { booleanValue: v };
+    if (typeof v === 'object') return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, encode(x)])) } };
+    return { stringValue: String(v) };
+  };
+  return { name: `projects/proj/databases/(default)/documents/${name}`, fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, encode(v)])) };
+}
+
+function notifyDeps({ devices, message, fcmStatus = 200 }) {
+  const sent = [];
+  const removed = [];
+  const fetcher = async (url, init = {}) => {
+    if (url.startsWith('https://fcm.googleapis.com')) {
+      sent.push(JSON.parse(init.body).message);
+      return fcmStatus === 200 ? new Response('{}') : new Response(JSON.stringify({ error: { status: 'NOT_FOUND' } }), { status: fcmStatus });
+    }
+    const docPath = decodeURIComponent(url.split('/documents/')[1].split('?')[0]);
+    if (init.method === 'DELETE') { removed.push(docPath); return new Response('{}'); }
+    if (docPath.endsWith(':runQuery')) {
+      return new Response(JSON.stringify([{ document: firestoreDoc('chats/a_b/messages/m1', message) }]));
+    }
+    if (docPath === 'chats/a_b') return new Response(JSON.stringify(firestoreDoc('chats/a_b', { members: ['a', 'b'], names: { a: 'Ali', b: 'Elif' } })));
+    if (docPath === 'chats/a_a') return new Response(JSON.stringify(firestoreDoc('chats/a_a', { members: ['a', 'a'] })));
+    if (docPath === 'chats/a_b/messages/m1') return new Response(JSON.stringify(firestoreDoc(docPath, message)));
+    if (docPath === 'users/b/devices') return new Response(JSON.stringify({ documents: devices.map((d) => firestoreDoc(`users/b/devices/${d.id}`, d.fields)) }));
+    return new Response('{}', { status: 404 });
+  };
+  return { deps: { ...deps, fetch: fetcher, googleToken: async () => 'g-token' }, sent, removed };
+}
+
+const notifyCall = (uid, body, d) => handle(new Request('https://w.dev/v1/notify', {
+  method: 'POST', headers: { authorization: `Bearer ${uid}`, 'content-type': 'application/json' }, body: JSON.stringify(body),
+}), env, d);
+
+test('bildirim: gönderenin mesajı karşı tarafın cihazlarına gider', async () => {
+  resetNotificationCache();
+  const { deps: d, sent, removed } = notifyDeps({
+    message: { senderId: 'a', type: 'audio', text: '', deleted: false },
+    devices: [{ id: 'd1', fields: { token: 'tok1', muted: false } }, { id: 'd2', fields: { token: 'tok2', muted: true } }],
+  });
+  const result = await (await notifyCall('a', { chatId: 'a_b', messageId: 'm1' }, d)).json();
+  assert.equal(result.sent, 1, 'sessize alınan cihaza gitmez');
+  assert.equal(sent[0].token, 'tok1');
+  assert.equal(sent[0].notification.title, 'Ali');
+  assert.equal(sent[0].notification.body, '🎤 Sesli mesaj');
+  assert.equal(sent[0].apns.payload.aps.badge, 1);
+  assert.deepEqual(removed, []);
+
+  const again = await (await notifyCall('a', { chatId: 'a_b', messageId: 'm1' }, d)).json();
+  assert.equal(again.reason, 'duplicate', 'yeniden deneme çift bildirim üretmez');
+});
+
+test('bildirim: başkasının mesajı, yabancı oda ve not sohbeti', async () => {
+  resetNotificationCache();
+  const { deps: d, sent } = notifyDeps({ message: { senderId: 'b', type: 'text', text: 'selam' }, devices: [{ id: 'd1', fields: { token: 't' } }] });
+  assert.equal((await notifyCall('a', { chatId: 'a_b', messageId: 'm1' }, d)).status, 403, 'yalnızca kendi mesajı için');
+  assert.equal((await notifyCall('c', { chatId: 'a_b', messageId: 'm1' }, d)).status, 403);
+  assert.equal((await notifyCall('a', { chatId: '../x', messageId: 'm1' }, d)).status, 400);
+  assert.equal((await (await notifyCall('a', { chatId: 'a_a', messageId: 'm9' }, d)).json()).reason, 'personal');
+  assert.equal(sent.length, 0);
+});
+
+test('bildirim: geçersiz belirteç silinir; servis hesabı yoksa sessizce atlanır', async () => {
+  resetNotificationCache();
+  const { deps: d, removed } = notifyDeps({ message: { senderId: 'a', type: 'text', text: 'selam' }, devices: [{ id: 'eski', fields: { token: 't' } }], fcmStatus: 404 });
+  const result = await (await notifyCall('a', { chatId: 'a_b', messageId: 'm1' }, d)).json();
+  assert.equal(result.removed, 1);
+  assert.deepEqual(removed, ['users/b/devices/eski']);
+
+  resetNotificationCache();
+  const none = await (await notifyCall('a', { chatId: 'a_b', messageId: 'm1' }, { ...d, googleToken: async () => null })).json();
+  assert.equal(none.reason, 'not_configured');
 });

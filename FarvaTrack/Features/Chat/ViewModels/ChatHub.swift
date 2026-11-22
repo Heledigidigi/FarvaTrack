@@ -2,6 +2,14 @@ import Foundation
 import Observation
 import SwiftData
 
+/// Uygulama açıkken gelen mesaj için üstte kısa süre görünen şerit (sistem bildirimi yerine).
+struct ChatBanner: Identifiable, Equatable {
+    let id: String
+    let kind: ChatRoomKind
+    let title: String
+    let body: String
+}
+
 /// Sohbet sekmesindeki iki oda: karşılıklı sohbet ve kendine not sohbeti.
 /// Her oda kendi `ChatViewModel`'iyle çalışır; burada yalnızca görünürlük ve ortak yaşam döngüsü yönetilir.
 @MainActor @Observable
@@ -15,15 +23,42 @@ final class ChatHub {
     var isTabVisible = false { didSet { updateVisibility() } }
     /// Açık konuşma: yalnızca ekrandaki odanın mesajları okundu sayılır.
     var openConversation: ChatRoomKind? { didSet { updateVisibility() } }
+    /// Uygulama içi bildirim şeridi.
+    var banner: ChatBanner?
+    /// Bildirime ya da şeride dokunulunca açılacak oda (sohbet ekranı tüketir).
+    var pendingOpen: ChatRoomKind?
 
     init(partner: ChatViewModel, personal: ChatViewModel) {
         self.partner = partner
         self.personal = personal
+        for kind in ChatRoomKind.allCases {
+            viewModel(for: kind).onIncoming = { [weak self] item in self?.incoming(item, kind: kind) }
+        }
     }
 
     convenience init() {
-        self.init(partner: ChatViewModel(kind: .partner, autoFetchOriginals: true),
-                  personal: ChatViewModel(kind: .personal, autoFetchOriginals: true))
+        let server = MediaServerClient()
+        self.init(partner: ChatViewModel(kind: .partner, autoFetchOriginals: true, notifier: server),
+                  personal: ChatViewModel(kind: .personal, autoFetchOriginals: true, notifier: server))
+    }
+
+    /// Oda kimliğinden tür (push bildiriminde gelen `chatId`).
+    func kind(forChatID chatID: String) -> ChatRoomKind? {
+        if partner.room?.id == chatID { return .partner }
+        if personal.room?.id == chatID { return .personal }
+        return nil
+    }
+
+    /// Bildirim / şeritten: sohbet sekmesinde ilgili odayı aç.
+    func open(_ kind: ChatRoomKind) {
+        banner = nil
+        pendingOpen = kind
+    }
+
+    private func incoming(_ item: ChatMessageItem, kind: ChatRoomKind) {
+        // Arka planda sistem bildirimi gelir; ekrandaki konuşma için şerit gereksiz.
+        guard isAppActive, !(isTabVisible && openConversation == kind) else { return }
+        banner = ChatBanner(id: item.id, kind: kind, title: viewModel(for: kind).partnerName, body: item.displayText)
     }
 
     func viewModel(for kind: ChatRoomKind) -> ChatViewModel {

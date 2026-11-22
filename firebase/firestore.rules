@@ -47,6 +47,16 @@ service cloud.firestore {
       match /manualSteps/{id}  { allow read, write: if isOwner(userId); }
       // Kişisel sticker kütüphanesi (8D): yalnızca sahibi.
       match /stickers/{id}     { allow read, write: if isOwner(userId); }
+      // Push bildirimi cihazları (8G): yalnızca sahibi. Bildirimi medya sunucusu servis hesabıyla okur.
+      match /devices/{deviceId} {
+        allow read, delete: if isOwner(userId);
+        allow write: if isOwner(userId)
+          && deviceId.matches('^[A-Za-z0-9-]{1,64}$')
+          && request.resource.data.keys().hasOnly(['token', 'platform', 'muted', 'appVersion', 'updatedAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() < 4096
+          && request.resource.data.muted is bool;
+      }
       // Baloncuk stilleri (8F): sahibi yazar; sohbet arkadaşı (aralarında sohbet odası olan) okuyabilir.
       match /bubbles/{id} {
         allow read: if isOwner(userId) || sharesChatWith(userId);

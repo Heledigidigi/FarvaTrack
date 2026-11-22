@@ -32,7 +32,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farvatrack.FarvaTrack
         TARGETED_DEVICE_FAMILY: "1"
-        CODE_SIGN_ENTITLEMENTS: Config/FarvaTrack.entitlements
+        # Push bildirimi yetkisi (aps-environment) bu ayarla açılır: ücretli Apple Developer hesabı olmadan
+        # imzalanan derlemeler bozulmasın diye varsayılan NO. TestFlight iş akışı YES geçirir (vars.PUSH_NOTIFICATIONS).
+        PUSH_NOTIFICATIONS: "NO"
+        CODE_SIGN_ENTITLEMENTS: Config/FarvaTrack-push-$(PUSH_NOTIFICATIONS).entitlements
         # INFOPLIST_FILE (URL şeması) + aşağıdaki üretilen anahtarlar birleştirilir
         INFOPLIST_FILE: Config/FarvaTrack-Info.plist
         GENERATE_INFOPLIST_FILE: YES
@@ -52,6 +55,8 @@ targets:
         product: FirebaseAuth
       - package: Firebase
         product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseMessaging
 
   FarvaTrackWidget:
     type: app-extension

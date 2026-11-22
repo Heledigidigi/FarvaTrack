@@ -47,6 +47,11 @@ struct SettingsView: View {
                 .listRowBackground(Color.ftCard)
 
                 Section {
+                    Toggle(isOn: Binding(get: { !PushManager.shared.muted }, set: { PushManager.shared.muted = !$0 })) {
+                        Label("Sohbet bildirimleri", systemImage: "bell.badge")
+                    }
+                    .tint(Color.ftAccent)
+                    .accessibilityHint(PushManager.shared.statusText)
                     Toggle(isOn: $autoSaveChatMedia) {
                         Label("Gelen fotoğraf ve videoları Fotoğraflar'a kaydet", systemImage: "photo.on.rectangle.angled")
                     }
@@ -59,7 +64,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Sohbet")
                 } footer: {
-                    Text("Açıkken karşı taraftan gelen fotoğraf ve videolar orijal kalitesinde Fotoğraflar'a eklenir.")
+                    Text("\(PushManager.shared.statusText) Fotoğraf kaydetme açıkken karşı taraftan gelen fotoğraf ve videolar orijal kalitesinde Fotoğraflar'a eklenir.")
                 }
                 .listRowBackground(Color.ftCard)
 

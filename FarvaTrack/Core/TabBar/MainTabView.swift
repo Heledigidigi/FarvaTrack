@@ -58,6 +58,30 @@ struct MainTabView: View {
         .environment(liveWorkout)
         .environment(chatHub)
         .environment(chatHub.partner)
+        .overlay(alignment: .top) {
+            if let banner = chatHub.banner {
+                ChatBannerView(banner: banner) {
+                    router.selectedTab = .chat
+                    chatHub.open(banner.kind)
+                } onDismiss: {
+                    chatHub.banner = nil
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .id(banner.id)
+            }
+        }
+        .animation(.spring(duration: 0.35), value: chatHub.banner)
+        // Uygulama simgesindeki rozet: okunmamış sohbet mesajları.
+        .onChange(of: chatHub.unreadCount, initial: true) { _, count in
+            PushManager.shared.setBadge(count)
+        }
+        // Push bildirimine dokunuldu: ilgili sohbeti aç.
+        .onChange(of: PushManager.shared.pendingChatID, initial: true) { _, chatID in
+            guard let chatID else { return }
+            router.selectedTab = .chat
+            chatHub.open(chatHub.kind(forChatID: chatID) ?? .partner)
+            PushManager.shared.pendingChatID = nil
+        }
         .tint(Color.ftAccentLight)
         .sensoryFeedback(.selection, trigger: router.selectedTab)
         .onOpenURL { router.handle($0) }
@@ -74,8 +98,10 @@ struct MainTabView: View {
                 wasteViewModel.configure(context: modelContext, user: user)
                 liveWorkout.configure(userID: user.id)
                 chatHub.configure(context: modelContext, user: user)
+                Task { await PushManager.shared.start(userID: user.id) }
             } else {
                 chatHub.reset()
+                Task { await PushManager.shared.stop() }
             }
         }
         .task(id: auth.currentUser?.id) {

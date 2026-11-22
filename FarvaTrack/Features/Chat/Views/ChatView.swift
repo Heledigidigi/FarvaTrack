@@ -62,6 +62,12 @@ struct ChatView: View {
         }
         .onDisappear { hub.isTabVisible = false }
         .onChange(of: path) { updateOpenConversation() }
+        // Bildirim ya da uygulama içi şeritten gelen "şu sohbeti aç" isteği.
+        .onChange(of: hub.pendingOpen, initial: true) { _, kind in
+            guard let kind else { return }
+            if hub.showsRoomList { path = [kind] }
+            hub.pendingOpen = nil
+        }
         .onChange(of: hub.partner.phase) { updateOpenConversation() }
         .onChange(of: hub.personal.phase) { _, phase in
             // Not sohbeti açıldı: kurulum kapanır ve doğrudan nota geçilir.
@@ -87,6 +93,50 @@ struct ChatView: View {
             hub.openConversation = path.last
         } else {
             hub.openConversation = hub.partner.phase == .ready ? .partner : nil
+        }
+    }
+}
+
+// MARK: - Uygulama içi bildirim şeridi
+
+/// Uygulama açıkken gelen mesaj: üstte birkaç saniye görünür; dokununca sohbet açılır, yukarı kaydırınca kapanır.
+struct ChatBannerView: View {
+    let banner: ChatBanner
+    let onOpen: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 12) {
+                Image(systemName: banner.kind == .personal ? "note.text" : "bubble.left.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 38, height: 38)
+                    .background(Color.ftAccent, in: Circle())
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(banner.title).font(.subheadline.bold()).lineLimit(1)
+                    Text(banner.body).font(.subheadline).foregroundStyle(Color.ftTextSecondary).lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+        .gesture(DragGesture(minimumDistance: 10).onEnded { value in
+            if value.translation.height < -10 { onDismiss() }
+        })
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Yeni mesaj, \(banner.title): \(banner.body)")
+        .accessibilityHint("Sohbeti açar")
+        .task(id: banner.id) {
+            Haptics.impact(.light)
+            try? await Task.sleep(for: .seconds(4))
+            if !Task.isCancelled { onDismiss() }
         }
     }
 }

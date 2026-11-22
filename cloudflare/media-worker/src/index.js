@@ -13,9 +13,12 @@
 //   GET    /v1/usage                         depolama özeti
 //   POST   /v1/cleanup                       temizliği hemen çalıştır
 //   GET    /v1/public/profile_images/<uid>/<ad>.jpg   profil fotoğrafı (herkese açık, tahmin edilemez ad)
+//   POST   /v1/notify  {chatId, messageId}   gönderen, yazdığı mesaj için karşı tarafa FCM bildirimi ister (8G)
 // Zamanlanmış görev (cron) her gün temizliği çalıştırır.
 
 import { verifyIdToken } from './auth.js';
+import { accessToken, firestore, parseServiceAccount } from './google.js';
+import { buildFcmMessage, isDeadToken, notificationBody, unreadCount } from './push.js';
 import {
   ACK_PREFIX, CLEANUP, authorize, chatIdFor, chatIdContains, parsePath, parsePrefix, selectForCleanup, uploadLimit,
 } from './rules.js';
@@ -58,7 +61,76 @@ const defaultDeps = {
   fetch: (...args) => fetch(...args),
   verify: (token, projectId) => verifyIdToken(token, projectId),
   now: () => new Date(),
+  /** Servis hesabı erişim belirteci; secret yoksa `null` (bildirim gönderilmez). */
+  googleToken: async (env) => {
+    const sa = parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT);
+    return sa ? accessToken(sa) : null;
+  },
 };
+
+// Aynı mesaj için tekrar gelen istekler (yeniden deneme) çift bildirim üretmesin (en iyi çaba, Worker örneği başına).
+const recentNotifications = new Map();
+const ID = /^[A-Za-z0-9_.-]{1,128}$/;
+
+async function notify(env, deps, uid, body) {
+  const chatId = String(body?.chatId || '');
+  const messageId = String(body?.messageId || '');
+  if (!ID.test(chatId) || !ID.test(messageId)) return fail(400, 'Geçersiz istek');
+  if (!chatIdContains(chatId, uid)) return fail(403, 'İzin yok');
+
+  const key = `${chatId}/${messageId}`;
+  const now = Date.now();
+  for (const [k, t] of recentNotifications) if (now - t > 10 * 60 * 1000) recentNotifications.delete(k);
+  if (recentNotifications.has(key)) return json({ sent: 0, reason: 'duplicate' });
+
+  const token = await deps.googleToken(env);
+  if (!token) return json({ sent: 0, reason: 'not_configured' });
+  const db = firestore(env.FIREBASE_PROJECT_ID, token, deps.fetch);
+
+  const chat = await db.get(`chats/${chatId}`);
+  const members = chat?.members || [];
+  if (!members.includes(uid)) return fail(403, 'İzin yok');
+  const recipient = members.find((m) => m !== uid);
+  if (!recipient) return json({ sent: 0, reason: 'personal' });
+
+  const message = await db.get(`chats/${chatId}/messages/${messageId}`);
+  if (!message) return fail(404, 'Mesaj bulunamadı');
+  if (message.senderId !== uid) return fail(403, 'İzin yok');
+  const text = notificationBody(message);
+  if (!text) return json({ sent: 0, reason: 'empty' });
+  recentNotifications.set(key, now);
+
+  const devices = (await db.list(`users/${recipient}/devices`)).filter((d) => typeof d.token === 'string' && d.token && !d.muted);
+  if (devices.length === 0) return json({ sent: 0, reason: 'no_devices' });
+
+  const badge = unreadCount(await db.latest(`chats/${chatId}`, 'messages', 50), uid);
+  const title = (chat.names && chat.names[uid]) || 'FarvaTrack';
+  let sent = 0;
+  let removed = 0;
+  for (const device of devices) {
+    const payload = buildFcmMessage({ token: device.token, title, body: text, chatId, messageId, type: message.type, badge });
+    const response = await deps.fetch(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (response.ok) {
+      sent += 1;
+    } else {
+      const errorBody = await response.json().catch(() => null);
+      if (isDeadToken(response.status, errorBody)) {
+        await db.remove(`users/${recipient}/devices/${device.id}`);
+        removed += 1;
+      }
+    }
+  }
+  return json({ sent, removed, badge });
+}
+
+/** Testler için. */
+export function resetNotificationCache() {
+  recentNotifications.clear();
+}
 
 /** Testler için önbelleği temizler. */
 export function resetMembershipCache() {
@@ -165,6 +237,10 @@ export async function handle(request, env, deps = defaultDeps) {
   const key = url.searchParams.get('p') || '';
 
   if (path === '/v1/usage' && method === 'GET') return json(await usage(env));
+  if (path === '/v1/notify' && method === 'POST') {
+    const body = await request.json().catch(() => null);
+    return notify(env, deps, uid, body);
+  }
   if (path === '/v1/cleanup' && method === 'POST') return json(await runCleanup(env, deps.now()));
 
   if (path === '/v1/prefix' && method === 'DELETE') {

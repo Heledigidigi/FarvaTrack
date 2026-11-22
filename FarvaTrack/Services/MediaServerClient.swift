@@ -33,6 +33,11 @@ extension ChatMediaStoring {
     func publicURL(for path: String) -> URL? { nil }
 }
 
+/// Yeni mesaj için karşı tarafa push bildirimi isteği (8G). Gönderim medya sunucusundan yapılır.
+protocol ChatNotifying: AnyObject {
+    func notify(chatID: String, messageID: String) async throws
+}
+
 /// Bulut depolama özeti.
 struct MediaUsage: Codable, Equatable {
     var usedBytes: Int64
@@ -322,6 +327,13 @@ final class MediaServerClient: ChatMediaStoring {
 
     func publicURL(for path: String) -> URL? {
         baseURL?.appendingPathComponent("v1/public").appendingPathComponent(path)
+    }
+}
+
+extension MediaServerClient: ChatNotifying {
+    func notify(chatID: String, messageID: String) async throws {
+        let body = try JSONEncoder().encode(["chatId": chatID, "messageId": messageID])
+        _ = try await send(makeRequest("POST", "v1/notify", headers: ["Content-Type": "application/json"]), body: body)
     }
 }
 
