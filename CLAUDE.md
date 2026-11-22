@@ -32,7 +32,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8E tamam; 8F–8H planlandı |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8F tamam; 8G–8H planlandı |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -86,7 +86,13 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Yerleştirilen sticker'ın konumu/ölçeği/açısı mesajla birlikte saklanır, iki tarafta da aynı görünür.
 - Sticker'a uzun basınca kaydet / sil / öne-arkaya al.
 
-**8F: Sohbet baloncukları**
+**8F: Sohbet baloncukları** (Tamamlandı)
+- Uygulandığı haliyle: model `BubbleStyle` (Codable JSON; `sanitized()` sınırları uygular): şekil (köşe 4–28, kuyruk yok/klasik/kıvrık/düşünce), dolgu (düz/doğrusal/radyal, en çok 3 renk), kenarlık, yazı rengi, en çok 12 süsleme (emoji/yazı/sticker; 8 köşe-kenar noktasına sabitli, kaydırma ±40, boyut, açı), çizim dosyası, efekt (parıltı/ışıma/parçacık + yoğunluk), isteğe bağlı elle dilim payları. 8 hazır stil `preset.*` (Bordo Klasik, Gece, Gül Kurusu, Altın Çerçeve, Neon Bordo, Yıldızlı Gece, Pati, Minimal) cihazda çözülür.
+- 9-dilim: `BubbleArtRenderer` sanatı (şekil + dolgu + çizim + iç kenarlık) referans 180×110 pt @3x bir kez çizer; `BubbleArt` 9 parçaya böler, `NineSliceArtView` Canvas ile köşeleri sabit, kenarları tek yönde, ortayı iki yönde esneterek çizer (`NineSlice` saf, testli; hedef paylardan küçükse paylar orantılı küçülür). Paylar `BubbleLayout.automaticInsets` (yarıçap + kenarlık + kuyruk) ya da elle. Süslemeler esnemez, `BubbleLayout.position` ile sabit noktalarına göre üstte çizilir. Gelen mesajda şekil aynalanır, yazı/süsleme ters dönmez. `BubbleArtCache` (64 kayıt, anahtar sahip+id+sürüm+yön).
+- Efektler `BubbleEffects.metal` (`[[stitchable]]` bubbleShimmer/bubbleSparkle colorEffect, bubbleGlow layerEffect) + `TimelineView(.animation)`; `BubbleEffectPolicy`: Hareketi azalt açıksa kapalı. Yalnızca metin ve sesli mesajlar baloncuk taşır (medya/sticker hariç).
+- Editör: sohbet araç çubuğundaki palet → `BubblePickerView` (Varsayılan, hazırlar, Benim baloncuklarım; kopyasını düzenle/düzenle/sil) → `BubbleEditorView` (kısa/uzun/gelen canlı önizleme, şekil, dolgu, kenarlık, süslemeler, PencilKit `BubbleDrawingSheet`, efekt, dilim kılavuzu + elle ayar).
+- Senkron: `BubbleStyleStore` (+ `BubbleSyncing`/`BubbleService`), SwiftData `BubbleStyleRecord` (kendi stillerim + karşı tarafın önbelleği), dosyalar `BubbleFiles` (kendi: Application Support/Bubbles, diğer: Caches/Bubbles). Firestore `users/{uid}/bubbles/{id}` `{json, version, updatedAt}`; Storage `users/{uid}/bubbles/{styleId}/{assetId}.png` (PNG < 1 MB). Okuma: sahibi ya da onunla sohbeti olan (`sharesChatWith`). Mesajda `bubble {id, version}`; karşı cihaz stil yoksa ya da sürüm daha yeniyse indirip önbelleğe alır. Düzenleme sürümü artırır; silme `PendingDeletionStore` "Bubble". Seçim `chat.bubble.selected.<uid>`.
+- Test notu: sahte servislerin yalıtımsız async metotları genel yürütücüde eşzamanlı çalışır; kayıt dizilerine yazım `mockLock.withLock` ile yapılır (yoksa yığın bozulması).
 - Hazır baloncuk temaları ve kullanıcının kendi tasarladığı özel baloncuklar.
 - Baloncuk düzenleyici: çizim, sticker, yazı, emoji ve efekt ekleme.
 - Dokuz dilimli (9-slice) ölçekleme: mesaj uzayıp kısaldıkça baloncuğun şekli bozulmaz.
