@@ -62,7 +62,7 @@ struct ChatReplyReference: Codable, Equatable, Hashable {
     var type: ChatMessageType
 
     static func make(from message: ChatMessageDTO) -> ChatReplyReference {
-        let base = message.deleted ? "Bu mesaj silindi" : (message.type == .text ? message.text : message.type.placeholder)
+        let base = message.deleted ? "Bu mesaj silindi" : ChatText.summary(of: message)
         return ChatReplyReference(
             messageID: message.id,
             senderID: message.senderID,
@@ -341,6 +341,16 @@ struct ChatSharedLink: Identifiable, Equatable {
 
 enum ChatText {
     static let turkish = Locale(identifier: "tr_TR")
+
+    /// Listede / alıntıda kısa metin: metin mesajında metnin kendisi, açıklamalı fotoğrafta "📷 açıklama".
+    static func summary(of message: ChatMessageDTO) -> String {
+        if message.type == .text { return message.text }
+        let caption = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.type.isMedia, !caption.isEmpty {
+            return "\(message.type == .video ? "🎬" : "📷") \(caption)"
+        }
+        return message.type.placeholder
+    }
 
     /// Arama: büyük/küçük harf ve aksan duyarsız, Türkçe kurallarıyla (İ/ı).
     static func matches(_ text: String, query: String) -> Bool {

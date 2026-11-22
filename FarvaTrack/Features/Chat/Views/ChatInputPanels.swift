@@ -19,12 +19,14 @@ enum ChatPanelLayout {
     static let defaultKeyboardHeight: CGFloat = 336
     static let keyboardHeightKey = "chat.keyboardHeight"
 
-    /// Yazma alanının altına eklenecek boşluk. `bottomInset`: o anki alt güvenli alan
-    /// (klavye açıkken klavye yüksekliği, kapalıyken ev çubuğu).
-    static func spacer(panel: ChatInputPanel, keyboardHeight: CGFloat, bottomInset: CGFloat) -> CGFloat {
-        guard panel != .none else { return 0 }
-        return max(0, keyboardHeight - bottomInset)
+    /// Yazma alanının ekranın altından yüksekliği: klavye, panel ve ev çubuğundan hangisi yüksekse.
+    /// Klavye inerken panel açıksa değer değişmez (yazma alanı kıpırdamaz); klavye panelin üstüne çıkarken de öyle.
+    static func lift(panel: ChatInputPanel, keyboardHeight: CGFloat, keyboardOverlap: CGFloat, homeInset: CGFloat) -> CGFloat {
+        max(keyboardOverlap, panel == .none ? 0 : keyboardHeight, homeInset)
     }
+
+    /// Klavyenin kendi hareketine çok yakın yay (UIKit klavye eğrisi).
+    static let keyboardAnimation = Animation.interpolatingSpring(mass: 3, stiffness: 1000, damping: 500, initialVelocity: 0)
 
     /// Galeri büyütülürken panel yüksekliği; parmak bırakılınca nereye oturacağı.
     enum GallerySnap: Equatable { case collapsed, expanded, closed }
@@ -88,6 +90,83 @@ final class ChatKeyboardObserver {
             }
         } else if overlap < 1 {
             isVisible = false
+        }
+    }
+}
+
+// MARK: - Klavyenin gerçek konumu
+
+/// Pencerenin `keyboardLayoutGuide`'ına bağlı görünmez bir ölçer: klavyenin ekranın altından yüksekliğini
+/// her karede bildirir (parmakla aşağı çekip kapatırken de). Animasyonlu değişimler ayrıca belirtilir.
+struct ChatKeyboardTracker: UIViewRepresentable {
+    /// `overlap`: klavyenin ekranın altından yüksekliği; `animated`: sistem animasyonu içinde mi; `homeInset`: ev çubuğu.
+    let onChange: (_ overlap: CGFloat, _ animated: Bool, _ homeInset: CGFloat) -> Void
+
+    func makeUIView(context: Context) -> AnchorView {
+        let view = AnchorView()
+        view.isUserInteractionEnabled = false
+        view.onChange = onChange
+        return view
+    }
+
+    func updateUIView(_ uiView: AnchorView, context: Context) {
+        uiView.onChange = onChange
+    }
+
+    static func dismantleUIView(_ uiView: AnchorView, coordinator: Void) {
+        uiView.detach()
+    }
+
+    final class AnchorView: UIView {
+        var onChange: ((CGFloat, Bool, CGFloat) -> Void)?
+        private var probe: ProbeView?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard let window else {
+                detach()
+                return
+            }
+            guard probe?.superview !== window else { return }
+            detach()
+            let probe = ProbeView()
+            probe.isUserInteractionEnabled = false
+            probe.alpha = 0
+            probe.translatesAutoresizingMaskIntoConstraints = false
+            window.addSubview(probe)
+            window.keyboardLayoutGuide.usesBottomSafeArea = false
+            NSLayoutConstraint.activate([
+                probe.leadingAnchor.constraint(equalTo: window.leadingAnchor),
+                probe.widthAnchor.constraint(equalToConstant: 1),
+                probe.bottomAnchor.constraint(equalTo: window.bottomAnchor),
+                probe.topAnchor.constraint(equalTo: window.keyboardLayoutGuide.topAnchor)
+            ])
+            probe.onLayout = { [weak self, weak window] height, animated in
+                self?.onChange?(height, animated, window?.safeAreaInsets.bottom ?? 0)
+            }
+            self.probe = probe
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let probe = self?.probe else { return }
+                self?.onChange?(probe.bounds.height, false, window?.safeAreaInsets.bottom ?? 0)
+            }
+        }
+
+        func detach() {
+            probe?.removeFromSuperview()
+            probe = nil
+        }
+    }
+
+    final class ProbeView: UIView {
+        var onLayout: ((CGFloat, Bool) -> Void)?
+        private var lastHeight: CGFloat = -1
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let height = bounds.height
+            guard abs(height - lastHeight) > 0.25 else { return }
+            lastHeight = height
+            onLayout?(height, UIView.inheritedAnimationDuration > 0)
         }
     }
 }

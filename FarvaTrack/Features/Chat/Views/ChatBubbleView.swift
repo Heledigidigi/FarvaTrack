@@ -95,9 +95,26 @@ struct ChatBubbleView: View {
                     onCancelUpload: onCancelUpload, onLoadThumbnail: onLoadThumbnail
                 )
                 .overlay(alignment: .bottomTrailing) {
-                    if hasFooter {
-                        footer.padding(6)
+                    if hasFooter, caption == nil {
+                        footer(floating: true).padding(6)
                     }
+                }
+                if let caption {
+                    // Fotoğrafın altına yazılan açıklama: küçük baloncuk.
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(caption)
+                            .font(.body)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if hasFooter { footer(floating: false) }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(item.isMine ? Color.ftAccent : Color.ftCardElevated,
+                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .frame(width: 250)
                 }
             } else if let sticker = message.sticker, !message.deleted {
                 ChatStickerBubbleContent(item: item, sticker: sticker, onLoad: onLoadSticker)
@@ -108,7 +125,7 @@ struct ChatBubbleView: View {
             }
 
             if hasFooter, !isBorderlessMedia {
-                footer
+                footer(floating: isSticker)
             }
         }
         .padding(contentInsets)
@@ -116,6 +133,12 @@ struct ChatBubbleView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Color.ftAccentLight, lineWidth: isHighlighted ? 2 : 0)
+        )
+        .background(
+            GeometryReader { geometry in
+                Color.clear.preference(key: ChatBubbleFramePreference.self,
+                                       value: [item.id: geometry.frame(in: .named(ChatCoordinateSpace.content))])
+            }
         )
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18, style: .continuous))
         .contextMenu { menu }
@@ -213,9 +236,15 @@ struct ChatBubbleView: View {
         .buttonStyle(.plain)
     }
 
-    private var footer: some View {
-        let floating = isSticker || isBorderlessMedia
-        return HStack(spacing: 4) {
+    /// Fotoğrafın altındaki açıklama (yoksa `nil`).
+    private var caption: String? {
+        guard isBorderlessMedia else { return nil }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : message.text
+    }
+
+    private func footer(floating: Bool) -> some View {
+        HStack(spacing: 4) {
             if message.editedAt != nil, !message.deleted {
                 Text("düzenlendi")
             }

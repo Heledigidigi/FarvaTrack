@@ -266,7 +266,8 @@ struct ChatCameraView: View {
     /// Fotoğrafa eklenebilecek kişisel stickerlar.
     var stickers: [StickerItem] = []
     /// Kalite Ayarlar → Sohbet → Veri tasarrufu'ndan seçilir (çağıran uygular).
-    let onSend: (PickedMedia) -> Void
+    /// İkinci değer fotoğrafın altına yazılan açıklama.
+    let onSend: (PickedMedia, String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var camera = ChatCameraModel()
     @State private var isPressing = false
@@ -439,7 +440,7 @@ struct ChatCameraView: View {
                 image: editorImage,
                 stickers: stickers,
                 onClose: { retake() },
-                onSend: { edited in send(media, edited: edited) },
+                onSend: { edited, caption in send(media, edited: edited, caption: caption) },
                 onSave: { edited in await save(media, edited: edited) }
             )
         } else {
@@ -525,7 +526,7 @@ struct ChatCameraView: View {
         camera.discardCapture()
     }
 
-    private func send(_ media: PickedMedia, edited: UIImage?) {
+    private func send(_ media: PickedMedia, edited: UIImage?, caption: String = "") {
         Haptics.impact(.medium)
         var outgoing = media
         if let edited, let url = ChatEditedImage.write(edited) {
@@ -534,7 +535,7 @@ struct ChatCameraView: View {
         }
         camera.releaseCapture()
         editorImage = nil
-        onSend(outgoing)
+        onSend(outgoing, caption)
         dismiss()
     }
 

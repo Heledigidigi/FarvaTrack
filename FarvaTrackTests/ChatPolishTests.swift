@@ -179,12 +179,37 @@ final class ChatLayoutHelperTests: XCTestCase {
         XCTAssertEqual(ChatTimeReveal.progress(-ChatTimeReveal.width), 1)
     }
 
-    func testPanelSpacerKeepsComposerAtKeyboardHeight() {
-        // Klavye kapalı (ev çubuğu 34): panel boşluğu + ev çubuğu = klavye yüksekliği.
-        XCTAssertEqual(ChatPanelLayout.spacer(panel: .stickers, keyboardHeight: 336, bottomInset: 34), 302)
-        // Klavye açık: boşluk yok, yazma alanı yine klavyenin üstünde.
-        XCTAssertEqual(ChatPanelLayout.spacer(panel: .gallery, keyboardHeight: 336, bottomInset: 336), 0)
-        XCTAssertEqual(ChatPanelLayout.spacer(panel: .none, keyboardHeight: 336, bottomInset: 34), 0)
+    func testComposerLiftNeverMovesWhenSwitchingBetweenKeyboardAndPanel() {
+        // Klavye açık → panele geçiş: klavye inerken (336 → 0) yazma alanı hep 336'da.
+        for overlap in stride(from: CGFloat(336), through: 0, by: -48) {
+            XCTAssertEqual(ChatPanelLayout.lift(panel: .stickers, keyboardHeight: 336, keyboardOverlap: overlap, homeInset: 34), 336)
+        }
+        // Panelden klavyeye: klavye çıkarken de aynı.
+        XCTAssertEqual(ChatPanelLayout.lift(panel: .gallery, keyboardHeight: 336, keyboardOverlap: 120, homeInset: 34), 336)
+        // Hiçbiri yoksa ev çubuğunun üstü; parmakla kapatırken klavyeyi izler.
+        XCTAssertEqual(ChatPanelLayout.lift(panel: .none, keyboardHeight: 336, keyboardOverlap: 0, homeInset: 34), 34)
+        XCTAssertEqual(ChatPanelLayout.lift(panel: .none, keyboardHeight: 336, keyboardOverlap: 200, homeInset: 34), 200)
+    }
+
+    func testSwipeReplyDirectionAndThreshold() {
+        XCTAssertEqual(ChatSwipeReply.offset(forTranslation: 40, isMine: true), 0, "kendi mesajı sağa çekilmez")
+        XCTAssertEqual(ChatSwipeReply.offset(forTranslation: -40, isMine: true), -40)
+        XCTAssertEqual(ChatSwipeReply.offset(forTranslation: -40, isMine: false), 0, "karşı tarafınki sola çekilmez")
+        XCTAssertEqual(ChatSwipeReply.offset(forTranslation: 40, isMine: false), 40)
+        XCTAssertFalse(ChatSwipeReply.isTriggered(40))
+        let far = ChatSwipeReply.offset(forTranslation: 400, isMine: false)
+        XCTAssertEqual(far, ChatSwipeReply.maximum)
+        XCTAssertTrue(ChatSwipeReply.isTriggered(far))
+        XCTAssertTrue(ChatSwipeReply.isTriggered(ChatSwipeReply.offset(forTranslation: -70, isMine: true)))
+    }
+
+    func testCaptionSummary() {
+        let photo = ChatMessageDTO(id: "p", senderID: "a", type: .image, text: "  deniz  ", createdAt: .now)
+        XCTAssertEqual(ChatText.summary(of: photo), "📷 deniz")
+        var plain = photo
+        plain.text = ""
+        XCTAssertEqual(ChatText.summary(of: plain), ChatMessageType.image.placeholder)
+        XCTAssertEqual(ChatReplyReference.make(from: photo).preview, "📷 deniz")
     }
 
     func testGallerySnapping() {
@@ -327,6 +352,22 @@ final class ChatPolishViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isFinding)
         XCTAssertEqual(sut.find.count, 0)
         XCTAssertEqual(sut.findQuery, "")
+    }
+
+    func testReplyFromViewerQuotesThePhotoWithoutTouchingDraft() async {
+        await pair()
+        let photo = ChatMessageDTO(id: "p1", senderID: "friend", type: .image, text: "", createdAt: currentTime)
+        sync.messagesHandler?([photo])
+        await settleTasks()
+        sut.draft = "yarım kalan"
+        guard let item = sut.messages.first(where: { $0.id == "p1" }) else { return XCTFail("fotoğraf yok") }
+        XCTAssertTrue(sut.sendReply("çok güzel", to: item))
+        XCTAssertFalse(sut.sendReply("   ", to: item))
+        await settleTasks()
+        await sut.flushOutbox()
+        XCTAssertEqual(sync.sent.last?.text, "çok güzel")
+        XCTAssertEqual(sync.sent.last?.replyTo?.messageID, "p1")
+        XCTAssertEqual(sut.draft, "yarım kalan")
     }
 
     func testInfoUsesLatestMessageState() async {

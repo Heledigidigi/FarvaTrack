@@ -582,7 +582,7 @@ enum ChatFirestoreMapper {
             ChatField.messageId: message.id,
             ChatField.senderId: message.senderID,
             ChatField.type: message.type.rawValue,
-            ChatField.preview: ChatText.preview(message.call.map { CallFormat.summary($0, isMine: false) } ?? (message.type == .text ? message.text : message.type.placeholder), limit: ChatLimits.replyPreviewLength),
+            ChatField.preview: ChatText.preview(message.call.map { CallFormat.summary($0, isMine: false) } ?? ChatText.summary(of: message), limit: ChatLimits.replyPreviewLength),
             ChatField.createdAt: Timestamp(date: message.createdAt)
         ]
     }

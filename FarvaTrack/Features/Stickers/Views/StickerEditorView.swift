@@ -216,11 +216,6 @@ struct StickerEditorView: View {
                 .shadow(color: overlay.kind == .text ? .black.opacity(0.45) : .clear, radius: 2)
                 .fixedSize()
                 .padding(4)
-                .overlay {
-                    if selected {
-                        RoundedRectangle(cornerRadius: 6).strokeBorder(.white, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-                    }
-                }
                 .position(
                     x: imageFrame.minX + overlay.center.x * imageFrame.width,
                     y: imageFrame.minY + overlay.center.y * imageFrame.height

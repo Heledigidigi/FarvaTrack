@@ -35,7 +35,7 @@ struct ChatMessageItem: Identifiable, Equatable {
     var displayText: String {
         if message.deleted { return "Bu mesaj silindi" }
         if let call = message.call { return CallFormat.summary(call, isMine: isMine) }
-        return message.type == .text ? message.text : message.type.placeholder
+        return ChatText.summary(of: message)
     }
 
     static func == (lhs: ChatMessageItem, rhs: ChatMessageItem) -> Bool {
@@ -694,6 +694,22 @@ final class ChatViewModel {
         scheduleFlush()
     }
 
+    /// Görüntüleyiciden: bir fotoğrafa/mesaja alıntılı yanıt (yazma alanındaki taslağa dokunmaz).
+    @discardableResult
+    func sendReply(_ rawText: String, to item: ChatMessageItem) -> Bool {
+        guard let context, let userID, let chatID = room?.id, let text = ChatText.sanitizedOutgoing(rawText) else { return false }
+        let dto = ChatMessageDTO(
+            id: makeID(), senderID: userID, type: .text, text: text, createdAt: clock(),
+            replyTo: ChatReplyReference.make(from: item.message), bubble: outgoingBubble
+        )
+        context.insert(ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending))
+        enqueue(.create, messageID: dto.id)
+        save()
+        reloadMessages()
+        scheduleFlush()
+        return true
+    }
+
     func beginReply(to item: ChatMessageItem) {
         guard !item.message.deleted else { return }
         if editing != nil { draft = "" }
@@ -1199,12 +1215,14 @@ final class ChatViewModel {
     // MARK: Medya: gönderme
 
     /// Galeriden ya da kameradan gelenleri gönderir. Önizleme cihazda üretilir; her dosya ayrı mesajdır.
-    func sendMedia(_ items: [PickedMedia], quality: ChatMediaQuality) async {
+    /// `caption`: fotoğrafın altına yazı (yalnızca ilk öğeye eklenir).
+    func sendMedia(_ items: [PickedMedia], quality: ChatMediaQuality, caption: String = "") async {
         guard let userID, let chatID = room?.id, context != nil, !items.isEmpty else { return }
         isPreparingMedia = true
         defer { isPreparingMedia = false }
         var reply = replyingTo.map { ChatReplyReference.make(from: $0.message) }
         replyingTo = nil
+        var pendingCaption = ChatText.sanitizedOutgoing(caption) ?? ""
 
         for picked in items {
             defer { files.remove([picked.fileURL]) }
@@ -1229,10 +1247,11 @@ final class ChatViewModel {
                     status: .uploading
                 )
                 let dto = ChatMessageDTO(
-                    id: messageID, senderID: userID, type: picked.kind.messageType, text: "",
+                    id: messageID, senderID: userID, type: picked.kind.messageType, text: pendingCaption,
                     createdAt: clock(), replyTo: reply, media: media
                 )
                 reply = nil
+                pendingCaption = ""
                 let record = ChatMessageRecord(dto: dto, ownerID: userID, chatID: chatID, sendState: .pending)
                 record.localOriginalName = prepared.originalFileName
                 record.localThumbnailName = prepared.thumbnailFileName

@@ -39,6 +39,8 @@ final class ChatScrollMetrics {
     var contentMinY: CGFloat = 0
     var viewportSize: CGSize = .zero
     var frames: [String: CGRect] = [:]
+    /// Yalnızca baloncukların çerçeveleri (kaydırarak yanıtlamada hangi baloncuğa dokunulduğu için).
+    var bubbleFrames: [String: CGRect] = [:]
     /// İçeriğin (mesaj sütununun) genişliği: yerleştirmelerin yatay oranı buna göre.
     var contentWidth: CGFloat = 0
 }
@@ -275,10 +277,6 @@ struct PlacementDraftView: View {
             let size = PlacementGeometry.displaySize(containerWidth: containerWidth, scale: transform.scale, aspectRatio: current.aspectRatio)
             StickerImage(url: current.imageURL)
                 .frame(width: size.width, height: size.height)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(.white.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
-                )
                 .rotationEffect(.radians(transform.rotation))
                 .shadow(color: .black.opacity(0.35), radius: 8)
                 .position(transform.center)

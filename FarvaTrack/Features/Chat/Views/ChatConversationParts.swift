@@ -20,10 +20,43 @@ enum ChatTimeReveal {
     }
 }
 
-/// Sohbetin kaydırma görünümüne yatay (sola) çekme hareketi ekler. Dikey kaydırma ve uzun basma menüsü
-/// bozulmaz: hareket yalnızca belirgin biçimde sola doğru başlarsa tanınır.
+/// Kaydırarak yanıtlama (saf, testli): kendi mesajını sola, karşı tarafınkini sağa çek.
+enum ChatSwipeReply {
+    /// Bu kadar çekilince bırakıldığında yanıtlanır.
+    static let threshold: CGFloat = 56
+    static let maximum: CGFloat = 84
+
+    /// Parmağın yatay hareketi → baloncuğun kayması (yanlış yöne gitmez, sınırdan sonra direnç gösterir).
+    static func offset(forTranslation translation: CGFloat, isMine: Bool) -> CGFloat {
+        let raw = isMine ? min(0, translation) : max(0, translation)
+        let magnitude = abs(raw)
+        let resisted = magnitude <= threshold ? magnitude : threshold + (magnitude - threshold) * 0.35
+        let clamped = min(resisted, maximum)
+        return isMine ? -clamped : clamped
+    }
+
+    static func isTriggered(_ offset: CGFloat) -> Bool { abs(offset) >= threshold }
+
+    static func progress(_ offset: CGFloat) -> Double { Double(min(abs(offset) / threshold, 1)) }
+}
+
+/// Baloncukların (yalnızca baloncuk; satırın tamamı değil) içerik koordinatındaki çerçeveleri.
+struct ChatBubbleFramePreference: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
+/// Sohbetin kaydırma görünümüne yatay çekme hareketi ekler (sola: saatler ya da kendi mesajını yanıtla;
+/// sağa: karşı tarafın mesajını yanıtla). Dikey kaydırma ve uzun basma menüsü bozulmaz: hareket yalnızca
+/// belirgin biçimde yatay başlarsa ve `shouldBegin` izin verirse tanınır. Konumlar kaydırma görünümünün
+/// görünen alanına göredir (içeriğin kayması hesaba katılmış).
 struct ChatHorizontalPanAttacher: UIViewRepresentable {
     var isEnabled: Bool
+    /// Görünen alandaki başlangıç noktası ve hız (x > 0 sağa) → hareket başlasın mı.
+    var shouldBegin: (CGPoint, CGPoint) -> Bool = { _, velocity in velocity.x < 0 }
+    var onBegan: (CGPoint, CGPoint) -> Void = { _, _ in }
     let onChanged: (CGFloat) -> Void
     let onEnded: () -> Void
 
@@ -82,8 +115,17 @@ struct ChatHorizontalPanAttacher: UIViewRepresentable {
             scrollView = nil
         }
 
+        /// Görünen alandaki konum (içeriğin kaydırma payı çıkarılmış).
+        private func visibleLocation(_ gesture: UIGestureRecognizer) -> CGPoint {
+            guard let view = gesture.view else { return .zero }
+            let point = gesture.location(in: view)
+            return CGPoint(x: point.x - view.bounds.minX, y: point.y - view.bounds.minY)
+        }
+
         @objc private func handle(_ gesture: UIPanGestureRecognizer) {
             switch gesture.state {
+            case .began:
+                parent.onBegan(visibleLocation(gesture), gesture.velocity(in: gesture.view))
             case .changed:
                 parent.onChanged(gesture.translation(in: gesture.view).x)
             case .ended, .cancelled, .failed:
@@ -96,7 +138,8 @@ struct ChatHorizontalPanAttacher: UIViewRepresentable {
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
             guard parent.isEnabled, let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
             let velocity = pan.velocity(in: pan.view)
-            return velocity.x < 0 && abs(velocity.x) > abs(velocity.y) * 1.5
+            guard abs(velocity.x) > abs(velocity.y) * 1.5 else { return false }
+            return parent.shouldBegin(visibleLocation(pan), velocity)
         }
 
         /// Yatay çekerken liste dikeyde de az da olsa kayabilir (Instagram'daki gibi); uzun basma menüsü de çalışır.

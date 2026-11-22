@@ -26,6 +26,9 @@ struct ChatMediaViewer: View {
     @State private var toast: String?
     @State private var isSaving = false
     @State private var isPreparingEdit = false
+    /// Alttaki yanıt çubuğu: bu fotoğrafı alıntılayarak mesaj.
+    @State private var replyText = ""
+    @FocusState private var replyFocused: Bool
 
     private let photoSaver: PhotoLibrarySaving = PhotoLibrarySaver()
 
@@ -70,7 +73,7 @@ struct ChatMediaViewer: View {
                 .scaleEffect(1 - min(abs(dragOffset) / 1600, 0.12))
 
                 chrome
-                    .opacity(chromeVisible && dragOffset == 0 && !isClosing ? 1 : 0)
+                    .opacity((chromeVisible || replyFocused) && dragOffset == 0 && !isClosing ? 1 : 0)
                     .animation(.easeInOut(duration: 0.2), value: chromeVisible)
                     .animation(.easeInOut(duration: 0.15), value: dragOffset == 0)
             }
@@ -84,7 +87,7 @@ struct ChatMediaViewer: View {
                 image: target.image,
                 stickers: stickers,
                 onClose: { editing = nil },
-                onSend: { edited in sendEdited(target, edited: edited) },
+                onSend: { edited, caption in sendEdited(target, edited: edited, caption: caption) },
                 onSave: { edited in await saveEdited(target, edited: edited) }
             )
         }
@@ -109,67 +112,101 @@ struct ChatMediaViewer: View {
     // MARK: Üst ve alt çubuk
 
     private var chrome: some View {
-        VStack {
-            HStack {
-                Button { close() } label: {
-                    Image(systemName: "xmark")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(Color.black.opacity(0.4), in: Circle())
-                }
-                .accessibilityLabel("Kapat")
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button { close() } label: { roundIcon("xmark") }
+                    .accessibilityLabel("Kapat")
                 Spacer()
+                if let url = currentFile {
+                    ShareLink(item: url) { roundIcon("square.and.arrow.up") }
+                        .accessibilityLabel("Paylaş")
+                } else {
+                    roundIcon("square.and.arrow.up").opacity(0.4)
+                }
+                Button { download() } label: { roundIcon(isSaving ? "hourglass" : "arrow.down.to.line") }
+                    .disabled(currentFile == nil || isSaving)
+                    .opacity(currentFile == nil ? 0.4 : 1)
+                    .accessibilityLabel("Fotoğraflar'a indir")
+                if !isVideo {
+                    Button { startEditing() } label: { roundIcon(isPreparingEdit ? "hourglass" : "slider.horizontal.3") }
+                        .disabled(currentFile == nil || isPreparingEdit)
+                        .opacity(currentFile == nil ? 0.4 : 1)
+                        .accessibilityLabel("Düzenle")
+                        .accessibilityHint("Kırp, çiz, yazı ekle; sonra indir ya da sohbete gönder")
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
             Spacer()
 
-            HStack(spacing: 0) {
-                if let url = currentFile {
-                    ShareLink(item: url) { barLabel("Paylaş", systemImage: "square.and.arrow.up") }
-                } else {
-                    barLabel("Paylaş", systemImage: "square.and.arrow.up").opacity(0.4)
-                }
-
-                Button { download() } label: {
-                    barLabel(isSaving ? "Kaydediliyor" : "İndir", systemImage: "arrow.down.to.line")
-                }
-                .disabled(currentFile == nil || isSaving)
-                .opacity(currentFile == nil ? 0.4 : 1)
-                .accessibilityLabel("Fotoğraflar'a indir")
-
-                if !isVideo {
-                    Button { startEditing() } label: {
-                        barLabel("Düzenle", systemImage: isPreparingEdit ? "hourglass" : "slider.horizontal.3")
-                    }
-                    .disabled(currentFile == nil || isPreparingEdit)
-                    .opacity(currentFile == nil ? 0.4 : 1)
-                    .accessibilityHint("Kırp, çiz, yazı ekle; sonra indir ya da sohbete gönder")
-                }
-            }
-            .padding(.vertical, 8)
-            .background(
-                LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            )
+            replyBar
         }
     }
 
-    private func barLabel(_ title: String, systemImage: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: systemImage).font(.title3)
-            Text(title).font(.caption2.weight(.semibold))
+    private func roundIcon(_ systemImage: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(width: 40, height: 40)
+            .background(Color.black.opacity(0.4), in: Circle())
+    }
+
+    /// Bu fotoğrafa alıntılı yanıt: dokununca klavye açılır, gönderince sohbete dönülür.
+    private var replyBar: some View {
+        HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 8) {
+                CachedImageView(url: current?.localThumbnailURL)
+                    .frame(width: 30, height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(.bottom, 4)
+                    .accessibilityHidden(true)
+                TextField("Yanıtla…", text: $replyText, axis: .vertical)
+                    .lineLimit(1...5)
+                    .focused($replyFocused)
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 9)
+                    .accessibilityLabel("Bu fotoğrafa yanıt yaz")
+            }
+            .padding(.leading, 6)
+            .padding(.trailing, 12)
+            .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+
+            if !replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button { sendReply() } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 42, height: 42)
+                        .background(Color.ftAccent, in: Circle())
+                }
+                .accessibilityLabel("Yanıtı gönder")
+            }
         }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, minHeight: 52)
-        .contentShape(Rectangle())
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(
+            LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+        )
+    }
+
+    private func sendReply() {
+        guard let item = current, viewModel.sendReply(replyText, to: item) else { return }
+        Haptics.impact(.light)
+        replyText = ""
+        replyFocused = false
+        dismiss()
     }
 
     // MARK: Hareketler
 
     private func toggleChrome() {
+        if replyFocused {
+            replyFocused = false
+            return
+        }
         withAnimation(.easeInOut(duration: 0.2)) { chromeVisible.toggle() }
     }
 
@@ -240,7 +277,7 @@ struct ChatMediaViewer: View {
     }
 
     /// Düzenlenmişse son hali, düzenlenmemişse orijinalin kopyası sohbete yeni mesaj olarak gider.
-    private func sendEdited(_ target: ChatEditTarget, edited: UIImage?) {
+    private func sendEdited(_ target: ChatEditTarget, edited: UIImage?, caption: String) {
         let outgoing: URL?
         if let edited {
             outgoing = ChatEditedImage.write(edited)
@@ -254,7 +291,7 @@ struct ChatMediaViewer: View {
         Haptics.impact(.medium)
         let quality = ChatMediaPreferences.sendQuality(.standard)
         let viewModel = viewModel
-        Task { await viewModel.sendMedia([PickedMedia(fileURL: outgoing, kind: .image)], quality: quality) }
+        Task { await viewModel.sendMedia([PickedMedia(fileURL: outgoing, kind: .image)], quality: quality, caption: caption) }
         editing = nil
         // Düzenleyici kapanınca görüntüleyici de kapanır; yeni mesaj sohbette görünür.
         Task {
