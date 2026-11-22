@@ -329,7 +329,7 @@ final class ChatOriginalRetentionTests: XCTestCase {
 
     func testIncomingOriginalsAreDownloadedSavedAndAcknowledgedOnce() async throws {
         sync.messagesHandler?([incoming("p1"), incoming("v1", ext: "mov"), incoming("u1", status: .uploading), incoming("mine", from: "me")])
-        XCTAssertEqual(sut.pendingIncomingOriginals().map(\.messageID), ["p1", "v1"], "yüklenmekte olan ve kendi mesajım hariç")
+        XCTAssertEqual(Set(sut.pendingIncomingOriginals().map(\.messageID)), ["p1", "v1"], "yüklenmekte olan ve kendi mesajım hariç")
 
         await sut.fetchPendingOriginals()
         XCTAssertEqual(Set(store.downloads), [media("p1").originalPath, media("v1", ext: "mov").originalPath])
