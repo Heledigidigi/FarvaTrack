@@ -17,6 +17,10 @@ enum AppError: LocalizedError, Equatable {
     case health(String)
     case invalidInput(String)
     case storage(String)
+    /// Medya sunucusu adresi yapılandırılmamış (MediaServer.plist eksik).
+    case mediaServerNotConfigured
+    /// Orijinal buluttan kaldırılmış (alındıktan 60 gün sonra ya da depolama dolunca).
+    case mediaRemoved
     case unknown(String)
 
     var errorDescription: String? {
@@ -51,6 +55,10 @@ enum AppError: LocalizedError, Equatable {
             return message
         case .storage(let message):
             return "Dosya işlemi başarısız: \(message)"
+        case .mediaServerNotConfigured:
+            return "Medya sunucusu ayarlanmamış. Fotoğraf, ses ve sticker gönderimi için kurulumu tamamla."
+        case .mediaRemoved:
+            return "Bu dosya artık bulutta yok. Orijaller, karşı taraf aldıktan sonra yer açmak için buluttan kaldırılır."
         case .unknown(let message):
             return "Beklenmeyen bir hata oluştu: \(message)"
         }

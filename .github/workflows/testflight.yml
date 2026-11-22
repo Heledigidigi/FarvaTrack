@@ -55,6 +55,22 @@ jobs:
           plutil -lint FarvaTrack/Resources/GoogleService-Info.plist
           echo "KEY_PATH=$RUNNER_TEMP/keys/AuthKey_${KEY_ID}.p8" >> "$GITHUB_ENV"
 
+      - name: Medya sunucusu adresi (MEDIA_SERVER_URL degiskeni)
+        env:
+          MEDIA_SERVER_URL: ${{ vars.MEDIA_SERVER_URL }}
+        run: |
+          mkdir -p FarvaTrack/Resources
+          if [ -z "$MEDIA_SERVER_URL" ]; then
+            echo "::warning::MEDIA_SERVER_URL degiskeni yok. Fotograf, ses ve sticker gonderimi 'Medya sunucusu ayarlanmamis' hatasi verecek."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os, plistlib
+          url = os.environ["MEDIA_SERVER_URL"].strip().rstrip("/")
+          with open("FarvaTrack/Resources/MediaServer.plist", "wb") as f:
+              plistlib.dump({"URL": url}, f)
+          PY
+
       - name: Projeyi Uret
         run: xcodegen generate
 

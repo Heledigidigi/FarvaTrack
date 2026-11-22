@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(\.modelContext) private var modelContext
 
+    @AppStorage(ChatMediaPreferences.autoSaveKey) private var autoSaveChatMedia = true
     @State private var exportURL: URL?
     @State private var exportError: String?
 
@@ -42,6 +43,23 @@ struct SettingsView: View {
                     } label: {
                         Label("Hatırlatıcılar", systemImage: "bell.badge.fill")
                     }
+                }
+                .listRowBackground(Color.ftCard)
+
+                Section {
+                    Toggle(isOn: $autoSaveChatMedia) {
+                        Label("Gelen fotoğraf ve videoları Fotoğraflar'a kaydet", systemImage: "photo.on.rectangle.angled")
+                    }
+                    .tint(Color.ftAccent)
+                    NavigationLink {
+                        ChatStorageView()
+                    } label: {
+                        Label("Bulut depolaması", systemImage: "externaldrive.fill.badge.icloud")
+                    }
+                } header: {
+                    Text("Sohbet")
+                } footer: {
+                    Text("Açıkken karşı taraftan gelen fotoğraf ve videolar orijal kalitesinde Fotoğraflar'a eklenir.")
                 }
                 .listRowBackground(Color.ftCard)
 

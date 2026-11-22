@@ -123,13 +123,24 @@ final class ChatViewModel {
     private var uploadBackoff: [String: Date] = [:]
     static let uploadRetryDelay: TimeInterval = 20
     private var retryTimer: Task<Void, Never>?
+    private let defaults: UserDefaults
+    private let photoSaver: PhotoLibrarySaving
+    /// Alıcı cihaz gelen orijalleri kendiliğinden indirir (bulut kopyası 60 gün sonra silinir).
+    /// Uygulamada açık; testlerde ayrıca açılır.
+    private let autoFetchOriginals: Bool
+    private var originalFetchTask: Task<Void, Never>?
+    private var originalFetchRequested = false
+    /// Aynı orijal için eşzamanlı indirmeler (otomatik + görüntüleyici) tek indirmede birleşir.
+    private var originalLoads: [String: Task<URL, Error>] = [:]
 
     init(
         sync: ChatSyncing = ChatService(),
-        mediaStore: ChatMediaStoring = ChatMediaStorage(),
+        mediaStore: ChatMediaStoring = MediaServerClient(),
         processor: ChatMediaProcessing = ChatMediaProcessor(),
         files: ChatMediaFiles = .live,
         defaults: UserDefaults = .standard,
+        photoSaver: PhotoLibrarySaving = PhotoLibrarySaver(),
+        autoFetchOriginals: Bool = false,
         clock: @escaping () -> Date = { .now },
         makeID: @escaping () -> String = { UUID().uuidString }
     ) {
@@ -137,6 +148,9 @@ final class ChatViewModel {
         self.mediaStore = mediaStore
         self.processor = processor
         self.files = files
+        self.defaults = defaults
+        self.photoSaver = photoSaver
+        self.autoFetchOriginals = autoFetchOriginals
         self.roomCache = ChatRoomCache(defaults: defaults)
         self.clock = clock
         self.makeID = makeID
@@ -202,6 +216,11 @@ final class ChatViewModel {
         // Oturum kapanınca hiçbir arka plan görevi eski veritabanına dokunmasın.
         retryTimer?.cancel()
         retryTimer = nil
+        originalFetchTask?.cancel()
+        originalFetchTask = nil
+        originalFetchRequested = false
+        originalLoads.values.forEach { $0.cancel() }
+        originalLoads = [:]
         typingTask?.cancel()
         typingTask = nil
         uploadTasks.values.forEach { $0.cancel() }
@@ -252,6 +271,7 @@ final class ChatViewModel {
         uploadBackoff = [:]
         await flushOutbox()
         await syncPlacements()
+        scheduleOriginalFetch()
     }
 
     /// Ekrandaki zamana bağlı bilgiler ("yazıyor…", düzenleme süresi) için periyodik yenileme.
@@ -369,6 +389,7 @@ final class ChatViewModel {
         upsert(items, chatID: chatID)
         reloadMessages()
         markVisibleAsRead()
+        scheduleOriginalFetch()
     }
 
     /// Sunucudan gelenleri önbelleğe yazar. Kuyrukta bekleyen yerel değişiklik varsa yerel hal kazanır;
@@ -1074,7 +1095,7 @@ final class ChatViewModel {
         guard let ext = originalExtension(of: record) else { return }
         let fm = FileManager.default
         if let name = record.localOriginalName {
-            let target = files.cachedOriginalURL(messageID: record.messageID, fileExtension: ext)
+            let target = files.originalURL(messageID: record.messageID, fileExtension: ext)
             try? fm.removeItem(at: target)
             try? fm.moveItem(at: files.outgoingURL(named: name), to: target)
         }
@@ -1158,7 +1179,7 @@ final class ChatViewModel {
         } else {
             throw AppError.storage("Bu mesajda dosya yok.")
         }
-        let destination = files.cachedOriginalURL(messageID: item.id, fileExtension: ext)
+        let destination = files.originalURL(messageID: item.id, fileExtension: ext)
         if files.exists(destination) { return destination }
         downloadProgress[item.id] = 0
         defer { downloadProgress[item.id] = nil }
@@ -1411,7 +1432,7 @@ final class ChatViewModel {
     /// Yerleştirmenin PNG'si: cihazda yoksa indirilir.
     func loadPlacementImage(_ item: ChatPlacementItem) async -> URL? {
         if let url = item.localImageURL { return url }
-        let destination = files.cachedOriginalURL(messageID: "placement-\(item.id)", fileExtension: ChatStickerPath.fileExtension)
+        let destination = files.originalURL(messageID: "placement-\(item.id)", fileExtension: ChatStickerPath.fileExtension)
         if files.exists(destination) { return destination }
         do {
             try await mediaStore.download(path: item.placement.sticker.path, to: destination, progress: { _ in })
@@ -1424,20 +1445,20 @@ final class ChatViewModel {
 
     private func placementImageURL(_ record: ChatPlacementRecord) -> URL? {
         if let name = record.localFileName, files.exists(files.outgoingURL(named: name)) { return files.outgoingURL(named: name) }
-        let cached = files.cachedOriginalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)
+        let cached = files.originalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)
         return files.exists(cached) ? cached : nil
     }
 
     private func movePlacementFileToCache(_ record: ChatPlacementRecord) {
         guard let name = record.localFileName else { return }
-        let target = files.cachedOriginalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)
+        let target = files.originalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)
         try? FileManager.default.removeItem(at: target)
         try? FileManager.default.moveItem(at: files.outgoingURL(named: name), to: target)
         record.localFileName = nil
     }
 
     private func removePlacementFiles(_ record: ChatPlacementRecord) {
-        var urls = [files.cachedOriginalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)]
+        var urls = [files.originalURL(messageID: "placement-\(record.placementID)", fileExtension: ChatStickerPath.fileExtension)]
         if let name = record.localFileName { urls.append(files.outgoingURL(named: name)) }
         files.remove(urls)
     }
@@ -1471,7 +1492,7 @@ final class ChatViewModel {
             return files.outgoingURL(named: name)
         }
         guard let ext = originalExtension(of: record) else { return nil }
-        let cached = files.cachedOriginalURL(messageID: record.messageID, fileExtension: ext)
+        let cached = files.originalURL(messageID: record.messageID, fileExtension: ext)
         return files.exists(cached) ? cached : nil
     }
 
@@ -1509,21 +1530,109 @@ final class ChatViewModel {
         guard media.status == .ready else {
             throw AppError.storage("Dosya hâlâ gönderiliyor, biraz sonra tekrar dene.")
         }
-        let destination = files.cachedOriginalURL(messageID: item.id, fileExtension: media.fileExtension)
+        if cachedRecord(for: item.id)?.originalUnavailable == true { throw AppError.mediaRemoved }
+        return try await fetchOriginal(messageID: item.id, media: media)
+    }
+
+    /// Orijali kalıcı klasöre indirir; aynı anda gelen istekler tek indirmeyi bekler.
+    private func fetchOriginal(messageID: String, media: ChatMedia) async throws -> URL {
+        let destination = files.originalURL(messageID: messageID, fileExtension: media.fileExtension)
         if files.exists(destination) { return destination }
-        downloadProgress[item.id] = 0
-        defer { downloadProgress[item.id] = nil }
-        try await mediaStore.download(path: media.originalPath, to: destination, progress: { [weak self] value in
-            self?.downloadProgress[item.id] = value
-        })
-        reloadMessages()
-        return destination
+        if let running = originalLoads[messageID] { return try await running.value }
+        let task = Task<URL, Error> { [weak self] in
+            guard let self else { throw CancellationError() }
+            self.downloadProgress[messageID] = 0
+            defer { self.downloadProgress[messageID] = nil }
+            try await self.mediaStore.download(path: media.originalPath, to: destination, progress: { [weak self] value in
+                self?.downloadProgress[messageID] = value
+            })
+            return destination
+        }
+        originalLoads[messageID] = task
+        defer { originalLoads[messageID] = nil }
+        do {
+            let url = try await task.value
+            reloadMessages()
+            return url
+        } catch {
+            if AppError.map(error) == .mediaRemoved, let record = cachedRecord(for: messageID) {
+                record.originalUnavailable = true
+                save()
+            }
+            throw error
+        }
+    }
+
+    // MARK: Gelen orijallerin cihaza alınması
+
+    /// Gelen fotoğraf/videoların orijallerini arka planda sırayla indirir, sunucuya "aldım" der
+    /// ve ayar açıksa Fotoğraflar'a kaydeder. Bulut, ancak bundan sonra orijali temizleyebilir.
+    func scheduleOriginalFetch() {
+        guard autoFetchOriginals, context != nil else { return }
+        guard originalFetchTask == nil else {
+            originalFetchRequested = true
+            return
+        }
+        originalFetchTask = Task { [weak self] in
+            await self?.fetchPendingOriginals()
+            guard let self else { return }
+            self.originalFetchTask = nil
+            if self.originalFetchRequested {
+                self.originalFetchRequested = false
+                self.scheduleOriginalFetch()
+            }
+        }
+    }
+
+    /// Alınmayı bekleyen gelen orijaller (eskiden yeniye).
+    func pendingIncomingOriginals() -> [ChatMessageRecord] {
+        guard let context, let userID, let chatID = room?.id else { return [] }
+        let descriptor = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate {
+                $0.ownerID == userID && $0.chatID == chatID && $0.senderID != userID
+                    && !$0.deletedForEveryone && $0.mediaData != nil && !$0.originalAcked && !$0.originalUnavailable
+            },
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        return ((try? context.fetch(descriptor)) ?? []).filter { $0.media?.status == .ready }
+    }
+
+    func fetchPendingOriginals() async {
+        for record in pendingIncomingOriginals() {
+            guard !Task.isCancelled, context != nil, let media = record.media else { return }
+            let messageID = record.messageID
+            let destination = files.originalURL(messageID: messageID, fileExtension: media.fileExtension)
+            let alreadyLocal = files.exists(destination)
+            let url: URL
+            do {
+                url = try await fetchOriginal(messageID: messageID, media: media)
+            } catch {
+                // Ağ yoksa sonraki fırsata kalır; buluttan silinmişse kayıt işaretlendi.
+                if AppError.map(error) == .network { return }
+                continue
+            }
+            guard let current = cachedRecord(for: messageID), !current.deletedForEveryone else { continue }
+
+            // Yalnızca bu adımda yeni indirilen dosyalar kaydedilir (eski indirilmişler Fotoğraflar'ı doldurmasın).
+            if !alreadyLocal, !current.savedToPhotos, ChatMediaPreferences.autoSaveToPhotos(defaults) {
+                try? await photoSaver.save(fileURL: url, isVideo: media.contentType.hasPrefix("video/"))
+                current.savedToPhotos = true
+                save()
+            }
+            do {
+                try await mediaStore.acknowledge(path: media.originalPath)
+                cachedRecord(for: messageID)?.originalAcked = true
+                save()
+            } catch {
+                if AppError.map(error) == .network { return }
+            }
+        }
     }
 
     private func removeLocalFiles(of record: ChatMessageRecord) {
         var urls: [URL] = [files.cachedThumbnailURL(messageID: record.messageID)]
         if let ext = originalExtension(of: record) {
-            urls.append(files.cachedOriginalURL(messageID: record.messageID, fileExtension: ext))
+            urls.append(files.originalURL(messageID: record.messageID, fileExtension: ext))
         }
         if let name = record.localOriginalName { urls.append(files.outgoingURL(named: name)) }
         if let name = record.localThumbnailName { urls.append(files.outgoingURL(named: name)) }

@@ -1,0 +1,91 @@
+name: Medya sunucusu (Cloudflare)
+
+# Worker'ı ve R2 kovasını Cloudflare'e dağıtır.
+# Gerekenler (Settings → Secrets and variables → Actions → Secrets):
+#   CLOUDFLARE_API_TOKEN   "Edit Cloudflare Workers" şablonu + "Workers R2 Storage: Edit" izni
+#   CLOUDFLARE_ACCOUNT_ID  Cloudflare panelinde hesap kimliği
+#   GOOGLE_SERVICE_INFO_PLIST (zaten var) → Firebase proje kimliği buradan okunur.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths: [ "cloudflare/media-worker/**", ".github/workflows/media-worker.yml" ]
+  workflow_dispatch:
+
+concurrency:
+  group: media-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: cloudflare/media-worker
+
+    steps:
+      - name: Kodlari Cek
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Testler
+        run: node --test test/*.test.js
+
+      - name: Secret'lari kontrol et
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GSI: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          missing=""
+          [ -z "$CF_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
+          [ -z "$CF_ACCOUNT" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
+          [ -z "$GSI" ] && missing="$missing GOOGLE_SERVICE_INFO_PLIST"
+          if [ -n "$missing" ]; then
+            echo "::error::Eksik secret'lar:$missing"
+            exit 1
+          fi
+
+      - name: Firebase proje kimligi
+        id: firebase
+        env:
+          GSI: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import base64, os, plistlib
+          raw = os.environ["GSI"].strip()
+          data = raw.encode() if raw.startswith("<") else base64.b64decode(raw)
+          print("project_id=" + plistlib.loads(data)["PROJECT_ID"])
+          PY
+
+      - name: R2 kovasi (yoksa olustur)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if npx --yes wrangler@4 r2 bucket list 2>/dev/null | grep -q "farvatrack-media"; then
+            echo "Kova zaten var."
+          else
+            npx --yes wrangler@4 r2 bucket create farvatrack-media
+          fi
+
+      - name: Dagit
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          npx --yes wrangler@4 deploy --var "FIREBASE_PROJECT_ID:${{ steps.firebase.outputs.project_id }}" 2>&1 | tee deploy.log
+          url=$(grep -oE "https://[a-z0-9.-]+\.workers\.dev" deploy.log | head -1)
+          {
+            echo "### Medya sunucusu dağıtıldı"
+            echo ""
+            echo "Adres: \`$url\`"
+            echo ""
+            echo "Bu adresi **Settings → Secrets and variables → Actions → Variables** altında \`MEDIA_SERVER_URL\` adıyla kaydet (bir kez)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Medya sunucusu adresi: $url"

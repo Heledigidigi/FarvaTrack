@@ -2,7 +2,6 @@ import Foundation
 import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore
-import FirebaseStorage
 
 // MARK: - Başlatma
 /// Firebase'i yalnızca `GoogleService-Info.plist` pakette varsa başlatır.
@@ -78,7 +77,6 @@ final class FirebaseManager: FirebaseServicing {
     // Tembel erişim: Firebase yalnızca başlatıldıktan sonra kullanılır.
     private var auth: Auth { Auth.auth() }
     private var db: Firestore { Firestore.firestore() }
-    var storage: Storage { Storage.storage() }
 
     var currentUserID: String? {
         FirebaseBootstrap.isConfigured ? auth.currentUser?.uid : nil
@@ -173,18 +171,18 @@ final class FirebaseManager: FirebaseServicing {
         }
     }
 
-    // MARK: Storage
+    // MARK: Profil fotoğrafı (medya sunucusu)
+    /// Her yüklemede yeni, tahmin edilemez bir ad verilir; sunucu eskisini siler. Avatar herkese açık adresten okunur.
     func uploadProfileImage(_ data: Data, uid: String) async throws -> URL {
         try ensureConfigured()
-        do {
-            let ref = storage.reference().child("\(Constants.StoragePath.profileImages)/\(uid).jpg")
-            let metadata = StorageMetadata()
-            metadata.contentType = "image/jpeg"
-            _ = try await ref.putDataAsync(data, metadata: metadata)
-            return try await ref.downloadURL()
-        } catch {
-            throw AppError.storage(error.localizedDescription)
-        }
+        let media = MediaServerClient()
+        let path = "\(Constants.StoragePath.profileImages)/\(uid)/\(UUID().uuidString.lowercased()).jpg"
+        guard let url = media.publicURL(for: path) else { throw AppError.mediaServerNotConfigured }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("profile-\(UUID().uuidString).jpg")
+        try data.write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        try await media.upload(fileURL: file, to: path, contentType: "image/jpeg", senderID: uid, progress: { _ in })
+        return url
     }
 
     // MARK: Hesap yönetimi
@@ -224,8 +222,8 @@ final class FirebaseManager: FirebaseServicing {
         // Baloncuk çizimleri ve sticker süslemeleri.
         try? await BubbleService().purge(userID: uid)
 
-        // Profil fotoğrafı yoksa ya da Storage kurulmadıysa hata yok sayılır.
-        try? await storage.reference().child("\(Constants.StoragePath.profileImages)/\(uid).jpg").delete()
+        // Profil fotoğrafı yoksa ya da medya sunucusu kurulmadıysa hata yok sayılır.
+        try? await MediaServerClient().deletePrefix("\(Constants.StoragePath.profileImages)/\(uid)/")
 
         try await perform {
             try await userDocument.delete()

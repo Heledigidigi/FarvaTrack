@@ -13,3 +13,10 @@ ci-out/
 
 # Firebase yapılandırması: GitHub Secret olarak tutulur, repoya eklenmez
 FarvaTrack/Resources/GoogleService-Info.plist
+
+# Medya sunucusu adresi: CI, GitHub değişkeni MEDIA_SERVER_URL'den yazar
+FarvaTrack/Resources/MediaServer.plist
+
+# Medya sunucusu (Cloudflare Worker)
+cloudflare/media-worker/node_modules/
+cloudflare/media-worker/.wrangler/

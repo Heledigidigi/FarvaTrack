@@ -1,6 +1,5 @@
 import Foundation
 import FirebaseFirestore
-import FirebaseStorage
 
 /// Baloncuk stillerinin sunucu işlemleri. Belge: `users/{uid}/bubbles/{styleId}` (`json`, `version`, `updatedAt`);
 /// dosyalar: `users/{uid}/bubbles/{styleId}/{assetId}.png`. Sohbet arkadaşı okuyabilir, yalnızca sahibi yazar.
@@ -33,7 +32,7 @@ enum BubblePath {
 final class BubbleService: BubbleSyncing {
     private let media: ChatMediaStoring
 
-    init(media: ChatMediaStoring = ChatMediaStorage()) {
+    init(media: ChatMediaStoring = MediaServerClient()) {
         self.media = media
     }
 
@@ -91,22 +90,14 @@ final class BubbleService: BubbleSyncing {
     func delete(styleID: String, userID: String) async throws {
         do {
             try await collection(userID).document(styleID).delete()
-            if FirebaseBootstrap.isConfigured {
-                let folder = Storage.storage().reference(withPath: BubblePath.document(userID: userID, styleID: styleID))
-                for item in (try? await folder.listAll().items) ?? [] { try? await item.delete() }
-            }
+            try? await media.deletePrefix(BubblePath.document(userID: userID, styleID: styleID) + "/")
         } catch {
             throw AppError.map(error)
         }
     }
 
     func purge(userID: String) async throws {
-        guard FirebaseBootstrap.isConfigured else { return }
-        let root = Storage.storage().reference(withPath: BubblePath.folder(userID: userID))
-        let list = try await root.listAll()
-        for prefix in list.prefixes {
-            for item in (try? await prefix.listAll().items) ?? [] { try? await item.delete() }
-        }
+        try await media.deletePrefix(BubblePath.folder(userID: userID) + "/")
     }
 
     /// Belge → stil; JSON'daki kimlik belge kimliğiyle, sürüm belge alanıyla eşitlenir.

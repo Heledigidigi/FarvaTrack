@@ -69,6 +69,18 @@ final class MockMediaStore: ChatMediaStoring {
     func delete(paths: [String]) async {
         deletedPaths.append(contentsOf: paths)
     }
+
+    private(set) var acknowledged: [String] = []
+    /// "Aldım" bildirimine bir kez fırlatılacak hata.
+    var ackFailure: Error?
+
+    func acknowledge(path: String) async throws {
+        if let error = ackFailure {
+            ackFailure = nil
+            throw error
+        }
+        acknowledged.append(path)
+    }
 }
 
 final class MockMediaProcessor: ChatMediaProcessing {

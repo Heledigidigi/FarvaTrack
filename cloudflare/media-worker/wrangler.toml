@@ -1,0 +1,14 @@
+# FarvaTrack medya sunucusu (Cloudflare Worker + R2).
+# Dağıtım: .github/workflows/media-worker.yml (FIREBASE_PROJECT_ID, GoogleService-Info.plist secret'ından okunur).
+name = "farvatrack-media"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "farvatrack-media"
+
+# Her gün 03:17 UTC: 60 gün / 10 GB temizliği.
+[triggers]
+crons = ["17 3 * * *"]

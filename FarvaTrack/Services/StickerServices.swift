@@ -2,7 +2,6 @@ import Foundation
 import CoreGraphics
 import CoreVideo
 import Vision
-import FirebaseStorage
 
 // MARK: - Arka plan kaldırma
 
@@ -109,7 +108,7 @@ final class StickerService: StickerSyncing {
     private let client = FirestoreCollectionClient(collectionName: Constants.Collection.stickers)
     private let media: ChatMediaStoring
 
-    init(media: ChatMediaStoring = ChatMediaStorage()) {
+    init(media: ChatMediaStoring = MediaServerClient()) {
         self.media = media
     }
 
@@ -133,9 +132,6 @@ final class StickerService: StickerSyncing {
     }
 
     func purge(userID: String) async throws {
-        guard FirebaseBootstrap.isConfigured else { return }
-        let folder = Storage.storage().reference(withPath: "\(Constants.Collection.users)/\(userID)/\(Constants.Collection.stickers)")
-        let list = try await folder.listAll()
-        for item in list.items { try? await item.delete() }
+        try await media.deletePrefix("\(Constants.Collection.users)/\(userID)/\(Constants.Collection.stickers)/")
     }
 }

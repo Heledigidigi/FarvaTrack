@@ -15,7 +15,7 @@ struct MainTabView: View {
     /// Salonda yarım kalan antrenman sekmeler arası ve uygulama yeniden açılınca korunur.
     @State private var liveWorkout = LiveWorkoutViewModel()
     /// Sohbet dinleyicileri sekmeler arasında açık kalsın (okunmamış rozeti, bekleyen gönderimler).
-    @State private var chatViewModel = ChatViewModel()
+    @State private var chatViewModel = ChatViewModel(autoFetchOriginals: true)
 
     init() {
         // Koyu, opak sekme çubuğu

@@ -1,6 +1,5 @@
 import Foundation
 import FirebaseFirestore
-import FirebaseStorage
 
 /// Anlık dinleyici aboneliği; `cancel()` dinlemeyi bırakır.
 final class ChatSubscription {
@@ -399,23 +398,12 @@ final class ChatService: ChatSyncing {
         do {
             let rooms = try await chats().whereField(ChatField.members, arrayContains: userID).getDocuments()
             for room in rooms.documents {
+                // Önce dosyalar: sunucu üyeliği Firestore'daki oda belgesinden doğruladığı için oda silinmeden.
+                try? await MediaServerClient().deletePrefix("\(Constants.Collection.chats)/\(room.documentID)/")
                 let collection = room.reference.collection(Constants.Collection.chatMessages)
                 while true {
                     let page = try await collection.limit(to: 300).getDocuments()
                     guard !page.documents.isEmpty else { break }
-                    // Önce Storage'daki fotoğraf/videolar (kurallar üyeliği Firestore'dan okuduğu için oda silinmeden).
-                    for document in page.documents {
-                        if let media = ChatMediaFields.decode(document.data()[ChatField.media]) {
-                            try? await Storage.storage().reference(withPath: media.originalPath).delete()
-                            try? await Storage.storage().reference(withPath: media.thumbnailPath).delete()
-                        }
-                        if let audio = ChatAudioFields.decode(document.data()[ChatField.audio]) {
-                            try? await Storage.storage().reference(withPath: audio.path).delete()
-                        }
-                        if let sticker = ChatStickerFields.decode(document.data()[ChatField.sticker]) {
-                            try? await Storage.storage().reference(withPath: sticker.path).delete()
-                        }
-                    }
                     let batch = try db.batch()
                     page.documents.forEach { batch.deleteDocument($0.reference) }
                     try await batch.commit()
@@ -423,9 +411,6 @@ final class ChatService: ChatSyncing {
                 // Sohbet üstüne bırakılan sticker'lar (belge + dosya).
                 let placements = try await room.reference.collection(Constants.Collection.chatPlacements).getDocuments()
                 for placement in placements.documents {
-                    if let sticker = ChatStickerFields.decode(placement.data()[ChatField.sticker]) {
-                        try? await Storage.storage().reference(withPath: sticker.path).delete()
-                    }
                     try await placement.reference.delete()
                 }
                 try await room.reference.delete()

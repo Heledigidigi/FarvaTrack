@@ -48,6 +48,28 @@ jobs:
           PY
           plutil -lint FarvaTrack/Resources/GoogleService-Info.plist
 
+      - name: Medya sunucusu adresi (MEDIA_SERVER_URL degiskeni)
+        env:
+          MEDIA_SERVER_URL: ${{ vars.MEDIA_SERVER_URL }}
+        run: |
+          mkdir -p FarvaTrack/Resources
+          if [ -z "$MEDIA_SERVER_URL" ]; then
+            echo "::warning::MEDIA_SERVER_URL degiskeni yok. Fotograf, ses ve sticker gonderimi 'Medya sunucusu ayarlanmamis' hatasi verecek."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os, plistlib
+          url = os.environ["MEDIA_SERVER_URL"].strip().rstrip("/")
+          with open("FarvaTrack/Resources/MediaServer.plist", "wb") as f:
+              plistlib.dump({"URL": url}, f)
+          PY
+
+      - name: Medya sunucusu testleri (Node)
+        id: worker_test
+        continue-on-error: true
+        working-directory: cloudflare/media-worker
+        run: node --test test/*.test.js 2>&1 | tee ../../worker-test.log
+
       - name: Projeyi Uret
         run: xcodegen generate
 
@@ -126,21 +148,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BUILD_OUTCOME: ${{ steps.build.outcome }}
           TEST_OUTCOME: ${{ steps.test.outcome }}
+          WORKER_OUTCOME: ${{ steps.worker_test.outcome }}
         run: |
           mkdir -p ci-out
-          touch build.log test.log
+          touch build.log test.log worker-test.log
           {
             echo "branch: $GITHUB_REF_NAME"
             echo "commit: $GITHUB_SHA"
             echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "build: $BUILD_OUTCOME"
             echo "test: ${TEST_OUTCOME:-skipped}"
+            echo "worker-test: ${WORKER_OUTCOME:-skipped}"
             echo "time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           } > ci-out/STATUS.txt
           grep -nE "error:|\*\* (BUILD|TEST) (SUCCEEDED|FAILED)" build.log | head -400 > ci-out/build-errors.txt || true
           grep -nE "error:|failed|\*\* TEST (SUCCEEDED|FAILED)|Executed [0-9]+ test" test.log | head -400 > ci-out/test-summary.txt || true
           tail -c 3000000 build.log > ci-out/build.log
           tail -c 3000000 test.log > ci-out/test.log
+          cp worker-test.log ci-out/worker-test.log
           cd ci-out
           git init -q -b ci-logs
           git config user.name "farvatrack-ci"
@@ -152,7 +177,7 @@ jobs:
       - name: Sonuc
         if: always()
         run: |
-          echo "Derleme: ${{ steps.build.outcome }} | Test: ${{ steps.test.outcome }}"
-          if [ "${{ steps.build.outcome }}" != "success" ] || [ "${{ steps.test.outcome }}" != "success" ]; then
+          echo "Derleme: ${{ steps.build.outcome }} | Test: ${{ steps.test.outcome }} | Worker: ${{ steps.worker_test.outcome }}"
+          if [ "${{ steps.build.outcome }}" != "success" ] || [ "${{ steps.test.outcome }}" != "success" ] || [ "${{ steps.worker_test.outcome }}" != "success" ]; then
             exit 1
           fi

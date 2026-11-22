@@ -191,8 +191,20 @@ struct ChatMediaFiles {
         cacheDirectory.appendingPathComponent("\(messageID)-thumb.jpg")
     }
 
-    func cachedOriginalURL(messageID: String, fileExtension: String) -> URL {
-        cacheDirectory.appendingPathComponent("\(messageID).\(ChatMediaPath.sanitizedExtension(fileExtension))")
+    /// İndirilen ve gönderilen orijaller kalıcı klasörde tutulur: buluttaki kopya 60 gün sonra silinebilir,
+    /// iOS'un yer açmak için temizlediği önbellekte durmamalı.
+    var originalsDirectory: URL { ensure(persistentRoot.appendingPathComponent("originals", isDirectory: true)) }
+
+    /// Orijal dosyanın kalıcı konumu. Eski sürümün önbelleğe indirdiği dosya varsa buraya taşınır.
+    func originalURL(messageID: String, fileExtension: String) -> URL {
+        let name = "\(messageID).\(ChatMediaPath.sanitizedExtension(fileExtension))"
+        let url = originalsDirectory.appendingPathComponent(name)
+        let legacy = cacheRoot.appendingPathComponent(name)
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: url.path), fm.fileExists(atPath: legacy.path) {
+            try? fm.moveItem(at: legacy, to: url)
+        }
+        return url
     }
 
     func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }

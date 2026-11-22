@@ -51,6 +51,12 @@ final class ChatMessageRecord {
     var stickerData: Data?
     /// `ChatBubbleRef` JSON'u (8F).
     var bubbleData: Data?
+    /// Alıcı cihaz: orijal indirildi ve sunucuya "aldım" denildi (bulut temizliği buna bakar).
+    var originalAcked: Bool = false
+    /// Alıcı cihaz: otomatik Fotoğraflar'a kaydetme denendi (bir kez).
+    var savedToPhotos: Bool = false
+    /// Orijal buluttan kaldırılmış ve cihazda yok: yeniden indirilmeye çalışılmaz.
+    var originalUnavailable: Bool = false
 
     init(dto: ChatMessageDTO, ownerID: String, chatID: String, sendState: ChatSendState) {
         self.key = ChatMessageRecord.key(ownerID: ownerID, messageID: dto.id)

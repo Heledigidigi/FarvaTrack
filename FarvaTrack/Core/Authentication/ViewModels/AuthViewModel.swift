@@ -260,7 +260,7 @@ final class AuthViewModel {
             await persist(user)
             return true
         } catch {
-            errorMessage = "Fotoğraf yüklenemedi. Firebase Storage kurulu olmayabilir. (\(AppError.map(error).errorDescription ?? ""))"
+            errorMessage = "Fotoğraf yüklenemedi. \(AppError.map(error).errorDescription ?? "")"
             Haptics.error()
             return false
         }
