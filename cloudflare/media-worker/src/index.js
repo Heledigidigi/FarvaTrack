@@ -187,8 +187,8 @@ export async function handle(request, env, deps = defaultDeps) {
     if (!(await authorize({ op: 'read', parsed, uid, ...ctx }))) return fail(403, 'İzin yok');
     const head = await env.BUCKET.head(key);
     if (!head) return fail(404, 'Dosya bulunamadı');
-    // Gönderen kendi dosyasını "aldım" diye işaretleyemez.
-    if (head.customMetadata?.senderId === uid) return json({ ok: true, ignored: true });
+    // Gönderen kendi dosyasını "aldım" diye işaretleyemez; not sohbetinde (`uid_uid`) alıcı da kendisidir.
+    if (head.customMetadata?.senderId === uid && parsed.chatId !== `${uid}_${uid}`) return json({ ok: true, ignored: true });
     await env.BUCKET.put(ACK_PREFIX + key, new Uint8Array(0), { customMetadata: { by: uid } });
     return json({ ok: true });
   }

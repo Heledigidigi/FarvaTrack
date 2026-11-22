@@ -36,7 +36,7 @@ enum LocalDataCleaner {
             defaults.removeObject(forKey: "pending\(scope)Deletes.\(ownerID)")
         }
         UserDefaultsLiveSessionStore(defaults: defaults).clear(userID: ownerID)
-        ChatRoomCache(defaults: defaults).clear(userID: ownerID)
+        for kind in ChatRoomKind.allCases { ChatRoomCache(defaults: defaults, kind: kind).clear(userID: ownerID) }
         StickerRecents(defaults: defaults, userID: ownerID).clear()
         defaults.removeObject(forKey: "chat.bubble.selected.\(ownerID)")
         BubbleFiles.live.removeAll()

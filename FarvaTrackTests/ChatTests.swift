@@ -29,6 +29,8 @@ final class MockChatSync: ChatSyncing {
 
     var roomHandler: (@MainActor (ChatRoomDTO?, Bool) -> Void)?
     var messagesHandler: (@MainActor ([ChatMessageDTO]) -> Void)?
+    /// Oda kimliğine göre (iki oda aynı sahte servisi paylaşırsa).
+    var messageHandlers: [String: @MainActor ([ChatMessageDTO]) -> Void] = [:]
 
     private func write() throws {
         if isOffline { throw AppError.network }
@@ -42,7 +44,13 @@ final class MockChatSync: ChatSyncing {
         return try redeemResult.get()
     }
 
-    func observeRoom(userID: String, onChange: @escaping @MainActor (ChatRoomDTO?, Bool) -> Void, onError: @escaping @MainActor (AppError) -> Void) -> ChatSubscription {
+    /// Türe göre dinleyiciler (iki oda aynı sahte servisi paylaşırsa).
+    var roomHandlers: [ChatRoomKind: @MainActor (ChatRoomDTO?, Bool) -> Void] = [:]
+    private(set) var observedKinds: [ChatRoomKind] = []
+
+    func observeRoom(userID: String, kind: ChatRoomKind, onChange: @escaping @MainActor (ChatRoomDTO?, Bool) -> Void, onError: @escaping @MainActor (AppError) -> Void) -> ChatSubscription {
+        observedKinds.append(kind)
+        roomHandlers[kind] = onChange
         roomHandler = onChange
         return ChatSubscription { [weak self] in self?.roomHandler = nil }
     }
@@ -50,6 +58,7 @@ final class MockChatSync: ChatSyncing {
     func observeRecentMessages(chatID: String, limit: Int, onChange: @escaping @MainActor ([ChatMessageDTO]) -> Void, onError: @escaping @MainActor (AppError) -> Void) -> ChatSubscription {
         observedChats.append(chatID)
         messagesHandler = onChange
+        messageHandlers[chatID] = onChange
         return ChatSubscription { [weak self] in self?.messagesHandler = nil }
     }
 
@@ -219,7 +228,7 @@ final class ChatModelTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 100_000)
         let invite = ChatInvite(code: "K7P2QX", ownerID: "owner", ownerName: "Ali", createdAt: now, expiresAt: now.addingTimeInterval(60))
         XCTAssertNoThrow(try ChatPairingRules.validate(invite: invite, redeemerID: "friend", now: now))
-        XCTAssertThrowsError(try ChatPairingRules.validate(invite: invite, redeemerID: "owner", now: now), "kendi kodu")
+        XCTAssertNoThrow(try ChatPairingRules.validate(invite: invite, redeemerID: "owner", now: now), "kendi kodu: not sohbeti açar")
         XCTAssertThrowsError(try ChatPairingRules.validate(invite: invite, redeemerID: "friend", now: now.addingTimeInterval(61)), "süresi doldu")
         var used = invite
         used.redeemedBy = "someone"

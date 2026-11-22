@@ -131,3 +131,13 @@ test('profil fotoğrafı: tek dosya, herkese açık okuma', async () => {
   assert.equal((await call('GET', '/v1/public/profile_images/a/x2.jpg')).status, 200);
   assert.equal((await call('GET', '/v1/public/chats/a_b/media/m/thumb.jpg')).status, 404, 'yalnızca profil fotoğrafları açık');
 });
+
+test('not sohbetinde gönderen kendi orijalini işaretleyebilir', async () => {
+  rooms.set('a_a', ['a', 'a']);
+  const p = 'chats/a_a/media/n1/original.jpg';
+  assert.equal((await call('PUT', `/v1/o?p=${p}`, { uid: 'a', body: bytes(5), headers: { 'content-type': 'image/jpeg' } })).status, 200);
+  const ack = await (await call('POST', `/v1/ack?p=${p}`, { uid: 'a' })).json();
+  assert.equal(ack.ignored, undefined);
+  assert.ok(bucket.objects.has(`acks/${p}`));
+  assert.equal((await call('GET', `/v1/o?p=${p}`, { uid: 'b' })).status, 403, 'başkası göremez');
+});

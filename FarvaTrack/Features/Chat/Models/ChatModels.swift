@@ -177,6 +177,11 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
         members.first { $0 != userID }
     }
 
+    /// Kullanıcının kendisiyle konuştuğu (not tuttuğu) oda mı: tüm üyeler kendisi.
+    func isPersonal(for userID: String) -> Bool {
+        !members.isEmpty && members.allSatisfy { $0 == userID }
+    }
+
     func displayName(of userID: String) -> String {
         let name = names[userID]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return name.isEmpty ? "Sohbet arkadaşın" : name
@@ -187,6 +192,19 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
         guard let date = typing[userID] else { return false }
         let age = now.timeIntervalSince(date)
         return age >= -ChatLimits.typingTimeout && age < ChatLimits.typingTimeout
+    }
+}
+
+// MARK: - Oda türü
+
+/// Karşılıklı sohbet ya da kullanıcının kendine yazdığı not sohbeti. İkisi aynı altyapıyı kullanır;
+/// fark yalnızca mesajın gittiği yerdir (not sohbetinde iki üye de kullanıcının kendisidir).
+enum ChatRoomKind: String, Codable, Hashable, CaseIterable {
+    case partner
+    case personal
+
+    static func of(_ room: ChatRoomDTO, userID: String) -> ChatRoomKind {
+        room.isPersonal(for: userID) ? .personal : .partner
     }
 }
 

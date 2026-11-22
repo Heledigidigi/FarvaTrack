@@ -140,9 +140,9 @@ service cloud.firestore {
         && request.resource.data.expiresAt is timestamp
         && request.resource.data.expiresAt <= request.time + duration.value(25, 'h');
 
-      // Kullanma: süresi dolmamış, henüz kullanılmamış, sahibi olmayan biri yalnızca `redeemedBy` alanını kendisi yapar.
+      // Kullanma: süresi dolmamış, henüz kullanılmamış kodun yalnızca `redeemedBy` alanını kullanan kendisi yapar.
+      // Sahibi kendi kodunu kullanırsa kendine not sohbeti açılır.
       allow update: if signedIn()
-        && resource.data.ownerId != request.auth.uid
         && resource.data.get('redeemedBy', null) == null
         && resource.data.expiresAt > request.time
         && onlyChanges(['redeemedBy'])
@@ -160,7 +160,9 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt', 'inviteCode', 'typing', 'lastMessage'])
         && request.resource.data.members is list
         && request.resource.data.members.size() == 2
-        && request.resource.data.members[0] < request.resource.data.members[1]
+        // Karşılıklı sohbet (küçük uid önce) ya da kendine not sohbeti (iki üye de kendisi).
+        && (request.resource.data.members[0] < request.resource.data.members[1]
+            || (request.resource.data.members[0] == request.auth.uid && request.resource.data.members[1] == request.auth.uid))
         && chatId == request.resource.data.members[0] + '_' + request.resource.data.members[1]
         && request.auth.uid in request.resource.data.members
         && getAfter(/databases/$(database)/documents/chatInvites/$(request.resource.data.inviteCode)).data.redeemedBy == request.auth.uid

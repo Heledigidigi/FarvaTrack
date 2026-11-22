@@ -1,49 +1,53 @@
 import SwiftUI
 
-/// Sohbet sekmesinin kökü: eşleşme yoksa davet ekranı, varsa konuşma.
+/// Sohbet sekmesinin kökü. Kendine not sohbeti yoksa eskisi gibi doğrudan karşılıklı sohbet (ya da eşleşme ekranı);
+/// varsa iki satırlık sohbet listesi (karşılıklı sohbet + kendime notlar).
 struct ChatView: View {
-    @Environment(ChatViewModel.self) private var viewModel
+    @Environment(ChatHub.self) private var hub
     @Environment(AuthViewModel.self) private var auth
     @Environment(\.modelContext) private var modelContext
-    /// Baloncuk stilleri (8F): hazırlar, kendi tasarımlarım, karşı taraftan indirilenler.
+    /// Baloncuk stilleri (8F): hazırlar, kendi tasarımlarım, karşı taraftan indirilenler. İki odada ortak.
     @State private var bubbleStore = BubbleStyleStore()
     @State private var showBubbles = false
+    @State private var showPersonalSetup = false
+    @State private var path: [ChatRoomKind] = []
 
     var body: some View {
-        @Bindable var viewModel = viewModel
-
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
-                switch viewModel.phase {
-                case .idle, .loading:
-                    ProgressView("Sohbet yükleniyor…")
-                        .tint(Color.ftAccentLight)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .unpaired:
-                    ChatPairingView()
-                case .ready:
-                    ChatConversationView()
+                if hub.showsRoomList {
+                    ChatRoomListView()
+                        .navigationTitle("Sohbetler")
+                        .navigationBarTitleDisplayMode(.inline)
+                } else {
+                    ChatRoomContent(showBubbles: $showBubbles)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Menu {
+                                    Button {
+                                        showPersonalSetup = true
+                                    } label: {
+                                        Label("Kendime not sohbeti aç", systemImage: "square.and.pencil")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle")
+                                }
+                                .accessibilityLabel("Sohbet seçenekleri")
+                            }
+                        }
                 }
             }
             .background(Color.ftBackground.ignoresSafeArea())
-            .navigationTitle(viewModel.phase == .ready ? viewModel.partnerName : "Sohbet")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if viewModel.phase == .ready {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { showBubbles = true } label: { Image(systemName: "paintpalette") }
-                            .accessibilityLabel("Baloncuk seç")
-                            .accessibilityHint("Mesaj baloncuğunun görünümünü değiştir ya da kendi baloncuğunu tasarla")
-                    }
-                }
+            .navigationDestination(for: ChatRoomKind.self) { kind in
+                ChatRoomContent(showBubbles: $showBubbles)
+                    .environment(hub.viewModel(for: kind))
             }
             .sheet(isPresented: $showBubbles) {
                 BubblePickerView(store: bubbleStore)
             }
-            .alert("Bir sorun oluştu", isPresented: $viewModel.hasError) {
-                Button("Tamam", role: .cancel) {}
-            } message: {
-                Text(viewModel.errorMessage ?? "")
+            .sheet(isPresented: $showPersonalSetup) {
+                ChatPersonalSetupSheet()
+                    .environment(hub.personal)
             }
         }
         .environment(bubbleStore)
@@ -52,14 +56,201 @@ struct ChatView: View {
             bubbleStore.configure(context: modelContext, userID: userID)
             await bubbleStore.syncAll()
         }
-        .onAppear { viewModel.setVisible(true) }
-        .onDisappear { viewModel.setVisible(false) }
+        .onAppear {
+            hub.isTabVisible = true
+            updateOpenConversation()
+        }
+        .onDisappear { hub.isTabVisible = false }
+        .onChange(of: path) { updateOpenConversation() }
+        .onChange(of: hub.partner.phase) { updateOpenConversation() }
+        .onChange(of: hub.personal.phase) { _, phase in
+            // Not sohbeti açıldı: kurulum kapanır ve doğrudan nota geçilir.
+            if phase == .ready, showPersonalSetup {
+                showPersonalSetup = false
+                path = [.personal]
+            }
+            if phase != .ready { path.removeAll { $0 == .personal } }
+            updateOpenConversation()
+        }
         .task {
             // "Yazıyor…" ve düzenleme süresi gibi zamana bağlı bilgileri tazeler.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
-                viewModel.tick()
+                hub.tick()
             }
+        }
+    }
+
+    /// Yalnızca ekrandaki konuşmanın mesajları okundu sayılır.
+    private func updateOpenConversation() {
+        if hub.showsRoomList {
+            hub.openConversation = path.last
+        } else {
+            hub.openConversation = hub.partner.phase == .ready ? .partner : nil
+        }
+    }
+}
+
+// MARK: - Oda içeriği
+
+/// Bir odanın ekranı: yükleniyor / eşleşme (ya da not sohbeti kurulumu) / konuşma.
+struct ChatRoomContent: View {
+    @Environment(ChatViewModel.self) private var viewModel
+    @Binding var showBubbles: Bool
+
+    var body: some View {
+        @Bindable var viewModel = viewModel
+
+        Group {
+            switch viewModel.phase {
+            case .idle, .loading:
+                ProgressView("Sohbet yükleniyor…")
+                    .tint(Color.ftAccentLight)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .unpaired:
+                ChatPairingView(purpose: viewModel.kind)
+            case .ready:
+                ChatConversationView()
+            }
+        }
+        .background(Color.ftBackground.ignoresSafeArea())
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if viewModel.phase == .ready {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showBubbles = true } label: { Image(systemName: "paintpalette") }
+                        .accessibilityLabel("Baloncuk seç")
+                        .accessibilityHint("Mesaj baloncuğunun görünümünü değiştir ya da kendi baloncuğunu tasarla")
+                }
+            }
+        }
+        .alert("Bir sorun oluştu", isPresented: $viewModel.hasError) {
+            Button("Tamam", role: .cancel) {}
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    private var title: String {
+        if viewModel.phase == .ready { return viewModel.partnerName }
+        return viewModel.kind == .personal ? "Kendime not" : "Sohbet"
+    }
+}
+
+// MARK: - Sohbet listesi
+
+/// Not sohbeti açıldıktan sonra sekmenin kökü.
+struct ChatRoomListView: View {
+    @Environment(ChatHub.self) private var hub
+
+    var body: some View {
+        List {
+            ForEach(ChatRoomKind.allCases, id: \.self) { kind in
+                NavigationLink(value: kind) {
+                    ChatRoomRow(viewModel: hub.viewModel(for: kind))
+                }
+                .listRowBackground(Color.ftCard)
+            }
+        }
+        .scrollContentBackground(.hidden)
+    }
+}
+
+struct ChatRoomRow: View {
+    let viewModel: ChatViewModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(viewModel.kind == .personal ? Color.ftCardElevated : Color.ftAccent, in: Circle())
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(title).font(.headline).lineLimit(1)
+                    Spacer(minLength: 8)
+                    if let date = viewModel.messages.last?.message.createdAt {
+                        Text(date, format: Date.FormatStyle(date: .omitted, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(Color.ftTextSecondary)
+                    }
+                }
+                HStack {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(Color.ftTextSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if viewModel.unreadCount > 0 {
+                        Text("\(viewModel.unreadCount)")
+                            .font(.caption.bold())
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Color.ftAccent, in: Capsule())
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(viewModel.unreadCount > 0 ? "\(viewModel.unreadCount) okunmamış mesaj" : "")
+    }
+
+    private var icon: String {
+        viewModel.kind == .personal ? "note.text" : (viewModel.phase == .ready ? "person.2.fill" : "person.badge.plus")
+    }
+
+    private var title: String {
+        switch (viewModel.kind, viewModel.phase) {
+        case (.personal, _): return viewModel.partnerName
+        case (.partner, .ready): return viewModel.partnerName
+        case (.partner, .unpaired): return "Sohbet arkadaşını ekle"
+        default: return "Sohbet"
+        }
+    }
+
+    private var subtitle: String {
+        if let last = viewModel.messages.last {
+            let prefix = last.isMine && viewModel.kind == .partner ? "Sen: " : ""
+            return prefix + last.displayText
+        }
+        switch (viewModel.kind, viewModel.phase) {
+        case (.personal, _): return "Kendine not al"
+        case (.partner, .unpaired): return "Davet kodu oluştur ya da gir"
+        default: return "Henüz mesaj yok"
+        }
+    }
+}
+
+// MARK: - Not sohbeti kurulumu
+
+/// Kendi davet kodunu oluşturup yine kendine yapıştırarak not sohbeti açılır.
+struct ChatPersonalSetupSheet: View {
+    @Environment(ChatViewModel.self) private var viewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        @Bindable var viewModel = viewModel
+
+        NavigationStack {
+            ChatPairingView(purpose: .personal)
+                .background(Color.ftBackground.ignoresSafeArea())
+                .navigationTitle("Kendime not")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Kapat") { dismiss() }
+                    }
+                }
+                .alert("Bir sorun oluştu", isPresented: $viewModel.hasError) {
+                    Button("Tamam", role: .cancel) {}
+                } message: {
+                    Text(viewModel.errorMessage ?? "")
+                }
         }
     }
 }
@@ -68,6 +259,8 @@ struct ChatView: View {
 
 struct ChatPairingView: View {
     @Environment(ChatViewModel.self) private var viewModel
+    /// Karşılıklı eşleşme ya da kendine not sohbeti kurulumu (aynı akış: kendi kodunu kendine yapıştırırsın).
+    var purpose: ChatRoomKind = .partner
     @FocusState private var codeFocused: Bool
     @State private var copied = false
 
@@ -77,13 +270,15 @@ struct ChatPairingView: View {
         ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 10) {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                    Image(systemName: purpose == .personal ? "note.text" : "bubble.left.and.bubble.right.fill")
                         .font(.system(size: 44))
                         .foregroundStyle(Color.ftAccentLight)
                         .accessibilityHidden(true)
-                    Text("Özel sohbetini başlat")
+                    Text(purpose == .personal ? "Kendine not sohbeti" : "Özel sohbetini başlat")
                         .font(.title2.bold())
-                    Text("Sohbet yalnızca iki kişi arasındadır. Biriniz davet kodu oluşturur, diğeriniz bu kodu girer; sohbeti yalnızca siz ikiniz görebilirsiniz.")
+                    Text(purpose == .personal
+                         ? "Kendine yazdığın, karşılıklı sohbetle tıpatıp aynı çalışan bir sohbet: fotoğraf, ses, sticker ve baloncuklar dahil. Bir davet kodu oluştur, kopyala ve aşağıdaki alana kendin yapıştır."
+                         : "Sohbet yalnızca iki kişi arasındadır. Biriniz davet kodu oluşturur, diğeriniz bu kodu girer; sohbeti yalnızca siz ikiniz görebilirsiniz. Kendi kodunu kendin girersen kendine not sohbeti açılır.")
                         .font(.subheadline)
                         .foregroundStyle(Color.ftTextSecondary)
                         .multilineTextAlignment(.center)
@@ -111,7 +306,9 @@ struct ChatPairingView: View {
                     .textSelection(.enabled)
                     .accessibilityLabel("Davet kodun: \(invite.code.map(String.init).joined(separator: " "))")
 
-                Text("Kod \(invite.expiresAt.formatted(date: .abbreviated, time: .shortened)) tarihine kadar geçerli. Karşı taraf kodu girince sohbet kendiliğinden açılır.")
+                Text(purpose == .personal
+                     ? "Kodu kopyala ve aşağıdaki alana yapıştır."
+                     : "Kod \(invite.expiresAt.formatted(date: .abbreviated, time: .shortened)) tarihine kadar geçerli. Karşı taraf kodu girince sohbet kendiliğinden açılır.")
                     .font(.footnote)
                     .foregroundStyle(Color.ftTextSecondary)
 
@@ -135,15 +332,19 @@ struct ChatPairingView: View {
                 }
                 .tint(Color.ftAccentLight)
 
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Eşleşme bekleniyor…")
-                        .font(.footnote)
-                        .foregroundStyle(Color.ftTextSecondary)
+                if purpose == .partner {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Eşleşme bekleniyor…")
+                            .font(.footnote)
+                            .foregroundStyle(Color.ftTextSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
                 }
-                .accessibilityElement(children: .combine)
             } else {
-                Text("Kodu sohbet edeceğin kişiye gönder. Kod 24 saat geçerlidir ve yalnızca bir kez kullanılabilir.")
+                Text(purpose == .personal
+                     ? "Önce kendine bir kod oluştur. Kod yalnızca bir kez kullanılabilir."
+                     : "Kodu sohbet edeceğin kişiye gönder. Kod 24 saat geçerlidir ve yalnızca bir kez kullanılabilir.")
                     .font(.footnote)
                     .foregroundStyle(Color.ftTextSecondary)
                 Button("Kod oluştur") {
@@ -160,7 +361,7 @@ struct ChatPairingView: View {
 
     private func redeemCard(code: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Kodun var mı?", systemImage: "key.fill")
+            Label(purpose == .personal ? "Kodu buraya yapıştır" : "Kodun var mı?", systemImage: "key.fill")
                 .font(.headline)
 
             TextField("Örn. K7P2QX", text: code)
@@ -174,9 +375,22 @@ struct ChatPairingView: View {
                 .submitLabel(.join)
                 .onSubmit(redeem)
                 .accessibilityLabel("Davet kodu")
-                .accessibilityHint("Karşı tarafın gönderdiği \(ChatInviteCode.length) karakterlik kodu yaz")
+                .accessibilityHint(purpose == .personal
+                                   ? "Oluşturduğun \(ChatInviteCode.length) karakterlik kodu yapıştır"
+                                   : "Karşı tarafın gönderdiği \(ChatInviteCode.length) karakterlik kodu yaz")
 
-            Button("Eşleş", action: redeem)
+            Button {
+                if let pasted = UIPasteboard.general.string {
+                    code.wrappedValue = ChatInviteCode.normalize(pasted)
+                    Haptics.selection()
+                }
+            } label: {
+                Label("Panodan yapıştır", systemImage: "doc.on.clipboard")
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.ftAccentLight)
+
+            Button(purpose == .personal ? "Not sohbetini aç" : "Eşleş", action: redeem)
                 .buttonStyle(PrimaryButtonStyle(isLoading: viewModel.isWorking))
                 .disabled(viewModel.isWorking || code.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
         }

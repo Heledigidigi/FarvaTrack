@@ -15,7 +15,8 @@ struct MainTabView: View {
     /// Salonda yarım kalan antrenman sekmeler arası ve uygulama yeniden açılınca korunur.
     @State private var liveWorkout = LiveWorkoutViewModel()
     /// Sohbet dinleyicileri sekmeler arasında açık kalsın (okunmamış rozeti, bekleyen gönderimler).
-    @State private var chatViewModel = ChatViewModel(autoFetchOriginals: true)
+    /// İki oda: karşılıklı sohbet ve kendine not sohbeti.
+    @State private var chatHub = ChatHub()
 
     init() {
         // Koyu, opak sekme çubuğu
@@ -45,7 +46,7 @@ struct MainTabView: View {
             ChatView()
                 .tabItem { Label(AppTab.chat.title, systemImage: AppTab.chat.systemImage) }
                 .tag(AppTab.chat)
-                .badge(chatViewModel.unreadCount)
+                .badge(chatHub.unreadCount)
 
             ProfileView()
                 .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.systemImage) }
@@ -55,7 +56,8 @@ struct MainTabView: View {
         .environment(waterViewModel)
         .environment(wasteViewModel)
         .environment(liveWorkout)
-        .environment(chatViewModel)
+        .environment(chatHub)
+        .environment(chatHub.partner)
         .tint(Color.ftAccentLight)
         .sensoryFeedback(.selection, trigger: router.selectedTab)
         .onOpenURL { router.handle($0) }
@@ -71,9 +73,9 @@ struct MainTabView: View {
                 waterViewModel.configure(context: modelContext, user: user)
                 wasteViewModel.configure(context: modelContext, user: user)
                 liveWorkout.configure(userID: user.id)
-                chatViewModel.configure(context: modelContext, user: user)
+                chatHub.configure(context: modelContext, user: user)
             } else {
-                chatViewModel.reset()
+                chatHub.reset()
             }
         }
         .task(id: auth.currentUser?.id) {
@@ -87,10 +89,10 @@ struct MainTabView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             // Arka plandayken gelen mesajlar okundu sayılmaz.
-            chatViewModel.setVisible(phase == .active && router.selectedTab == .chat)
+            chatHub.isAppActive = phase == .active
             guard phase == .active, let userID = auth.currentUser?.id else { return }
             Task {
-                await chatViewModel.handleForeground()
+                await chatHub.handleForeground()
                 await waterViewModel.handleForeground()
                 await wasteViewModel.handleForeground()
                 await librarySync.syncAll(context: modelContext, userID: userID)

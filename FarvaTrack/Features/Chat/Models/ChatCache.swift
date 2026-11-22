@@ -216,8 +216,12 @@ final class ChatPendingOperation {
 /// Eşleşilen sohbet odasının kimliği ve isimleri; uygulama çevrimdışı açılınca da sohbet görünsün diye.
 struct ChatRoomCache {
     let defaults: UserDefaults
+    var kind: ChatRoomKind = .partner
 
-    private func key(_ userID: String) -> String { "chatRoom.\(userID)" }
+    /// Karşılıklı sohbetin anahtarı eski sürümle aynı kalır.
+    private func key(_ userID: String) -> String {
+        kind == .partner ? "chatRoom.\(userID)" : "chatRoom.\(userID).\(kind.rawValue)"
+    }
 
     func load(userID: String) -> ChatRoomDTO? {
         guard let data = defaults.data(forKey: key(userID)) else { return nil }

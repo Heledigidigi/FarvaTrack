@@ -25,9 +25,11 @@ protocol ChatSyncing: AnyObject {
     func createInvite(ownerID: String, ownerName: String, now: Date) async throws -> ChatInvite
     func redeemInvite(code: String, userID: String, userName: String, now: Date) async throws -> ChatRoomDTO
 
-    /// Kullanıcının üyesi olduğu sohbet (en fazla bir tane). `isFromCache` yalnızca yerel önbellekten geldiyse `true`.
+    /// Kullanıcının bu türdeki sohbeti (karşılıklı ya da not; her türden en fazla bir tane).
+    /// `isFromCache` yalnızca yerel önbellekten geldiyse `true`.
     func observeRoom(
         userID: String,
+        kind: ChatRoomKind,
         onChange: @escaping @MainActor (_ room: ChatRoomDTO?, _ isFromCache: Bool) -> Void,
         onError: @escaping @MainActor (AppError) -> Void
     ) -> ChatSubscription
@@ -168,14 +170,11 @@ final class ChatService: ChatSyncing {
             }
             try ChatPairingRules.validate(invite: invite, redeemerID: userID, now: now)
 
+            // Kendi kodunu yapıştıran kullanıcı kendine not sohbeti açar: `uid_uid`, iki üye de kendisi.
             let members = ChatID.sortedMembers(invite.ownerID, userID)
             let chatID = ChatID.make(invite.ownerID, userID)
-            let room = ChatRoomDTO(
-                id: chatID,
-                members: members,
-                names: [invite.ownerID: invite.ownerName, userID: userName],
-                createdAt: now
-            )
+            let names = invite.ownerID == userID ? [userID: userName] : [invite.ownerID: invite.ownerName, userID: userName]
+            let room = ChatRoomDTO(id: chatID, members: members, names: names, createdAt: now)
 
             // Davetin kullanıldığı ve odanın oluşturulduğu tek bir toplu yazım; kurallar `getAfter` ile doğrular.
             let batch = try db.batch()
@@ -198,10 +197,12 @@ final class ChatService: ChatSyncing {
 
     func observeRoom(
         userID: String,
+        kind: ChatRoomKind,
         onChange: @escaping @MainActor (ChatRoomDTO?, Bool) -> Void,
         onError: @escaping @MainActor (AppError) -> Void
     ) -> ChatSubscription {
-        guard let query = try? chats().whereField(ChatField.members, arrayContains: userID).limit(to: 1) else {
+        // Kullanıcının en fazla iki odası olur (karşılıklı + not); tür istemcide ayrılır.
+        guard let query = try? chats().whereField(ChatField.members, arrayContains: userID).limit(to: 5) else {
             Task { @MainActor in onError(.firebaseNotConfigured) }
             return .none
         }
@@ -211,7 +212,9 @@ final class ChatService: ChatSyncing {
                 return
             }
             guard let snapshot else { return }
-            let room = snapshot.documents.first.flatMap { ChatFirestoreMapper.room(id: $0.documentID, data: $0.data()) }
+            let room = snapshot.documents
+                .compactMap { ChatFirestoreMapper.room(id: $0.documentID, data: $0.data()) }
+                .first { ChatRoomKind.of($0, userID: userID) == kind }
             let fromCache = snapshot.metadata.isFromCache
             Task { @MainActor in onChange(room, fromCache) }
         }
@@ -427,9 +430,7 @@ final class ChatService: ChatSyncing {
 
 enum ChatPairingRules {
     static func validate(invite: ChatInvite, redeemerID: String, now: Date) throws {
-        if invite.ownerID == redeemerID {
-            throw AppError.invalidInput("Kendi davet kodunu kullanamazsın. Kodu sohbet edeceğin kişiye gönder.")
-        }
+        // Kendi kodu: hata değil, kendine not sohbeti açar (bkz. `redeemInvite`).
         if invite.isExpired(now: now) {
             throw AppError.invalidInput("Bu davet kodunun süresi dolmuş. Yeni bir kod iste.")
         }

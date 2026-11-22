@@ -133,7 +133,11 @@ final class ChatViewModel {
     /// Aynı orijal için eşzamanlı indirmeler (otomatik + görüntüleyici) tek indirmede birleşir.
     private var originalLoads: [String: Task<URL, Error>] = [:]
 
+    /// Karşılıklı sohbet ya da kendine not sohbeti. İkisi aynı akışı kullanır.
+    let kind: ChatRoomKind
+
     init(
+        kind: ChatRoomKind = .partner,
         sync: ChatSyncing = ChatService(),
         mediaStore: ChatMediaStoring = MediaServerClient(),
         processor: ChatMediaProcessing = ChatMediaProcessor(),
@@ -151,7 +155,8 @@ final class ChatViewModel {
         self.defaults = defaults
         self.photoSaver = photoSaver
         self.autoFetchOriginals = autoFetchOriginals
-        self.roomCache = ChatRoomCache(defaults: defaults)
+        self.kind = kind
+        self.roomCache = ChatRoomCache(defaults: defaults, kind: kind)
         self.clock = clock
         self.makeID = makeID
         self.now = clock()
@@ -165,6 +170,10 @@ final class ChatViewModel {
     }
 
     var partnerName: String {
+        if kind == .personal {
+            let name = userName.trimmingCharacters(in: .whitespacesAndNewlines)
+            return name.isEmpty ? "Ben (Sen)" : "\(name) (Sen)"
+        }
         guard let room, let other = otherMemberID else { return "Sohbet" }
         return room.displayName(of: other)
     }
@@ -205,6 +214,7 @@ final class ChatViewModel {
 
         roomSubscription = sync.observeRoom(
             userID: user.id,
+            kind: kind,
             onChange: { [weak self] room, fromCache in self?.handleRoom(room, isFromCache: fromCache) },
             onError: { [weak self] error in self?.handleListenerError(error) }
         )
@@ -288,6 +298,8 @@ final class ChatViewModel {
         guard let userID else { return }
         if let newRoom {
             guard newRoom.members.contains(userID) else { return }
+            // Diğer türdeki oda (ör. eşleşme ekranında kendi kodunu yapıştırınca açılan not sohbeti) bu modeli ilgilendirmez.
+            guard ChatRoomKind.of(newRoom, userID: userID) == kind else { return }
             let changed = room?.id != newRoom.id
             room = newRoom
             roomCache.save(newRoom, userID: userID)
@@ -361,6 +373,8 @@ final class ChatViewModel {
         do {
             let newRoom = try await sync.redeemInvite(code: code, userID: userID, userName: userName, now: clock())
             inviteCodeInput = ""
+            // Kendi kodu kullanıldı: kod tükendi, gösterilmesin (açılan not sohbetini diğer model dinler).
+            if invite?.code == code { invite = nil }
             handleRoom(newRoom, isFromCache: false)
             return true
         } catch {
@@ -736,6 +750,8 @@ final class ChatViewModel {
 
     /// Sinyaller sırayla gider; "yazmayı bıraktı" bir önceki "yazıyor"un önüne geçmez.
     private func sendTyping(_ isTyping: Bool, chatID: String, userID: String, at date: Date) {
+        // Not sohbetinde "yazıyor" gösterilecek kimse yok.
+        guard kind == .partner else { return }
         let previous = typingTask
         let sync = sync
         typingTask = Task {
@@ -793,9 +809,10 @@ final class ChatViewModel {
     }
 
     func pendingOperations() -> [ChatPendingOperation] {
-        guard let context, let userID else { return [] }
+        // İki oda (karşılıklı + not) aynı veritabanını paylaşır: her model yalnızca kendi odasının kuyruğunu işler.
+        guard let context, let userID, let chatID = room?.id else { return [] }
         let descriptor = FetchDescriptor<ChatPendingOperation>(
-            predicate: #Predicate { $0.ownerID == userID },
+            predicate: #Predicate { $0.ownerID == userID && $0.chatID == chatID },
             sortBy: [SortDescriptor(\.createdAt), SortDescriptor(\.kindRaw), SortDescriptor(\.messageID)]
         )
         return (try? context.fetch(descriptor)) ?? []
@@ -1042,6 +1059,12 @@ final class ChatViewModel {
             current.uploadStage = .done
             current.sendState = .sent
             moveOutgoingToCache(current)
+            if kind == .personal {
+                // Not sohbetinde alıcı da benim: orijal bu cihazda, bulut kopyası 60 gün sonra temizlenebilir.
+                let store = mediaStore
+                let path = media.originalPath
+                Task { try? await store.acknowledge(path: path) }
+            }
             removeOperations(for: messageID, kinds: [.uploadOriginal])
             uploadProgress[messageID] = nil
             uploadBackoff[messageID] = nil
