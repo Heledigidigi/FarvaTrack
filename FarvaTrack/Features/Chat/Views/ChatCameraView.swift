@@ -263,11 +263,16 @@ struct CameraPreviewLayer: UIViewRepresentable {
 // MARK: - Kamera ekranı
 
 struct ChatCameraView: View {
-    let onSend: (PickedMedia, ChatMediaQuality) -> Void
+    /// Fotoğrafa eklenebilecek kişisel stickerlar.
+    var stickers: [StickerItem] = []
+    /// Kalite Ayarlar → Sohbet → Veri tasarrufu'ndan seçilir (çağıran uygular).
+    let onSend: (PickedMedia) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var camera = ChatCameraModel()
     @State private var isPressing = false
-    @State private var quality: ChatMediaQuality = .original
+    @State private var editorImage: UIImage?
+    @State private var toast: String?
+    private let photoSaver: PhotoLibrarySaving = PhotoLibrarySaver()
 
     var body: some View {
         ZStack {
@@ -276,6 +281,8 @@ struct ChatCameraView: View {
                 review(captured)
             } else {
                 capture
+                    // Önizlemeden dönünce çekim ekranı baştan kurulur (eski katmanlar dokunuşu yutmasın).
+                    .id("capture")
             }
         }
         .statusBarHidden()
@@ -297,14 +304,21 @@ struct ChatCameraView: View {
             default:
                 CameraPreviewLayer(session: camera.session)
                     .ignoresSafeArea()
+                    // UIKit önizleme katmanı dokunuşları almamalı: üstteki ✕ ve flaş düğmeleri hep çalışsın.
+                    .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
 
             VStack {
                 HStack {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.title2.weight(.semibold))
+                    Button { close() } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 40, height: 40)
+                            .background(Color.black.opacity(0.4), in: Circle())
+                            .contentShape(Circle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Kamerayı kapat")
                     Spacer()
                     if camera.state == .recording, let started = camera.recordingStarted {
@@ -323,15 +337,21 @@ struct ChatCameraView: View {
                             camera.flash = camera.flash.next
                             Haptics.selection()
                         } label: {
-                            Image(systemName: camera.flash.systemImage).font(.title2)
+                            Image(systemName: camera.flash.systemImage)
+                                .font(.body.weight(.semibold))
+                                .frame(width: 40, height: 40)
+                                .background(Color.black.opacity(0.4), in: Circle())
+                                .contentShape(Circle())
                         }
+                        .buttonStyle(.plain)
                         .accessibilityLabel(camera.flash.accessibilityText)
                         .accessibilityHint("Değiştirmek için dokun")
                     }
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .zIndex(1)
 
                 Spacer()
 
@@ -402,53 +422,156 @@ struct ChatCameraView: View {
         }
     }
 
-    // MARK: Önizleme → gönder
+    // MARK: Önizleme → düzenle → gönder
 
+    private func close() {
+        camera.discardCapture()
+        camera.stop()
+        dismiss()
+    }
+
+    @ViewBuilder
     private func review(_ media: PickedMedia) -> some View {
-        VStack(spacing: 0) {
-            Group {
-                if media.kind == .video {
-                    LoopingVideoPlayer(url: media.fileURL)
-                } else {
-                    CachedImageView(url: media.fileURL, contentMode: .fit)
+        if media.kind == .video {
+            videoReview(media)
+        } else if let editorImage {
+            ChatPhotoEditorView(
+                image: editorImage,
+                stickers: stickers,
+                onClose: { retake() },
+                onSend: { edited in send(media, edited: edited) },
+                onSave: { edited in await save(media, edited: edited) }
+            )
+        } else {
+            ProgressView()
+                .tint(.white)
+                .task(id: media.fileURL) {
+                    let url = media.fileURL
+                    let image = await Task.detached(priority: .userInitiated) { UIImage(contentsOfFile: url.path)?.preparingForDisplay() }.value
+                    if let image { editorImage = image } else { retake() }
                 }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-
-            VStack(spacing: 14) {
-                Picker("Kalite", selection: $quality) {
-                    ForEach(ChatMediaQuality.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityLabel("Gönderim kalitesi")
-
-                HStack(spacing: 12) {
-                    Button {
-                        camera.discardCapture()
-                    } label: {
-                        Label("Yeniden çek", systemImage: "arrow.uturn.backward")
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
-
-                    Button {
-                        Haptics.impact(.medium)
-                        camera.releaseCapture()
-                        onSend(media, quality)
-                        dismiss()
-                    } label: {
-                        Label("Gönder", systemImage: "paperplane.fill")
-                            .frame(maxWidth: .infinity, minHeight: 48)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.ftAccent)
-                }
-            }
-            .padding(20)
-            .background(Color.ftCard)
         }
+    }
+
+    private func videoReview(_ media: PickedMedia) -> some View {
+        ZStack {
+            LoopingVideoPlayer(url: media.fileURL)
+                .ignoresSafeArea()
+            VStack {
+                HStack {
+                    Button { retake() } label: {
+                        Image(systemName: "xmark")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Color.black.opacity(0.45), in: Circle())
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Vazgeç, yeniden çek")
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                Spacer()
+                HStack {
+                    Button {
+                        Task {
+                            let message = await save(media, edited: nil)
+                            withAnimation { toast = message }
+                        }
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .background(Color.white.opacity(0.18), in: Circle())
+                    }
+                    .accessibilityLabel("Fotoğraflar'a kaydet")
+                    Spacer()
+                    Button {
+                        send(media, edited: nil)
+                    } label: {
+                        Image(systemName: "paperplane.fill")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 58, height: 58)
+                            .background(Color.ftAccent, in: Circle())
+                    }
+                    .accessibilityLabel("Gönder")
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
+            }
+        }
+        .overlay(alignment: .top) {
+            if let toast {
+                Text(toast)
+                    .font(.footnote.weight(.semibold))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(.top, 64)
+                    .task {
+                        try? await Task.sleep(for: .seconds(2))
+                        withAnimation { self.toast = nil }
+                    }
+            }
+        }
+    }
+
+    /// Önizlemeden vazgeç: dosya silinir, çekim ekranına dönülür.
+    private func retake() {
+        editorImage = nil
+        camera.discardCapture()
+    }
+
+    private func send(_ media: PickedMedia, edited: UIImage?) {
+        Haptics.impact(.medium)
+        var outgoing = media
+        if let edited, let url = Self.writeEdited(edited) {
+            try? FileManager.default.removeItem(at: media.fileURL)
+            outgoing = PickedMedia(fileURL: url, kind: .image)
+        }
+        camera.releaseCapture()
+        editorImage = nil
+        onSend(outgoing)
+        dismiss()
+    }
+
+    /// Düzenlenmemişse orijinal dosya, düzenlenmişse son görüntü Fotoğraflar'a eklenir.
+    private func save(_ media: PickedMedia, edited: UIImage?) async -> String {
+        var url = media.fileURL
+        var temporary: URL?
+        if let edited {
+            guard let written = Self.writeEdited(edited) else { return "Kaydedilemedi" }
+            url = written
+            temporary = written
+        }
+        defer { if let temporary { try? FileManager.default.removeItem(at: temporary) } }
+        do {
+            try await photoSaver.save(fileURL: url, isVideo: media.kind == .video)
+            Haptics.success()
+            return "Fotoğraflar'a kaydedildi"
+        } catch AppError.notAuthorized {
+            Haptics.error()
+            return "Fotoğraflar'a erişim izni yok"
+        } catch {
+            Haptics.error()
+            return "Kaydedilemedi"
+        }
+    }
+
+    /// Düzenlenen fotoğraf HEIC olarak (desteklenmiyorsa JPEG) geçici klasöre yazılır.
+    private static func writeEdited(_ image: UIImage) -> URL? {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ChatPicked", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let data = image.heicData() {
+            let url = directory.appendingPathComponent("\(UUID().uuidString).heic")
+            if (try? data.write(to: url)) != nil { return url }
+        }
+        guard let data = image.jpegData(compressionQuality: 0.95) else { return nil }
+        let url = directory.appendingPathComponent("\(UUID().uuidString).jpg")
+        return (try? data.write(to: url)) != nil ? url : nil
     }
 }
 

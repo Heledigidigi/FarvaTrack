@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Sohbet sekmesinin kökü. Kendine not sohbeti yoksa eskisi gibi doğrudan karşılıklı sohbet (ya da eşleşme ekranı);
-/// varsa iki satırlık sohbet listesi (karşılıklı sohbet + kendime notlar).
+/// Sohbet sekmesinin kökü: her zaman sohbet listesi (karşılıklı sohbet + kendime notlar).
+/// Bir konuşma açılınca sekme çubuğu gizlenir; geri dönünce yeniden görünür.
 struct ChatView: View {
     @Environment(ChatHub.self) private var hub
     @Environment(AuthViewModel.self) private var auth
@@ -14,29 +14,9 @@ struct ChatView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if hub.showsRoomList {
-                    ChatRoomListView()
-                        .navigationTitle("Sohbetler")
-                        .navigationBarTitleDisplayMode(.inline)
-                } else {
-                    ChatRoomContent(showBubbles: $showBubbles)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Menu {
-                                    Button {
-                                        showPersonalSetup = true
-                                    } label: {
-                                        Label("Kendime not sohbeti aç", systemImage: "square.and.pencil")
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis.circle")
-                                }
-                                .accessibilityLabel("Sohbet seçenekleri")
-                            }
-                        }
-                }
-            }
+            ChatRoomListView(onOpenPersonalSetup: { showPersonalSetup = true })
+                .navigationTitle("Sohbetler")
+                .navigationBarTitleDisplayMode(.inline)
             .background(Color.ftBackground.ignoresSafeArea())
             .navigationDestination(for: ChatRoomKind.self) { kind in
                 ChatRoomContent(showBubbles: $showBubbles)
@@ -65,7 +45,7 @@ struct ChatView: View {
         // Bildirim ya da uygulama içi şeritten gelen "şu sohbeti aç" isteği.
         .onChange(of: hub.pendingOpen, initial: true) { _, kind in
             guard let kind else { return }
-            if hub.showsRoomList { path = [kind] }
+            path = [kind]
             hub.pendingOpen = nil
         }
         .onChange(of: hub.partner.phase) { updateOpenConversation() }
@@ -89,11 +69,7 @@ struct ChatView: View {
 
     /// Yalnızca ekrandaki konuşmanın mesajları okundu sayılır.
     private func updateOpenConversation() {
-        if hub.showsRoomList {
-            hub.openConversation = path.last
-        } else {
-            hub.openConversation = hub.partner.phase == .ready ? .partner : nil
-        }
+        hub.openConversation = path.last
     }
 }
 
@@ -166,6 +142,8 @@ struct ChatRoomContent: View {
         .background(Color.ftBackground.ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        // Açık konuşmada (ve sticker panelinde) alttaki sekmeler gizlenir; geri dönünce görünür.
+        .toolbar(viewModel.phase == .ready ? .hidden : .visible, for: .tabBar)
         .toolbar {
             if viewModel.phase == .ready, viewModel.kind == .partner {
                 ToolbarItem(placement: .primaryAction) {
@@ -201,14 +179,28 @@ struct ChatRoomContent: View {
 /// Not sohbeti açıldıktan sonra sekmenin kökü.
 struct ChatRoomListView: View {
     @Environment(ChatHub.self) private var hub
+    var onOpenPersonalSetup: () -> Void = {}
 
     var body: some View {
         List {
-            ForEach(ChatRoomKind.allCases, id: \.self) { kind in
-                NavigationLink(value: kind) {
-                    ChatRoomRow(viewModel: hub.viewModel(for: kind))
+            NavigationLink(value: ChatRoomKind.partner) {
+                ChatRoomRow(viewModel: hub.partner)
+            }
+            .listRowBackground(Color.ftCard)
+
+            if hub.personal.phase == .ready {
+                NavigationLink(value: ChatRoomKind.personal) {
+                    ChatRoomRow(viewModel: hub.personal)
                 }
                 .listRowBackground(Color.ftCard)
+            } else {
+                // Not sohbeti henüz yok: kendi kodunu kendine yapıştırarak açılır.
+                Button(action: onOpenPersonalSetup) {
+                    ChatRoomRow(viewModel: hub.personal)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.ftCard)
+                .accessibilityHint("Kendine not sohbeti açar")
             }
         }
         .scrollContentBackground(.hidden)
@@ -264,7 +256,8 @@ struct ChatRoomRow: View {
 
     private var title: String {
         switch (viewModel.kind, viewModel.phase) {
-        case (.personal, _): return viewModel.partnerName
+        case (.personal, .ready): return viewModel.partnerName
+        case (.personal, _): return "Kendime not"
         case (.partner, .ready): return viewModel.partnerName
         case (.partner, .unpaired): return "Sohbet arkadaşını ekle"
         default: return "Sohbet"
@@ -277,7 +270,8 @@ struct ChatRoomRow: View {
             return prefix + last.displayText
         }
         switch (viewModel.kind, viewModel.phase) {
-        case (.personal, _): return "Kendine not al"
+        case (.personal, .ready): return "Kendine not al"
+        case (.personal, _): return "Kendine not sohbeti aç"
         case (.partner, .unpaired): return "Davet kodu oluştur ya da gir"
         default: return "Henüz mesaj yok"
         }

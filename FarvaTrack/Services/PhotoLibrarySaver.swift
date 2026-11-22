@@ -24,9 +24,15 @@ final class PhotoLibrarySaver: PhotoLibrarySaving {
 /// Sohbet medya tercihleri (Ayarlar'dan değişir).
 enum ChatMediaPreferences {
     static let autoSaveKey = "chat.autoSaveToPhotos"
+    static let dataSaverKey = "chat.mediaDataSaver"
 
     /// Gelen fotoğraf ve videolar Fotoğraflar'a otomatik kaydedilsin mi (varsayılan: açık).
     static func autoSaveToPhotos(_ defaults: UserDefaults) -> Bool {
         defaults.object(forKey: autoSaveKey) as? Bool ?? true
+    }
+
+    /// Gönderilen fotoğraf/video kalitesi: varsayılan Orijinal; "Veri tasarrufu" açıksa Hızlı.
+    static func sendQuality(_ defaults: UserDefaults) -> ChatMediaQuality {
+        defaults.bool(forKey: dataSaverKey) ? .fast : .original
     }
 }

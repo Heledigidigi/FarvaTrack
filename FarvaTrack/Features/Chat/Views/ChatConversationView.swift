@@ -9,7 +9,6 @@ struct ChatConversationView: View {
     @State private var showPicker = false
     @State private var showCamera = false
     /// Galeriden seçilenler; gönderim sayfası (Orijinal / Hızlı) bunlar için açılır.
-    @State private var pickedMedia: [PickedMedia] = []
     @State private var viewerItem: ChatMessageItem?
     @State private var showStickers = false
     /// Sticker paneli (yazma alanının altında) ve yerleştirme (8E).
@@ -71,6 +70,13 @@ struct ChatConversationView: View {
                     }
                 )
                 .coordinateSpace(name: ChatCoordinateSpace.content)
+                // Panelden sürüklenen sticker: bırakılan nokta doğrudan içerik koordinatındadır (kaydırma hesabı gerekmez).
+                .contentShape(Rectangle())
+                .dropDestination(for: String.self) { items, location in
+                    handleStickerDrop(items, at: location)
+                } isTargeted: { targeted in
+                    if targeted { Haptics.selection() }
+                }
                 // Yerleştirmeler içerikle birlikte kayar; konum bağlı mesajın çerçevesinden hesaplanır.
                 .overlayPreferenceValue(MessageFramePreference.self) { frames in
                     GeometryReader { geometry in
@@ -95,6 +101,8 @@ struct ChatConversationView: View {
                             )
                             PlacementDraftView(draft: $placementDraft, containerWidth: geometry.size.width)
                         }
+                        .onAppear { metrics.contentWidth = geometry.size.width }
+                        .onChange(of: geometry.size.width) { _, width in metrics.contentWidth = width }
                     }
                 }
                 .onPreferenceChange(MessageFramePreference.self) { metrics.frames = $0 }
@@ -146,7 +154,7 @@ struct ChatConversationView: View {
                                     viewModel.sendSticker(fileURL: sticker.fileURL, width: sticker.width, height: sticker.height)
                                     useRecent(sticker)
                                 },
-                                onPlace: { sticker in startPlacing(sticker) },
+                                onPlace: { sticker in placeNearLastMessage(sticker) },
                                 onCreate: { showStickers = true }
                             )
                             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -159,22 +167,17 @@ struct ChatConversationView: View {
             }
         }
         .sheet(isPresented: $showPicker) {
+            // Seçilenler doğrudan gider; kalite Ayarlar → Sohbet → Veri tasarrufu'ndan.
             ChatMediaPicker { items in
-                pickedMedia = items
+                guard !items.isEmpty else { return }
+                let quality = ChatMediaPreferences.sendQuality(.standard)
+                Task { await viewModel.sendMedia(items, quality: quality) }
             }
             .ignoresSafeArea()
         }
-        .sheet(isPresented: Binding(get: { !pickedMedia.isEmpty }, set: { if !$0 { discardPicked() } })) {
-            ChatMediaSendSheet(items: pickedMedia) { quality in
-                let items = pickedMedia
-                pickedMedia = []
-                Task { await viewModel.sendMedia(items, quality: quality) }
-            } onCancel: {
-                discardPicked()
-            }
-        }
         .fullScreenCover(isPresented: $showCamera) {
-            ChatCameraView { media, quality in
+            ChatCameraView(stickers: stickerLibrary.stickers) { media in
+                let quality = ChatMediaPreferences.sendQuality(.standard)
                 Task { await viewModel.sendMedia([media], quality: quality) }
             }
         }
@@ -387,22 +390,34 @@ struct ChatConversationView: View {
         recentIDs = recents.ids
     }
 
-    /// Panelden "Sohbete yerleştir": görünen bölgenin ortasında taslak başlar.
-    private func startPlacing(_ sticker: StickerItem) {
+    /// Panelden sohbete sürüklenip bırakılan sticker: bırakılan noktada taslak başlar (büyüt / döndür, sonra onayla).
+    private func handleStickerDrop(_ items: [String], at location: CGPoint) -> Bool {
+        guard let id = items.lazy.compactMap(StickerDragPayload.stickerID(from:)).first,
+              let sticker = stickerLibrary.stickers.first(where: { $0.id == id }) else { return false }
         guard !viewModel.messages.isEmpty else {
+            toast = "Yerleştirmek için sohbette en az bir mesaj olmalı"
+            return false
+        }
+        useRecent(sticker)
+        withAnimation(.easeOut(duration: 0.2)) { showStickerPanel = false }
+        placementDraft = PlacementDraft(
+            imageURL: sticker.fileURL, width: sticker.width, height: sticker.height, editingID: nil,
+            transform: PlacementTransform(center: location, scale: 1, rotation: 0)
+        )
+        Haptics.impact(.medium)
+        return true
+    }
+
+    /// VoiceOver: sürükleyemeyen kullanıcı için son mesajın yanına doğrudan yerleştirir.
+    private func placeNearLastMessage(_ sticker: StickerItem) {
+        guard let last = viewModel.messages.last else {
             toast = "Yerleştirmek için sohbette en az bir mesaj olmalı"
             return
         }
-        showStickerPanel = false
         useRecent(sticker)
-        placementDraft = PlacementDraft(
-            imageURL: sticker.fileURL, width: sticker.width, height: sticker.height, editingID: nil,
-            transform: PlacementTransform(
-                center: PlacementGeometry.visibleCenter(contentMinY: metrics.contentMinY, viewportSize: metrics.viewportSize),
-                scale: 1, rotation: 0
-            )
-        )
-        Haptics.impact(.medium)
+        viewModel.placeSticker(fileURL: sticker.fileURL, width: sticker.width, height: sticker.height,
+                               anchorMessageID: last.id, x: last.isMine ? 0.25 : 0.75, y: 0, scale: 1, rotation: 0)
+        Haptics.success()
     }
 
     /// Kendi yerleştirmesini taşımak için taslağa alır.
@@ -417,10 +432,16 @@ struct ChatConversationView: View {
 
     private var placementBar: some View {
         HStack(spacing: 12) {
-            Button("Vazgeç") {
+            Button {
                 placementDraft = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 36, height: 36)
+                    .background(Color.ftCardElevated, in: Circle())
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Vazgeç")
             Text("Sürükle, iki parmakla büyüt ve döndür")
                 .font(.caption)
                 .foregroundStyle(Color.ftTextSecondary)
@@ -428,10 +449,14 @@ struct ChatConversationView: View {
             Button {
                 commitPlacement()
             } label: {
-                Label("Yerleştir", systemImage: "checkmark")
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Color.ftAccent, in: Circle())
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Color.ftAccent)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Yerleştir")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -440,8 +465,10 @@ struct ChatConversationView: View {
 
     private func commitPlacement() {
         guard let draft = placementDraft else { return }
+        // Yatay oran, yerleştirmelerin çizildiği içerik genişliğine göre (kenar boşlukları hariç).
+        let width = metrics.contentWidth > 0 ? metrics.contentWidth : metrics.viewportSize.width
         guard let anchor = PlacementGeometry.anchored(center: draft.transform.center,
-                                                      containerWidth: metrics.viewportSize.width,
+                                                      containerWidth: width,
                                                       frames: metrics.frames) else {
             toast = "Sticker'ı bir mesajın yakınına bırak"
             return
@@ -489,10 +516,6 @@ struct ChatConversationView: View {
     }
 
     /// Gönderilmeden vazgeçilen geçici kopyalar silinir.
-    private func discardPicked() {
-        pickedMedia.forEach { try? FileManager.default.removeItem(at: $0.fileURL) }
-        pickedMedia = []
-    }
 
     private func showsDayHeader(at index: Int) -> Bool {
         let messages = viewModel.messages

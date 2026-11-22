@@ -16,6 +16,19 @@ struct ChatContentOffsetPreference: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
+/// Panelden sohbete sürüklenen sticker: kimliği önekli metin olarak taşınır (başka uygulamadan bırakılan metinler ayıklanır).
+enum StickerDragPayload {
+    static let prefix = "farvatrack-sticker:"
+
+    static func text(for id: String) -> String { prefix + id }
+
+    static func stickerID(from text: String) -> String? {
+        guard text.hasPrefix(prefix) else { return nil }
+        let id = String(text.dropFirst(prefix.count))
+        return id.isEmpty ? nil : id
+    }
+}
+
 enum ChatCoordinateSpace {
     static let content = "chatContent"
     static let viewport = "chatViewport"
@@ -26,6 +39,8 @@ final class ChatScrollMetrics {
     var contentMinY: CGFloat = 0
     var viewportSize: CGSize = .zero
     var frames: [String: CGRect] = [:]
+    /// İçeriğin (mesaj sütununun) genişliği: yerleştirmelerin yatay oranı buna göre.
+    var contentWidth: CGFloat = 0
 }
 
 // MARK: - Sticker paneli
@@ -40,6 +55,7 @@ struct ChatStickerPanel: View {
     let library: StickerLibraryViewModel
     let recents: [StickerItem]
     let onSend: (StickerItem) -> Void
+    /// Yalnızca erişilebilirlik (VoiceOver) için: sürükleyemeyen kullanıcı son mesajın yanına yerleştirir.
     let onPlace: (StickerItem) -> Void
     let onCreate: () -> Void
 
@@ -91,20 +107,18 @@ struct ChatStickerPanel: View {
                                     .background(Color.clear)
                             }
                             .buttonStyle(.plain)
-                            .contextMenu {
-                                Button { onSend(sticker) } label: { Label("Gönder", systemImage: "paperplane") }
-                                Button { onPlace(sticker) } label: { Label("Sohbete yerleştir", systemImage: "hand.draw") }
+                            // Basılı tutup sohbetin üstüne sürükleyince bırakılan yere yerleştirilir.
+                            .draggable(StickerDragPayload.text(for: sticker.id)) {
+                                CachedImageView(url: sticker.fileURL, contentMode: .fit)
+                                    .frame(width: 96, height: 96)
                             }
                             .accessibilityLabel("Sticker")
-                            .accessibilityHint("Göndermek için dokun")
+                            .accessibilityHint("Göndermek için dokun. Sohbete yerleştirmek için basılı tutup sürükle.")
                             .accessibilityAction(named: "Sohbete yerleştir") { onPlace(sticker) }
                         }
                     }
                 }
-                .frame(height: 170)
-                Text("Dokun: gönder · Uzun bas: sohbetin üstüne yerleştir")
-                    .font(.caption2)
-                    .foregroundStyle(Color.ftTextSecondary)
+                .frame(height: 190)
             }
         }
         .padding(.horizontal, 12)

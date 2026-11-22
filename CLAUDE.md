@@ -34,7 +34,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8H tamam |
+| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8H + düzeltmeler tamam |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -126,5 +126,11 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - CallKit ile sistem arama ekranı; PushKit VoIP bildirimiyle kilitliyken gelen arama.
 - Hoparlör, sessiz, Bluetooth kulaklık geçişleri; arama süresi ve kalite göstergesi.
 - Cevapsız arama kaydı ve sohbette arama geçmişi satırı.
+
+**Sohbet düzeltmeleri** (8H sonrası, tamamlandı)
+- Sohbet sekmesi hep `ChatRoomListView` ile açılır (Karşılıklı + "Kendime not"; not sohbeti yoksa satır kurulum açar). Açık konuşmada ve sticker panelinde sekme çubuğu gizli (`.toolbar(.hidden, for: .tabBar)`).
+- Medya kalitesi her gönderimde sorulmaz: varsayılan Orijinal, Ayarlar → Sohbet → "Veri tasarrufu" (`ChatMediaPreferences.dataSaverKey`, `sendQuality`) açıksa Hızlı. Galeriden seçilenler doğrudan gider (`ChatMediaSendSheet` kaldırıldı).
+- Kamera sonrası `ChatPhotoEditorView`: kırp (tahribatsız, `PhotoEditDocument.crop`), sticker (kütüphaneden), yazı (renkli), kalem + çizgi silgisi + geri al, Fotoğraflar'a kaydet, gönder; katmanlar sürükle/büyüt/döndür, alttaki çöpe sürükleyince silinir. Saf mantık `PhotoEdit.swift` (`PhotoEditGeometry`: dönüşümler, kırpma tutamaçları, silgi isabeti), testli. Düzenleme yoksa orijinal dosya bayt bayt gider; varsa `ImageRenderer` ile orijinal çözünürlükte HEIC. Videoda ✕ / kaydet / gönder. Kapat/vazgeç sol üstte küçük ✕; önizleme katmanı `allowsHitTesting(false)` (dönüşte ✕ basılamama hatası).
+- Sticker yerleştirme: panelde dokun = gönder; basılı tutup sohbete sürükle (`.draggable` `StickerDragPayload` → içerikte `dropDestination`, nokta içerik koordinatında) → bırakılan yerde taslak, ✕ / ✓. Yatay oran içerik genişliğine göre (`ChatScrollMetrics.contentWidth`). VoiceOver eylemi son mesajın yanına yerleştirir.
 
 Yeni modül eklerken: `AppRoute` (Özet'ten açılan sayfa) veya `AppTab`, SwiftData şeması (`FarvaTrackApp`), `LiveDashboardDataSource`, Firestore kuralları, `Constants.Collection.userSubcollections` (hesap silme), `LocalDataCleaner` ve `DataExporter` güncellenir.

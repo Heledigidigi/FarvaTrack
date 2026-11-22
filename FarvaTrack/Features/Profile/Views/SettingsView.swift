@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
     @AppStorage(ChatMediaPreferences.autoSaveKey) private var autoSaveChatMedia = true
+    @AppStorage(ChatMediaPreferences.dataSaverKey) private var chatDataSaver = false
     @State private var exportURL: URL?
     @State private var exportError: String?
 
@@ -56,6 +57,11 @@ struct SettingsView: View {
                         Label("Gelen fotoğraf ve videoları Fotoğraflar'a kaydet", systemImage: "photo.on.rectangle.angled")
                     }
                     .tint(Color.ftAccent)
+                    Toggle(isOn: $chatDataSaver) {
+                        Label("Veri tasarrufu", systemImage: "antenna.radiowaves.left.and.right.slash")
+                    }
+                    .tint(Color.ftAccent)
+                    .accessibilityHint("Açıkken fotoğraf ve videolar küçültülerek daha hızlı gönderilir")
                     NavigationLink {
                         ChatStorageView()
                     } label: {
@@ -64,7 +70,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Sohbet")
                 } footer: {
-                    Text("\(PushManager.shared.statusText) Fotoğraf kaydetme açıkken karşı taraftan gelen fotoğraf ve videolar orijal kalitesinde Fotoğraflar'a eklenir.")
+                    Text("\(PushManager.shared.statusText) Fotoğraf kaydetme açıkken karşı taraftan gelen fotoğraf ve videolar orijal kalitesinde Fotoğraflar'a eklenir. Fotoğraf ve videolar varsayılan olarak orijinal kalitede gider; veri tasarrufu açıkken küçültülüp (2048 px fotoğraf, 720p video) daha hızlı gönderilir.")
                 }
                 .listRowBackground(Color.ftCard)
 
