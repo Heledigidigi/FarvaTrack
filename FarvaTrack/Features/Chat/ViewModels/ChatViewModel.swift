@@ -526,6 +526,15 @@ final class ChatViewModel {
         }
     }
 
+    /// Alıntılanan mesaj fotoğraf/video/sticker ise cihazdaki küçük resmi (ekrandaki pencerede olmasa da).
+    func replyThumbnail(for messageID: String) -> URL? {
+        if let item = messages.first(where: { $0.id == messageID }) { return ChatReplyVisual(item: item).thumbnailURL }
+        guard let record = cachedRecord(for: messageID), !record.deletedForEveryone, !record.hiddenForMe else { return nil }
+        if record.media != nil { return localThumbnailURL(for: record) }
+        if record.sticker != nil { return localOriginalURL(for: record) }
+        return nil
+    }
+
     /// Mesaj bilgisi ekranı (gönderildi / iletildi / görüldü).
     func info(for item: ChatMessageItem) -> ChatMessageInfo {
         let current = messages.first { $0.id == item.id } ?? item

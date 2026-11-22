@@ -32,6 +32,8 @@ struct ChatBubbleView: View {
     var onCallBack: (() -> Void)?
     /// Uzun bas → Bilgi (gönderildi / iletildi / görüldü).
     var onInfo: () -> Void = {}
+    /// Alıntılanan mesaj fotoğraf/video/sticker ise küçük resmi (cihazda varsa).
+    var quoteThumbnail: URL?
 
     private var message: ChatMessageDTO { item.message }
 
@@ -137,7 +139,7 @@ struct ChatBubbleView: View {
         .background(
             GeometryReader { geometry in
                 Color.clear.preference(key: ChatBubbleFramePreference.self,
-                                       value: [item.id: geometry.frame(in: .named(ChatCoordinateSpace.content))])
+                                       value: [item.id: geometry.frame(in: .global)])
             }
         )
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -224,16 +226,36 @@ struct ChatBubbleView: View {
                     Text(name(for: reply.senderID))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.ftAccentLight)
-                    Text(reply.preview.isEmpty ? reply.type.placeholder : reply.preview)
-                        .font(.caption)
-                        .foregroundStyle(Color.white.opacity(0.8))
-                        .lineLimit(2)
+                    if let text = quoteText(reply) {
+                        Text(text)
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.8))
+                            .lineLimit(2)
+                    }
+                }
+                if let quoteThumbnail {
+                    CachedImageView(url: quoteThumbnail)
+                        .frame(width: 40, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .accessibilityHidden(true)
                 }
             }
             .padding(6)
             .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+
+    /// Alıntı metni: küçük resim varken "📷 Fotoğraf" yazılmaz, yalnızca açıklama (varsa).
+    private func quoteText(_ reply: ChatReplyReference) -> String? {
+        guard quoteThumbnail != nil, reply.type.isMedia || reply.type == .sticker else {
+            return reply.preview.isEmpty ? reply.type.placeholder : reply.preview
+        }
+        let placeholder = reply.type.placeholder
+        var text = reply.preview
+        for prefix in ["📷 ", "🎬 "] where text.hasPrefix(prefix) { text.removeFirst(prefix.count) }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty || reply.preview == placeholder ? nil : text
     }
 
     /// Fotoğrafın altındaki açıklama (yoksa `nil`).
@@ -435,10 +457,14 @@ struct ChatComposer: View {
     var body: some View {
         VStack(spacing: 6) {
             if let reply = viewModel.replyingTo {
+                // Fotoğraf/video/sticker yanıtında "Fotoğraf" yazmaz; küçük resmi gösterilir (açıklama varsa o yazar).
+                let visual = ChatReplyVisual(item: reply)
                 contextBar(
                     icon: "arrowshape.turn.up.left.fill",
                     title: reply.isMine ? "Kendi mesajına yanıt" : "\(viewModel.partnerName) kişisine yanıt",
-                    text: reply.displayText
+                    text: visual.text,
+                    thumbnail: visual.thumbnailURL,
+                    isVideo: reply.message.type == .video
                 )
             } else if let editing = viewModel.editing {
                 contextBar(icon: "pencil", title: "Mesajı düzenle", text: editing.message.text)
@@ -523,7 +549,7 @@ struct ChatComposer: View {
         .background(Color.ftCard.ignoresSafeArea(edges: .bottom))
     }
 
-    private func contextBar(icon: String, title: String, text: String) -> some View {
+    private func contextBar(icon: String, title: String, text: String, thumbnail: URL? = nil, isVideo: Bool = false) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .foregroundStyle(Color.ftAccentLight)
@@ -532,12 +558,25 @@ struct ChatComposer: View {
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.ftAccentLight)
-                Text(text)
-                    .font(.caption)
-                    .foregroundStyle(Color.ftTextSecondary)
-                    .lineLimit(1)
+                if !text.isEmpty {
+                    Text(text)
+                        .font(.caption)
+                        .foregroundStyle(Color.ftTextSecondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
+            if let thumbnail {
+                CachedImageView(url: thumbnail)
+                    .frame(width: 38, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay {
+                        if isVideo {
+                            Image(systemName: "play.fill").font(.caption2).foregroundStyle(.white).shadow(radius: 2)
+                        }
+                    }
+                    .accessibilityLabel(isVideo ? "Video" : "Fotoğraf")
+            }
             Button {
                 viewModel.cancelComposerContext()
             } label: {
@@ -549,5 +588,28 @@ struct ChatComposer: View {
         .padding(8)
         .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
+    }
+}
+
+// MARK: - Yanıtta görsel önizleme
+
+/// Yanıtlanan fotoğraf/video/sticker için küçük resim ve (varsa) açıklama.
+struct ChatReplyVisual {
+    let thumbnailURL: URL?
+    let text: String
+
+    init(item: ChatMessageItem) {
+        let message = item.message
+        if message.media != nil, !message.deleted {
+            thumbnailURL = item.localThumbnailURL
+            let caption = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            text = caption.isEmpty ? (item.localThumbnailURL == nil ? message.type.placeholder : "") : caption
+        } else if message.sticker != nil, !message.deleted, let url = item.localOriginalURL {
+            thumbnailURL = url
+            text = ""
+        } else {
+            thumbnailURL = nil
+            text = item.displayText
+        }
     }
 }

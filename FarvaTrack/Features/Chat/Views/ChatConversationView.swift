@@ -27,6 +27,7 @@ struct ChatConversationView: View {
     @State private var infoItem: ChatMessageItem?
     @FocusState private var findFocused: Bool
     @State private var scrollToBottomRequest = 0
+    @State private var viewerReplyAction: ChatViewerReplyAction?
     @State private var stickerLibrary = StickerLibraryViewModel()
     @State private var recentIDs: [String] = []
     @State private var placementDraft: PlacementDraft?
@@ -92,8 +93,10 @@ struct ChatConversationView: View {
                                         .foregroundStyle(.white)
                                         .frame(width: 32, height: 32)
                                         .background(Color.ftCardElevated, in: Circle())
-                                        .scaleEffect(0.6 + 0.4 * ChatSwipeReply.progress(offset))
+                                        // Eşiğe gelince küçük bir sıçrama: "bırakırsan yanıtlayacaksın".
+                                        .scaleEffect(ChatSwipeReply.isTriggered(offset) ? 1.15 : 0.55 + 0.45 * ChatSwipeReply.progress(offset))
                                         .opacity(ChatSwipeReply.progress(offset))
+                                        .animation(.spring(response: 0.25, dampingFraction: 0.5), value: ChatSwipeReply.isTriggered(offset))
                                         .padding(.horizontal, 4)
                                         .accessibilityHidden(true)
                                 }
@@ -133,9 +136,10 @@ struct ChatConversationView: View {
                         onBegan: { location, velocity in
                             if let hit = bubbleHit(at: location), hit.isMine == (velocity.x < 0) {
                                 swipeReply = (hit.id, 0)
-                            } else {
-                                swipeReply = nil
+                                return true
                             }
+                            swipeReply = nil
+                            return false
                         },
                         onChanged: { translation in
                             if let current = swipeReply {
@@ -363,8 +367,12 @@ struct ChatConversationView: View {
                     }
             }
         }
-        .fullScreenCover(item: $viewerItem) { item in
-            ChatMediaViewer(item: item, viewModel: viewModel, stickers: stickerLibrary.stickers)
+        .fullScreenCover(item: $viewerItem, onDismiss: runViewerReplyAction) { item in
+            ChatMediaViewer(item: item, viewModel: viewModel, stickers: stickerLibrary.stickers) { quoted, action in
+                // Fotoğrafa yanıt: sohbete dönülür, alıntı hazır, seçilen işlem açılır (kamera, galeri…).
+                viewModel.beginReply(to: quoted)
+                viewerReplyAction = action
+            }
         }
         .sheet(item: $infoItem) { item in
             ChatMessageInfoSheet(item: item, info: viewModel.info(for: item), partnerName: viewModel.partnerName)
@@ -510,7 +518,8 @@ struct ChatConversationView: View {
             bubbleAssets: style.map { bubbleStore.assets(for: $0, ownerID: sender) } ?? .empty,
             bubbleCacheOwner: owner,
             onCallBack: viewModel.kind == .partner ? { CallLauncher.call(viewModel) } : nil,
-            onInfo: { infoItem = item }
+            onInfo: { infoItem = item },
+            quoteThumbnail: item.message.replyTo.flatMap { viewModel.replyThumbnail(for: $0.messageID) }
         )
         .task(id: item.message.bubble) {
             await bubbleStore.ensure(item.message.bubble, ownerID: sender)
@@ -723,6 +732,20 @@ struct ChatConversationView: View {
         }
     }
 
+    /// Görüntüleyiciden gelen yanıt işlemi (görüntüleyici kapanınca).
+    private func runViewerReplyAction() {
+        guard let action = viewerReplyAction else { return }
+        viewerReplyAction = nil
+        switch action {
+        case .camera: showCamera = true
+        case .gallery: togglePanel(.gallery)
+        case .stickers: togglePanel(.stickers)
+        case .voice:
+            // Kayıt basılı tutarak yapılır: alıntı hazır, mikrofon düğmesi aynı yerde.
+            recorder.hint = "Yanıtı kaydetmek için mikrofonu basılı tut"
+        }
+    }
+
     /// Düğmeye basılınca: panel açıksa klavyeye dön, değilse klavyenin yerine paneli koy.
     /// Panel animasyonsuz gelir; klavye kendi animasyonuyla inerken altında aynı yükseklikte panel hazırdır.
     private func togglePanel(_ target: ChatInputPanel) {
@@ -754,10 +777,9 @@ struct ChatConversationView: View {
         return swipeReply.offset
     }
 
-    /// Görünen alandaki noktanın altındaki baloncuk (içerik koordinatına çevrilerek).
+    /// Pencere koordinatındaki noktanın altındaki baloncuk.
     private func bubbleHit(at location: CGPoint) -> (id: String, isMine: Bool)? {
-        let point = CGPoint(x: location.x, y: location.y - metrics.contentMinY)
-        guard let id = metrics.bubbleFrames.first(where: { $0.value.insetBy(dx: -6, dy: -4).contains(point) })?.key,
+        guard let id = metrics.bubbleFrames.first(where: { $0.value.insetBy(dx: -6, dy: -4).contains(location) })?.key,
               let item = viewModel.messages.first(where: { $0.id == id }),
               !item.message.deleted else { return nil }
         return (id, item.isMine)

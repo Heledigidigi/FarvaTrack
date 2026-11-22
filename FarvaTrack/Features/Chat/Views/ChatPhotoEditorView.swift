@@ -243,6 +243,9 @@ struct ChatPhotoEditorView: View {
                                                                height: bounds.height - (mode == .crop ? 32 : 0)))
                 let origin = CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2)
                 ZStack(alignment: .topLeading) {
+                    // Alan her kipte aynı kalsın: tuval yalnızca kendi boyutunda olursa (kalem/kırpma kipinde)
+                    // ortalanıp üstüne bir de öteleme eklenir ve fotoğraf sağa-aşağı kayar.
+                    Color.clear.frame(width: bounds.width, height: bounds.height)
                     canvas(crop: crop, size: size)
                         .frame(width: size.width, height: size.height)
                         .offset(x: origin.x, y: origin.y)
@@ -259,10 +262,10 @@ struct ChatPhotoEditorView: View {
                         )
                     }
                 }
-                .frame(width: bounds.width, height: bounds.height)
+                .frame(width: bounds.width, height: bounds.height, alignment: .topLeading)
             }
             .padding(.top, 64)
-            .padding(.bottom, mode == .draw ? 150 : 96)
+            .padding(.bottom, 96)
             .ignoresSafeArea(.keyboard)
 
             VStack(spacing: 0) {

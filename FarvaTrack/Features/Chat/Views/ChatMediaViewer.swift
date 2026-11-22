@@ -13,6 +13,9 @@ struct ChatMediaViewer: View {
     let viewModel: ChatViewModel
     /// Düzenleyicide eklenebilecek sticker'lar.
     var stickers: [StickerItem] = []
+    /// Yanıt çubuğundaki galeri / sticker / kamera / mikrofon: görüntüleyici kapanır, sohbette bu fotoğrafa
+    /// yanıt olarak o işlem açılır. `nil` ise (ör. profil) yalnızca yazıyla yanıt.
+    var onReplyAction: ((ChatMessageItem, ChatViewerReplyAction) -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var items: [ChatMessageItem] = []
@@ -32,10 +35,12 @@ struct ChatMediaViewer: View {
 
     private let photoSaver: PhotoLibrarySaving = PhotoLibrarySaver()
 
-    init(item: ChatMessageItem, viewModel: ChatViewModel, stickers: [StickerItem] = []) {
+    init(item: ChatMessageItem, viewModel: ChatViewModel, stickers: [StickerItem] = [],
+         onReplyAction: ((ChatMessageItem, ChatViewerReplyAction) -> Void)? = nil) {
         self.item = item
         self.viewModel = viewModel
         self.stickers = stickers
+        self.onReplyAction = onReplyAction
         _selection = State(initialValue: item.id)
     }
 
@@ -154,7 +159,12 @@ struct ChatMediaViewer: View {
 
     /// Bu fotoğrafa alıntılı yanıt: dokununca klavye açılır, gönderince sohbete dönülür.
     private var replyBar: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        let typing = !replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return HStack(alignment: .bottom, spacing: 8) {
+            if onReplyAction != nil, !typing {
+                replyActionButton("photo.on.rectangle.angled", label: "Galeriden yanıtla", action: .gallery)
+                replyActionButton("face.smiling", label: "Sticker ile yanıtla", action: .stickers)
+            }
             HStack(alignment: .bottom, spacing: 8) {
                 CachedImageView(url: current?.localThumbnailURL)
                     .frame(width: 30, height: 30)
@@ -172,7 +182,11 @@ struct ChatMediaViewer: View {
             .padding(.trailing, 12)
             .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
 
-            if !replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if onReplyAction != nil, !typing {
+                replyActionButton("camera.fill", label: "Fotoğraf çekip yanıtla", action: .camera)
+                replyActionButton("mic.fill", label: "Sesli mesajla yanıtla", action: .voice)
+            }
+            if typing {
                 Button { sendReply() } label: {
                     Image(systemName: "arrow.up")
                         .font(.body.weight(.bold))
@@ -190,6 +204,22 @@ struct ChatMediaViewer: View {
             LinearGradient(colors: [.clear, .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
         )
+    }
+
+    private func replyActionButton(_ systemImage: String, label: String, action: ChatViewerReplyAction) -> some View {
+        Button {
+            guard let item = current else { return }
+            Haptics.selection()
+            replyFocused = false
+            onReplyAction?(item, action)
+            dismiss()
+        } label: {
+            Image(systemName: systemImage)
+                .font(.system(size: 20))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 42)
+        }
+        .accessibilityLabel(label)
     }
 
     private func sendReply() {
@@ -579,4 +609,9 @@ struct ZoomableImage: UIViewRepresentable {
             return abs(velocity.y) > abs(velocity.x) * 1.2
         }
     }
+}
+
+/// Görüntüleyicinin yanıt çubuğundan sohbete taşınan işlem.
+enum ChatViewerReplyAction: Equatable {
+    case gallery, stickers, camera, voice
 }

@@ -96,10 +96,12 @@ final class ChatKeyboardObserver {
 
 // MARK: - Klavyenin gerçek konumu
 
-/// Pencerenin `keyboardLayoutGuide`'ına bağlı görünmez bir ölçer: klavyenin ekranın altından yüksekliğini
-/// her karede bildirir (parmakla aşağı çekip kapatırken de). Animasyonlu değişimler ayrıca belirtilir.
+/// Klavyenin ekranın altından yüksekliğini bildirir.
+/// - Açılma/kapanma: sistemin klavye bildirimlerinden (son konum + animasyonlu olduğu bilgisi).
+/// - Parmakla aşağı çekip kapatma: ana görünüm denetleyicisinin `keyboardLayoutGuide`'ına bağlı görünmez bir
+///   ölçer her karede bildirir (yalnızca animasyonsuz değişimler alınır; animasyonluları bildirimler verir).
 struct ChatKeyboardTracker: UIViewRepresentable {
-    /// `overlap`: klavyenin ekranın altından yüksekliği; `animated`: sistem animasyonu içinde mi; `homeInset`: ev çubuğu.
+    /// `overlap`: klavyenin ekranın altından yüksekliği; `animated`: sistem animasyonuyla mı; `homeInset`: ev çubuğu.
     let onChange: (_ overlap: CGFloat, _ animated: Bool, _ homeInset: CGFloat) -> Void
 
     func makeUIView(context: Context) -> AnchorView {
@@ -120,6 +122,11 @@ struct ChatKeyboardTracker: UIViewRepresentable {
     final class AnchorView: UIView {
         var onChange: ((CGFloat, Bool, CGFloat) -> Void)?
         private var probe: ProbeView?
+        private var tokens: [NSObjectProtocol] = []
+        /// Bildirimlere göre klavye açık mı (ölçer yalnızca açıkken dinlenir).
+        private var keyboardShown = false
+
+        private var homeInset: CGFloat { window?.safeAreaInsets.bottom ?? 0 }
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
@@ -127,33 +134,66 @@ struct ChatKeyboardTracker: UIViewRepresentable {
                 detach()
                 return
             }
-            guard probe?.superview !== window else { return }
-            detach()
+            if tokens.isEmpty { observeNotifications() }
+            attachProbe(in: window)
+            let inset = homeInset
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.keyboardShown else { return }
+                self.onChange?(0, false, inset)
+            }
+        }
+
+        private func observeNotifications() {
+            let center = NotificationCenter.default
+            for name in [UIResponder.keyboardWillChangeFrameNotification, UIResponder.keyboardWillHideNotification] {
+                tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                    MainActor.assumeIsolated { self?.handle(note) }
+                })
+            }
+        }
+
+        private func handle(_ note: Notification) {
+            guard let window else { return }
+            let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0
+            var overlap: CGFloat = 0
+            if note.name != UIResponder.keyboardWillHideNotification,
+               let screenFrame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue {
+                let frame = window.convert(screenFrame, from: nil)
+                overlap = max(0, window.bounds.maxY - frame.minY)
+            }
+            keyboardShown = overlap > 1
+            onChange?(overlap, duration > 0, homeInset)
+        }
+
+        private func attachProbe(in window: UIWindow) {
+            guard let host = window.rootViewController?.view else { return }
+            if probe?.superview === host { return }
+            probe?.removeFromSuperview()
             let probe = ProbeView()
             probe.isUserInteractionEnabled = false
             probe.alpha = 0
             probe.translatesAutoresizingMaskIntoConstraints = false
-            window.addSubview(probe)
-            window.keyboardLayoutGuide.usesBottomSafeArea = false
+            host.addSubview(probe)
+            host.keyboardLayoutGuide.usesBottomSafeArea = false
             NSLayoutConstraint.activate([
-                probe.leadingAnchor.constraint(equalTo: window.leadingAnchor),
+                probe.leadingAnchor.constraint(equalTo: host.leadingAnchor),
                 probe.widthAnchor.constraint(equalToConstant: 1),
-                probe.bottomAnchor.constraint(equalTo: window.bottomAnchor),
-                probe.topAnchor.constraint(equalTo: window.keyboardLayoutGuide.topAnchor)
+                probe.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+                probe.topAnchor.constraint(equalTo: host.keyboardLayoutGuide.topAnchor)
             ])
-            probe.onLayout = { [weak self, weak window] height, animated in
-                self?.onChange?(height, animated, window?.safeAreaInsets.bottom ?? 0)
+            probe.onLayout = { [weak self] height, animated in
+                // Parmakla kapatma: animasyonsuz, kare kare.
+                guard let self, self.keyboardShown, !animated else { return }
+                self.onChange?(height, false, self.homeInset)
             }
             self.probe = probe
-            DispatchQueue.main.async { [weak self, weak window] in
-                guard let probe = self?.probe else { return }
-                self?.onChange?(probe.bounds.height, false, window?.safeAreaInsets.bottom ?? 0)
-            }
         }
 
         func detach() {
             probe?.removeFromSuperview()
             probe = nil
+            for token in tokens { NotificationCenter.default.removeObserver(token) }
+            tokens = []
         }
     }
 

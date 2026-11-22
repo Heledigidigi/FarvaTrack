@@ -203,6 +203,28 @@ final class ChatLayoutHelperTests: XCTestCase {
         XCTAssertTrue(ChatSwipeReply.isTriggered(ChatSwipeReply.offset(forTranslation: -70, isMine: true)))
     }
 
+    func testReplyVisualShowsThumbnailInsteadOfPhotoWord() {
+        let media = ChatMedia(originalPath: "o", thumbnailPath: "t", contentType: "image/heic", fileExtension: "heic",
+                              byteSize: 1, width: 10, height: 10, duration: nil, quality: .original, status: .ready)
+        let thumb = URL(fileURLWithPath: "/tmp/t.jpg")
+        let photo = ChatMessageItem(message: ChatMessageDTO(id: "p", senderID: "a", type: .image, text: "", createdAt: .now, media: media),
+                                    isMine: false, status: nil, myReaction: nil, canEdit: false, localThumbnailURL: thumb)
+        let visual = ChatReplyVisual(item: photo)
+        XCTAssertEqual(visual.thumbnailURL, thumb)
+        XCTAssertEqual(visual.text, "", "küçük resim varken 'Fotoğraf' yazmaz")
+
+        var captioned = photo.message
+        captioned.text = "deniz"
+        let withCaption = ChatReplyVisual(item: ChatMessageItem(message: captioned, isMine: false, status: nil, myReaction: nil,
+                                                                canEdit: false, localThumbnailURL: thumb))
+        XCTAssertEqual(withCaption.text, "deniz")
+
+        let text = ChatReplyVisual(item: ChatMessageItem(message: ChatMessageDTO(id: "t", senderID: "a", text: "selam", createdAt: .now),
+                                                         isMine: true, status: .delivered, myReaction: nil, canEdit: false))
+        XCTAssertNil(text.thumbnailURL)
+        XCTAssertEqual(text.text, "selam")
+    }
+
     func testCaptionSummary() {
         let photo = ChatMessageDTO(id: "p", senderID: "a", type: .image, text: "  deniz  ", createdAt: .now)
         XCTAssertEqual(ChatText.summary(of: photo), "📷 deniz")

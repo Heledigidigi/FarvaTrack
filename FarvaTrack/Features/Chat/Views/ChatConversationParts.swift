@@ -40,7 +40,8 @@ enum ChatSwipeReply {
     static func progress(_ offset: CGFloat) -> Double { Double(min(abs(offset) / threshold, 1)) }
 }
 
-/// Baloncukların (yalnızca baloncuk; satırın tamamı değil) içerik koordinatındaki çerçeveleri.
+/// Baloncukların (yalnızca baloncuk; satırın tamamı değil) pencere (`.global`) koordinatındaki çerçeveleri.
+/// Pencere koordinatı UIKit hareketinin konumuyla birebir aynıdır; kaydırma payı ya da üst çubuk farkı olmaz.
 struct ChatBubbleFramePreference: PreferenceKey {
     static var defaultValue: [String: CGRect] = [:]
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
@@ -50,13 +51,13 @@ struct ChatBubbleFramePreference: PreferenceKey {
 
 /// Sohbetin kaydırma görünümüne yatay çekme hareketi ekler (sola: saatler ya da kendi mesajını yanıtla;
 /// sağa: karşı tarafın mesajını yanıtla). Dikey kaydırma ve uzun basma menüsü bozulmaz: hareket yalnızca
-/// belirgin biçimde yatay başlarsa ve `shouldBegin` izin verirse tanınır. Konumlar kaydırma görünümünün
-/// görünen alanına göredir (içeriğin kayması hesaba katılmış).
+/// belirgin biçimde yatay başlarsa ve `shouldBegin` izin verirse tanınır. Konumlar pencere koordinatındadır.
 struct ChatHorizontalPanAttacher: UIViewRepresentable {
     var isEnabled: Bool
     /// Görünen alandaki başlangıç noktası ve hız (x > 0 sağa) → hareket başlasın mı.
     var shouldBegin: (CGPoint, CGPoint) -> Bool = { _, velocity in velocity.x < 0 }
-    var onBegan: (CGPoint, CGPoint) -> Void = { _, _ in }
+    /// `true` dönerse hareket sürdükçe dikey kaydırma kilitlenir (baloncuğu yanıt için çekerken liste oynamasın).
+    var onBegan: (CGPoint, CGPoint) -> Bool = { _, _ in false }
     let onChanged: (CGFloat) -> Void
     let onEnded: () -> Void
 
@@ -115,20 +116,21 @@ struct ChatHorizontalPanAttacher: UIViewRepresentable {
             scrollView = nil
         }
 
-        /// Görünen alandaki konum (içeriğin kaydırma payı çıkarılmış).
+        /// Pencere koordinatındaki konum (SwiftUI `.global` ile aynı).
         private func visibleLocation(_ gesture: UIGestureRecognizer) -> CGPoint {
-            guard let view = gesture.view else { return .zero }
-            let point = gesture.location(in: view)
-            return CGPoint(x: point.x - view.bounds.minX, y: point.y - view.bounds.minY)
+            gesture.location(in: nil)
         }
 
         @objc private func handle(_ gesture: UIPanGestureRecognizer) {
             switch gesture.state {
             case .began:
-                parent.onBegan(visibleLocation(gesture), gesture.velocity(in: gesture.view))
+                if parent.onBegan(visibleLocation(gesture), gesture.velocity(in: gesture.view)) {
+                    scrollView?.isScrollEnabled = false
+                }
             case .changed:
                 parent.onChanged(gesture.translation(in: gesture.view).x)
             case .ended, .cancelled, .failed:
+                scrollView?.isScrollEnabled = true
                 parent.onEnded()
             default:
                 break
