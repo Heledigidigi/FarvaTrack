@@ -1,6 +1,6 @@
 # FarvaTrack: proje rehberi
 
-iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, `@Observable`, async/await, SwiftData (çevrimdışı), Firebase (Auth, Firestore, Storage). Arayüz metinleri ve kod yorumları **Türkçe**.
+iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, `@Observable`, async/await, SwiftData (çevrimdışı), Firebase (Auth, Firestore), dosyalar için Cloudflare R2 (medya sunucusu). Arayüz metinleri ve kod yorumları **Türkçe**.
 
 ## Derleme ve doğrulama
 
@@ -16,6 +16,8 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Kayıt deseni: SwiftData ana kaynak; `needsSync` bayrağı + arka planda Firestore yüklemesi; silmeler `PendingDeletionStore` ile kuyruklanır; çakışmada bekleyen yerel değişiklik kazanır, yoksa `updatedAt` daha yeni olan.
 - Firestore yolları `users/{uid}/<koleksiyon>`; genel işlemler `FirestoreCollectionClient` üzerinden. Kurallar `firebase/firestore.rules`.
 - TestFlight: `.github/workflows/testflight.yml` elle çalıştırılır; App Store Connect API anahtarıyla otomatik imzalar ve yükler (secret'lar README'de).
+- Dosyalar (sohbet medyası, ses, sticker, baloncuk, profil fotoğrafı) Firebase Storage'da değil, `cloudflare/media-worker` (Cloudflare Worker + R2) üzerinden: `ChatMediaStoring` → `MediaServerClient`. Worker her isteği Firebase ID token ile doğrular; izinler `src/rules.js` (eski Storage kurallarıyla aynı; sohbet üyeliği kullanıcının belirteciyle Firestore'daki oda belgesinden). Uç noktalar `src/index.js` başında. Testler `node --test test/*.test.js` (CI'da çalışır). Dağıtım `.github/workflows/media-worker.yml` (main'de worker değişince ya da elle; secret'lar `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`). Sunucu adresi GitHub değişkeni `MEDIA_SERVER_URL` → CI `FarvaTrack/Resources/MediaServer.plist` yazar (repoda yok); yoksa `AppError.mediaServerNotConfigured`.
+- Saklama: alıcı cihaz gelen foto/video orijallerini kendiliğinden indirir (`ChatViewModel.fetchPendingOriginals`, uygulamada `autoFetchOriginals: true`), kalıcı klasörde tutar (`ChatMediaFiles.originalURL`, eski önbellektekiler taşınır), ayar açıksa Fotoğraflar'a kaydeder (`ChatMediaPreferences`, `PhotoLibrarySaving`) ve `/v1/ack` ile bildirir. Worker cron'u her gün: alınmış orijallerden 60 günü geçenleri, toplam 9 GB'ı geçerse en eskiden başlayarak 8,5 GB'a inene kadar siler; önizleme/ses/sticker kalır. 404 → `AppError.mediaRemoved`. Ayarlar → Sohbet → Bulut depolaması (`ChatStorageView`).
 - Firebase yalnızca `GoogleService-Info.plist` varsa başlar (`FirebaseBootstrap`); yoksa uygulama kurulum ekranıyla açılır. Plist CI'da `GOOGLE_SERVICE_INFO_PLIST` secret'ından yazılır, repoya eklenmez.
 - `SharedStore.swift` hem uygulama hem widget hedefinde derlenir; uygulamaya özel tiplere bağımlı olmamalı. App Group: `group.com.farvatrack.shared`.
 - Renkler `Color.ft*` (koyu tema, bordo vurgu). Önemli aksiyonlarda `Haptics`, VoiceOver etiketleri zorunlu.
