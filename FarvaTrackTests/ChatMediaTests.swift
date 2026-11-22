@@ -382,9 +382,9 @@ final class ChatMediaViewModelTests: XCTestCase {
         XCTAssertEqual(item("media-1")?.message.media?.status, .ready)
         XCTAssertTrue(sut.pendingOperations().isEmpty)
 
-        // Yükleme bitince dosyalar önbelleğe taşınır; görüntüleyici indirmeden açılır.
+        // Yükleme bitince orijal kalıcı klasöre taşınır; görüntüleyici indirmeden açılır.
         let local = try XCTUnwrap(item("media-1")?.localOriginalURL)
-        XCTAssertTrue(local.path.hasPrefix(files.cacheRoot.path))
+        XCTAssertTrue(local.path.hasPrefix(files.originalsDirectory.path), "orijaller kalıcı klasörde (bulut kopyası silinebilir)")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: files.outgoingDirectory.path), [])
         let opened = try await sut.loadOriginal(for: item("media-1")!)
         XCTAssertEqual(opened, local)

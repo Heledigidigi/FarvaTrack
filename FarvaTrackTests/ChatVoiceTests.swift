@@ -568,7 +568,7 @@ final class ChatVoiceViewModelTests: XCTestCase {
         XCTAssertEqual(item("voice-1")?.status, .delivered)
 
         let local = try XCTUnwrap(item("voice-1")?.localOriginalURL)
-        XCTAssertTrue(local.path.hasPrefix(files.cacheRoot.path))
+        XCTAssertTrue(local.path.hasPrefix(files.originalsDirectory.path), "orijaller kalıcı klasörde (bulut kopyası silinebilir)")
         let playable = try await sut.loadAudio(for: item("voice-1")!)
         XCTAssertEqual(playable, local)
         XCTAssertTrue(store.downloads.isEmpty, "kendi sesimiz indirilmez")
