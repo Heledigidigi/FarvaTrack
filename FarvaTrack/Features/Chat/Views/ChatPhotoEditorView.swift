@@ -121,6 +121,10 @@ struct ChatPhotoEditorView: View {
     @State private var draftCrop = PhotoEditDocument.fullCrop
     @State private var cropStart: CGRect?
     @State private var layerStart: PhotoEditLayer?
+    /// Ekranın herhangi bir yerindeki hareketin uygulanacağı katman (son dokunulan / eklenen).
+    @State private var selectedLayerID: UUID?
+    /// Süren hareket hiçbir katmana denk gelmediyse true (bitene kadar yok sayılır).
+    @State private var gestureIgnored = false
     @State private var draggingLayerOverTrash = false
     @State private var draggingLayer = false
     @State private var textEntry: TextEntry?
@@ -145,9 +149,15 @@ struct ChatPhotoEditorView: View {
                 let bounds = CGSize(width: geometry.size.width, height: geometry.size.height)
                 let crop = mode == .crop ? PhotoEditDocument.fullCrop : document.crop
                 let size = PhotoEditGeometry.fitted(aspect: PhotoEditGeometry.aspect(of: crop, imageSize: imageSize), in: bounds)
-                canvas(crop: crop, size: size)
-                    .frame(width: size.width, height: size.height)
-                    .position(x: bounds.width / 2, y: bounds.height / 2)
+                ZStack {
+                    // Katman hareketleri tüm alanda: parmağın katmanın üstünde olması gerekmez.
+                    Color.clear.contentShape(Rectangle())
+                    canvas(crop: crop, size: size)
+                        .frame(width: size.width, height: size.height)
+                        .position(x: bounds.width / 2, y: bounds.height / 2)
+                }
+                .frame(width: bounds.width, height: bounds.height)
+                .simultaneousGesture(canvasGesture(crop: crop, size: size, bounds: bounds), including: mode == .none ? .all : .subviews)
             }
             .padding(.top, 64)
             .padding(.bottom, 96)
@@ -214,9 +224,19 @@ struct ChatPhotoEditorView: View {
             ForEach(document.layers) { layer in
                 PhotoEditLayerView(layer: layer, fullWidth: full.width, stickerImages: stickerImages)
                     .padding(10)
+                    .overlay {
+                        if selectedLayerID == layer.id {
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(.white.opacity(0.8), style: StrokeStyle(lineWidth: 1.2, dash: [5, 4]))
+                                .rotationEffect(.radians(layer.rotation))
+                                .allowsHitTesting(false)
+                        }
+                    }
                     .contentShape(Rectangle())
-                    .gesture(layerGesture(layer, full: full))
-                    .onTapGesture { edit(layer) }
+                    .onTapGesture {
+                        // İlk dokunuş seçer; seçiliyken yazıya dokunmak düzenler.
+                        if selectedLayerID == layer.id { edit(layer) } else { selectedLayerID = layer.id; Haptics.selection() }
+                    }
                     .accessibilityElement()
                     .accessibilityLabel(layerLabel(layer))
                     .accessibilityAction(named: "Sil") { delete(layer.id) }
@@ -268,13 +288,30 @@ struct ChatPhotoEditorView: View {
             }
     }
 
-    private func layerGesture(_ layer: PhotoEditLayer, full: CGSize) -> some Gesture {
-        let drag = DragGesture(minimumDistance: 2, coordinateSpace: .named(Self.coordinateSpace))
-        let pinch = MagnifyGesture()
-        let rotate = RotateGesture()
-        return drag.simultaneously(with: pinch.simultaneously(with: rotate))
+    /// Tüm düzenleme alanındaki sürükle / iki parmak büyüt / döndür: başladığı yerdeki katmana,
+    /// yoksa seçili katmana uygulanır.
+    private func canvasGesture(crop: CGRect, size: CGSize, bounds: CGSize) -> some Gesture {
+        let full = PhotoEditGeometry.fullDisplaySize(displaySize: size, crop: crop)
+        let origin = CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2)
+        let drag = DragGesture(minimumDistance: 4, coordinateSpace: .local)
+        return drag.simultaneously(with: MagnifyGesture().simultaneously(with: RotateGesture()))
             .onChanged { value in
+                guard mode == .none, !gestureIgnored else { return }
                 if layerStart == nil {
+                    var targetID = selectedLayerID
+                    if let start = value.first?.startLocation {
+                        let local = CGPoint(x: start.x - origin.x, y: start.y - origin.y)
+                        let point = PhotoEditGeometry.toImage(local, displaySize: size, crop: crop)
+                        if let hit = PhotoEditGeometry.layerHit(document.layers, at: point,
+                                                                heightOverWidth: imageSize.height / max(imageSize.width, 1)) {
+                            targetID = hit
+                        }
+                    }
+                    guard let targetID, let layer = document.layers.first(where: { $0.id == targetID }) else {
+                        gestureIgnored = true
+                        return
+                    }
+                    selectedLayerID = targetID
                     layerStart = layer
                     history.record(document)
                 }
@@ -284,7 +321,8 @@ struct ChatPhotoEditorView: View {
                     updated.center = CGPoint(x: start.center.x + drag.translation.width / max(full.width, 1),
                                              y: start.center.y + drag.translation.height / max(full.height, 1))
                     draggingLayer = true
-                    draggingLayerOverTrash = isOverTrash(drag.location)
+                    let location = CGPoint(x: drag.location.x, y: drag.location.y + 64)
+                    draggingLayerOverTrash = isOverTrash(location)
                 }
                 if let magnification = value.second?.first?.magnification {
                     updated.scale = min(max(start.scale * magnification, PhotoEditLayer.scaleRange.lowerBound), PhotoEditLayer.scaleRange.upperBound)
@@ -297,9 +335,11 @@ struct ChatPhotoEditorView: View {
             .onEnded { _ in
                 if draggingLayerOverTrash, let id = layerStart?.id {
                     document.layers.removeAll { $0.id == id }
+                    if selectedLayerID == id { selectedLayerID = nil }
                     Haptics.impact(.medium)
                 }
                 layerStart = nil
+                gestureIgnored = false
                 draggingLayer = false
                 draggingLayerOverTrash = false
             }
@@ -582,7 +622,9 @@ struct ChatPhotoEditorView: View {
                 document.layers[index].content = .text(text, colorIndex: entry.colorIndex)
             }
         } else if !text.isEmpty {
-            document.layers.append(PhotoEditLayer(content: .text(text, colorIndex: entry.colorIndex), center: visibleCenter))
+            let layer = PhotoEditLayer(content: .text(text, colorIndex: entry.colorIndex), center: visibleCenter)
+            document.layers.append(layer)
+            selectedLayerID = layer.id
         }
         colorIndex = entry.colorIndex
     }
@@ -635,7 +677,9 @@ struct ChatPhotoEditorView: View {
         }
         let aspect = CGFloat(sticker.width) / CGFloat(max(sticker.height, 1))
         history.record(document)
-        document.layers.append(PhotoEditLayer(content: .sticker(id: sticker.id, aspect: aspect), center: visibleCenter))
+        let layer = PhotoEditLayer(content: .sticker(id: sticker.id, aspect: aspect), center: visibleCenter)
+        document.layers.append(layer)
+        selectedLayerID = layer.id
         Haptics.impact(.light)
     }
 

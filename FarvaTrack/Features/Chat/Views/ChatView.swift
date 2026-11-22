@@ -123,6 +123,7 @@ struct ChatBannerView: View {
 struct ChatRoomContent: View {
     @Environment(ChatViewModel.self) private var viewModel
     @Binding var showBubbles: Bool
+    @State private var showProfile = false
 
     var body: some View {
         @Bindable var viewModel = viewModel
@@ -145,6 +146,38 @@ struct ChatRoomContent: View {
         // Açık konuşmada (ve sticker panelinde) alttaki sekmeler gizlenir; geri dönünce görünür.
         .toolbar(viewModel.phase == .ready ? .hidden : .visible, for: .tabBar)
         .toolbar {
+            if viewModel.phase == .ready {
+                // Başlığa dokununca kişi profili (WhatsApp'taki gibi).
+                ToolbarItem(placement: .principal) {
+                    Button { showProfile = true } label: {
+                        HStack(spacing: 8) {
+                            if viewModel.kind == .partner {
+                                AvatarView(name: viewModel.partnerName, photoURL: nil)
+                                    .frame(width: 30, height: 30)
+                            } else {
+                                Image(systemName: "note.text")
+                                    .font(.footnote)
+                                    .frame(width: 30, height: 30)
+                                    .background(Color.ftCardElevated, in: Circle())
+                            }
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(viewModel.partnerName)
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                                Text(viewModel.isPartnerTyping ? "yazıyor…" : "bilgi için dokun")
+                                    .font(.caption2)
+                                    .foregroundStyle(viewModel.isPartnerTyping ? Color.ftAccentLight : Color.ftTextSecondary)
+                            }
+                        }
+                        .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(viewModel.partnerName)
+                    .accessibilityHint("Kişi bilgisini, medyayı ve aramayı açar")
+                    .accessibilityAddTraits(.isButton)
+                }
+            }
             if viewModel.phase == .ready, viewModel.kind == .partner {
                 ToolbarItem(placement: .primaryAction) {
                     Button { CallLauncher.call(viewModel) } label: { Image(systemName: "phone.fill") }
@@ -153,12 +186,11 @@ struct ChatRoomContent: View {
                         .disabled(CallManager.shared.phase.isActive)
                 }
             }
-            if viewModel.phase == .ready {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showBubbles = true } label: { Image(systemName: "paintpalette") }
-                        .accessibilityLabel("Baloncuk seç")
-                        .accessibilityHint("Mesaj baloncuğunun görünümünü değiştir ya da kendi baloncuğunu tasarla")
-                }
+        }
+        .navigationDestination(isPresented: $showProfile) {
+            ChatContactProfileView(viewModel: viewModel, showBubbles: $showBubbles) { messageID in
+                viewModel.pendingJumpMessageID = messageID
+                showProfile = false
             }
         }
         .alert("Bir sorun oluştu", isPresented: $viewModel.hasError) {

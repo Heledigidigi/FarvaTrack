@@ -149,6 +149,30 @@ enum PhotoEditGeometry {
         return hit
     }
 
+    /// Katmanın yaklaşık yarıçapı (orijinal genişlik biriminde; dönüşten bağımsız olsun diye çevreleyen daire).
+    static func approximateRadius(of layer: PhotoEditLayer) -> CGFloat {
+        switch layer.content {
+        case .sticker(_, let aspect):
+            let halfWidth = PhotoEditLayer.stickerWidthFraction * layer.scale / 2
+            return max(halfWidth, halfWidth / max(aspect, 0.05))
+        case .text(let text, _):
+            let size = PhotoEditLayer.textSizeFraction * layer.scale
+            let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+            let longest = CGFloat(lines.map(\.count).max() ?? 1)
+            return max(longest * size * 0.6, CGFloat(lines.count) * size * 1.2) / 2
+        }
+    }
+
+    /// Dokunulan noktadaki en üstteki katman (yoksa nil). `aspect` = yükseklik / genişlik.
+    static func layerHit(_ layers: [PhotoEditLayer], at point: CGPoint, heightOverWidth aspect: CGFloat, slop: CGFloat = 0.03) -> UUID? {
+        for layer in layers.reversed() {
+            let dx = point.x - layer.center.x
+            let dy = (point.y - layer.center.y) * aspect
+            if hypot(dx, dy) <= approximateRadius(of: layer) + slop { return layer.id }
+        }
+        return nil
+    }
+
     static func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
         hypot(a.x - b.x, a.y - b.y)
     }

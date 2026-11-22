@@ -294,6 +294,16 @@ enum ChatMessageStatus: Equatable {
 
 // MARK: - Metin yardımcıları
 
+/// Sohbette paylaşılmış bir bağlantı (profil sayfası).
+struct ChatSharedLink: Identifiable, Equatable {
+    let id: String
+    let url: URL
+    let messageID: String
+    let text: String
+    let date: Date
+    let isMine: Bool
+}
+
 enum ChatText {
     static let turkish = Locale(identifier: "tr_TR")
 
@@ -303,6 +313,94 @@ enum ChatText {
         guard !needle.isEmpty else { return false }
         return fold(text).contains(needle)
     }
+
+    /// Yazım hatasına dayanıklı arama. Eşleşmezse `nil`; eşleşirse puan (0 = birebir, büyüdükçe daha uzak).
+    /// Sorgudaki her kelime mesajdaki bir kelimeyle eşleşmeli: içinde geçmesi 0 puan; değilse
+    /// harf ekleme/silme/değiştirme/yer değiştirme sayısı kelime uzunluğuna göre (4–5 harf: 1, 6–8: 2, 9+: 3) sınırlı.
+    static func fuzzyScore(_ text: String, query: String) -> Int? {
+        let needle = fold(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard !needle.isEmpty else { return nil }
+        let haystack = fold(text)
+        if haystack.contains(needle) { return 0 }
+        let queryWords = words(needle)
+        let textWords = words(haystack)
+        guard !queryWords.isEmpty, !textWords.isEmpty else { return nil }
+        var total = 0
+        for word in queryWords {
+            var best: Int?
+            for candidate in textWords {
+                if candidate.contains(word) { best = 0; break }
+                let limit = typoAllowance(word.count)
+                guard limit > 0, abs(candidate.count - word.count) <= limit + 2 else { continue }
+                // Yarım yazılmış kelime: "antrenm" ~ "antrenman" için aday kelimenin başıyla da karşılaştır.
+                var distance = editDistance(word, candidate, limit: limit)
+                if candidate.count > word.count {
+                    distance = min(distance, editDistance(word, String(candidate.prefix(word.count)), limit: limit))
+                }
+                if distance <= limit { best = min(best ?? distance, distance) }
+            }
+            guard let best else { return nil }
+            total += best
+        }
+        return total + 1
+    }
+
+    /// Kelime uzunluğuna göre izin verilen yazım hatası.
+    static func typoAllowance(_ length: Int) -> Int {
+        switch length {
+        case ..<4: return 0
+        case 4...5: return 1
+        case 6...8: return 2
+        default: return 3
+        }
+    }
+
+    static func words(_ text: String) -> [String] {
+        text.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+    }
+
+    /// Damerau–Levenshtein (bitişik harf yer değiştirmesi 1 sayılır). `limit` aşılınca erken döner.
+    static func editDistance(_ a: String, _ b: String, limit: Int = .max) -> Int {
+        let s = Array(a), t = Array(b)
+        if s.isEmpty { return t.count }
+        if t.isEmpty { return s.count }
+        if abs(s.count - t.count) > limit { return limit + 1 }
+        var previous2 = [Int](repeating: 0, count: t.count + 1)
+        var previous = Array(0...t.count)
+        var current = [Int](repeating: 0, count: t.count + 1)
+        for i in 1...s.count {
+            current[0] = i
+            var rowMin = current[0]
+            for j in 1...t.count {
+                let cost = s[i - 1] == t[j - 1] ? 0 : 1
+                var value = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+                if i > 1, j > 1, s[i - 1] == t[j - 2], s[i - 2] == t[j - 1] {
+                    value = min(value, previous2[j - 2] + 1)
+                }
+                current[j] = value
+                rowMin = min(rowMin, value)
+            }
+            if rowMin > limit { return limit + 1 }
+            (previous2, previous, current) = (previous, current, previous2)
+        }
+        return previous[t.count]
+    }
+
+    /// Metindeki bağlantılar (http/https; "www.ornek.com" gibi şemasızlar https'e tamamlanır).
+    static func links(in text: String) -> [URL] {
+        guard !text.isEmpty, let detector = linkDetector else { return [] }
+        let range = NSRange(text.startIndex..., in: text)
+        var seen = Set<String>()
+        return detector.matches(in: text, range: range).compactMap { match -> URL? in
+            guard var url = match.url else { return nil }
+            if url.scheme == nil, let fixed = URL(string: "https://" + url.absoluteString) { url = fixed }
+            guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+            guard seen.insert(url.absoluteString).inserted else { return nil }
+            return url
+        }
+    }
+
+    private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
 
     /// Türkçe küçük harfe çevirir (İ→i, I→ı), aksanları atar (ç→c, ğ→g…) ve ı/i farkını kaldırır;
     /// böylece "istanbul", "İSTANBUL" ve "ISTANBUL" aynı eşleşir.

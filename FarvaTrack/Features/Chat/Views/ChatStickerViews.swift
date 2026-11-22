@@ -254,55 +254,89 @@ struct PlacementDraft: Equatable {
     var aspectRatio: Double { height > 0 ? Double(width) / Double(height) : 1 }
 }
 
-struct PlacementDraftView: View {
-    @Binding var draft: PlacementDraft?
-    let containerWidth: CGFloat
+/// Hareket sürerken (henüz kaydedilmemiş) öteleme, büyütme ve dönüş.
+struct PlacementLiveGesture: Equatable {
+    var translation: CGSize = .zero
+    var magnification: Double = 1
+    var rotation: Double = 0
+}
 
-    @GestureState private var dragOffset: CGSize = .zero
-    @GestureState private var magnification: CGFloat = 1
-    @GestureState private var rotation: Angle = .zero
+/// Taslak sticker'ın çizimi (içerik koordinatında, mesajlarla birlikte). Hareketleri `PlacementGestureLayer` alır.
+struct PlacementDraftView: View {
+    let draft: PlacementDraft?
+    let live: PlacementLiveGesture
+    let containerWidth: CGFloat
 
     var body: some View {
         if let current = draft {
-            let live = current.transform.applying(translation: dragOffset, magnification: Double(magnification), rotation: rotation.radians)
-            let size = PlacementGeometry.displaySize(containerWidth: containerWidth, scale: live.scale, aspectRatio: current.aspectRatio)
+            let transform = current.transform.applying(translation: live.translation, magnification: live.magnification, rotation: live.rotation)
+            let size = PlacementGeometry.displaySize(containerWidth: containerWidth, scale: transform.scale, aspectRatio: current.aspectRatio)
             StickerImage(url: current.imageURL)
                 .frame(width: size.width, height: size.height)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
                         .strokeBorder(.white.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                 )
-                .rotationEffect(.radians(live.rotation))
+                .rotationEffect(.radians(transform.rotation))
                 .shadow(color: .black.opacity(0.35), radius: 8)
-                .contentShape(Rectangle())
-                .position(live.center)
-                .gesture(
+                .position(transform.center)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+/// Taslak varken sohbet alanının TAMAMINI kaplar: parmak sticker'ın üstünde olmasa da
+/// sürükleme taşır, iki parmak büyütür ve döndürür (Instagram hikâyesindeki gibi).
+struct PlacementGestureLayer: View {
+    @Binding var draft: PlacementDraft?
+    @Binding var live: PlacementLiveGesture
+
+    @GestureState private var dragOffset: CGSize = .zero
+    @GestureState private var magnification: CGFloat = 1
+    @GestureState private var rotation: Angle = .zero
+
+    var body: some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(
+                SimultaneousGesture(
+                    DragGesture(minimumDistance: 0)
+                        .updating($dragOffset) { value, state, _ in state = value.translation }
+                        .onEnded { value in
+                            live.translation = .zero
+                            commit { $0.applying(translation: value.translation) }
+                        },
                     SimultaneousGesture(
-                        DragGesture(coordinateSpace: .named(ChatCoordinateSpace.content))
-                            .updating($dragOffset) { value, state, _ in state = value.translation }
-                            .onEnded { value in commit { $0.applying(translation: value.translation) } },
-                        SimultaneousGesture(
-                            MagnifyGesture()
-                                .updating($magnification) { value, state, _ in state = value.magnification }
-                                .onEnded { value in commit { $0.applying(magnification: Double(value.magnification)) } },
-                            RotateGesture()
-                                .updating($rotation) { value, state, _ in state = value.rotation }
-                                .onEnded { value in commit { $0.applying(rotation: value.rotation.radians) } }
-                        )
+                        MagnifyGesture()
+                            .updating($magnification) { value, state, _ in state = value.magnification }
+                            .onEnded { value in
+                                live.magnification = 1
+                                commit { $0.applying(magnification: Double(value.magnification)) }
+                            },
+                        RotateGesture()
+                            .updating($rotation) { value, state, _ in state = value.rotation }
+                            .onEnded { value in
+                                live.rotation = 0
+                                commit { $0.applying(rotation: value.rotation.radians) }
+                            }
                     )
                 )
-                .accessibilityElement()
-                .accessibilityLabel("Yerleştirilen sticker")
-                .accessibilityHint("Sürükleyerek taşı, iki parmakla büyüt ve döndür")
-                .accessibilityActions {
-                    Button("Büyüt") { commit { $0.applying(magnification: 1.2) } }
-                    Button("Küçült") { commit { $0.applying(magnification: 1 / 1.2) } }
-                    Button("Sağa döndür") { commit { $0.applying(rotation: .pi / 12) } }
-                    Button("Sola döndür") { commit { $0.applying(rotation: -.pi / 12) } }
-                    Button("Yukarı taşı") { commit { $0.applying(translation: CGSize(width: 0, height: -24)) } }
-                    Button("Aşağı taşı") { commit { $0.applying(translation: CGSize(width: 0, height: 24)) } }
-                }
-        }
+            )
+            .onChange(of: dragOffset) { _, value in live.translation = value }
+            .onChange(of: magnification) { _, value in live.magnification = Double(value) }
+            .onChange(of: rotation) { _, value in live.rotation = value.radians }
+            .accessibilityElement()
+            .accessibilityLabel("Yerleştirilen sticker")
+            .accessibilityHint("Ekranın herhangi bir yerinde sürükleyerek taşı, iki parmakla büyüt ve döndür")
+            .accessibilityActions {
+                Button("Büyüt") { commit { $0.applying(magnification: 1.2) } }
+                Button("Küçült") { commit { $0.applying(magnification: 1 / 1.2) } }
+                Button("Sağa döndür") { commit { $0.applying(rotation: .pi / 12) } }
+                Button("Sola döndür") { commit { $0.applying(rotation: -.pi / 12) } }
+                Button("Yukarı taşı") { commit { $0.applying(translation: CGSize(width: 0, height: -24)) } }
+                Button("Aşağı taşı") { commit { $0.applying(translation: CGSize(width: 0, height: 24)) } }
+            }
     }
 
     private func commit(_ change: (PlacementTransform) -> PlacementTransform) {

@@ -810,9 +810,51 @@ final class ChatViewModel {
         )
         let query = searchQuery
         let pendingCreates = Set(pendingOperations().filter { $0.kind == .create }.map(\.messageID))
-        searchResults = ((try? context.fetch(descriptor)) ?? [])
-            .filter { ChatText.matches($0.text, query: query) }
-            .map { makeItem($0, pendingCreates: pendingCreates) }
+        // Yazım hatasına dayanıklı: önce en yakın eşleşmeler, eşitse en yenisi (kayıtlar yeniden eskiye sıralı).
+        let scored = ((try? context.fetch(descriptor)) ?? []).enumerated().compactMap { index, record -> (Int, Int, ChatMessageRecord)? in
+            guard !record.text.isEmpty, let score = ChatText.fuzzyScore(record.text, query: query) else { return nil }
+            return (score, index, record)
+        }
+        searchResults = scored
+            .sorted { $0.0 != $1.0 ? $0.0 < $1.0 : $0.1 < $1.1 }
+            .prefix(200)
+            .map { makeItem($0.2, pendingCreates: pendingCreates) }
+    }
+
+    /// Profil sayfasındaki aramadan seçilen mesaj: konuşma ekranı görünce oraya kayar.
+    var pendingJumpMessageID: String?
+
+    // MARK: Paylaşılanlar (profil sayfası)
+
+    /// Sohbetteki tüm fotoğraf ve videolar (yeniden eskiye; ekrandaki pencereyle sınırlı değil).
+    func sharedMedia() -> [ChatMessageItem] {
+        sharedRecords().filter { record in
+            let type = ChatMessageType(rawOrUnknown: record.typeRaw)
+            return type.isMedia && record.mediaData != nil
+        }
+        .map { makeItem($0, pendingCreates: []) }
+    }
+
+    /// Metin mesajlarındaki bağlantılar (yeniden eskiye).
+    func sharedLinks() -> [ChatSharedLink] {
+        sharedRecords().flatMap { record -> [ChatSharedLink] in
+            guard ChatMessageType(rawOrUnknown: record.typeRaw) == .text else { return [] }
+            return ChatText.links(in: record.text).enumerated().map { index, url in
+                ChatSharedLink(id: "\(record.messageID)-\(index)", url: url, messageID: record.messageID,
+                               text: record.text, date: record.createdAt, isMine: record.senderID == userID)
+            }
+        }
+    }
+
+    private func sharedRecords() -> [ChatMessageRecord] {
+        guard let context, let userID, let chatID = room?.id else { return [] }
+        let descriptor = FetchDescriptor<ChatMessageRecord>(
+            predicate: #Predicate {
+                $0.ownerID == userID && $0.chatID == chatID && !$0.hiddenForMe && !$0.deletedForEveryone
+            },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     /// Arama sonucundaki mesaj ekranda yoksa gösterim penceresini genişletir.

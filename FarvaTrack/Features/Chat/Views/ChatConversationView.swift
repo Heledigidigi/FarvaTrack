@@ -16,6 +16,7 @@ struct ChatConversationView: View {
     @State private var stickerLibrary = StickerLibraryViewModel()
     @State private var recentIDs: [String] = []
     @State private var placementDraft: PlacementDraft?
+    @State private var placementLive = PlacementLiveGesture()
     @State private var metrics = ChatScrollMetrics()
     @State private var toast: String?
     @Environment(AuthViewModel.self) private var auth
@@ -99,7 +100,7 @@ struct ChatConversationView: View {
                                 onSaveToLibrary: { item in savePlacementToLibrary(item) },
                                 partnerName: viewModel.partnerName
                             )
-                            PlacementDraftView(draft: $placementDraft, containerWidth: geometry.size.width)
+                            PlacementDraftView(draft: placementDraft, live: placementLive, containerWidth: geometry.size.width)
                         }
                         .onAppear { metrics.contentWidth = geometry.size.width }
                         .onChange(of: geometry.size.width) { _, width in metrics.contentWidth = width }
@@ -117,16 +118,25 @@ struct ChatConversationView: View {
                 }
             )
             .scrollDisabled(placementDraft != nil)
+            // Taslak varken tüm görünen sohbet alanı hareketleri alır (sticker'a dokunmak gerekmez).
+            .overlay {
+                if placementDraft != nil {
+                    PlacementGestureLayer(draft: $placementDraft, live: $placementLive)
+                }
+            }
+            .onChange(of: placementDraft == nil) { _, _ in placementLive = PlacementLiveGesture() }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: viewModel.messages.last?.id) { _, _ in
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
-            .overlay {
-                if !viewModel.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                    ChatSearchResults(viewModel: viewModel) { id in
-                        jump(to: id, proxy: proxy)
-                    }
+            // Profil sayfasındaki aramadan / medyadan seçilen mesaja git (profil kapanınca).
+            .onChange(of: viewModel.pendingJumpMessageID) { _, id in
+                guard let id else { return }
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    viewModel.pendingJumpMessageID = nil
+                    jump(to: id, proxy: proxy)
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -256,7 +266,6 @@ struct ChatConversationView: View {
         } message: {
             Text(audioPlayer.errorMessage ?? "")
         }
-        .searchable(text: $viewModel.searchQuery, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Mesajlarda ara")
         .confirmationDialog(
             "Mesaj herkesten silinsin mi?",
             isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }),
@@ -591,46 +600,3 @@ struct ChatTypingIndicator: View {
     }
 }
 
-// MARK: - Arama sonuçları
-
-struct ChatSearchResults: View {
-    let viewModel: ChatViewModel
-    let onSelect: (String) -> Void
-    @Environment(\.dismissSearch) private var dismissSearch
-
-    var body: some View {
-        Group {
-            if viewModel.searchResults.isEmpty {
-                ContentUnavailableView.search(text: viewModel.searchQuery)
-            } else {
-                List(viewModel.searchResults) { item in
-                    Button {
-                        let id = item.id
-                        dismissSearch()
-                        viewModel.searchQuery = ""
-                        onSelect(id)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(item.isMine ? "Sen" : viewModel.partnerName)
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                                Text(item.message.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                    .font(.caption)
-                                    .foregroundStyle(Color.ftTextSecondary)
-                            }
-                            Text(item.message.text)
-                                .font(.subheadline)
-                                .lineLimit(2)
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .listRowBackground(Color.ftCard)
-                    .accessibilityHint("Mesaja gider")
-                }
-                .scrollContentBackground(.hidden)
-            }
-        }
-        .background(Color.ftBackground)
-    }
-}

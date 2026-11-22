@@ -744,6 +744,8 @@ final class ChatViewModelTests: XCTestCase {
 
         sut.searchQuery = "istanbul"
         XCTAssertEqual(sut.searchResults.map(\.id), ["r1"])
+        sut.searchQuery = "istnabul"
+        XCTAssertEqual(sut.searchResults.map(\.id), ["r1"], "yazım hatasıyla da bulunur")
         sut.searchQuery = "xyz"
         XCTAssertTrue(sut.searchResults.isEmpty)
         sut.searchQuery = ""
