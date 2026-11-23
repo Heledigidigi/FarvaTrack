@@ -151,7 +151,7 @@ final class BubbleLayoutTests: XCTestCase {
 final class BubbleStyleModelTests: XCTestCase {
     func testPresets() {
         let presets = BubblePresets.all
-        XCTAssertTrue((6...8).contains(presets.count))
+        XCTAssertTrue((6...9).contains(presets.count))
         XCTAssertEqual(Set(presets.map(\.id)).count, presets.count)
         for preset in presets {
             XCTAssertTrue(preset.isPreset)

@@ -36,6 +36,8 @@ struct ChatBubbleView: View {
     /// Stil yalnızca metin ve sesli mesajlarda uygulanır (fotoğraf, video, sticker kendi görünümünü korur).
     private var appliedStyle: BubbleStyle? {
         guard let bubbleStyle, !message.deleted, message.media == nil, message.sticker == nil else { return nil }
+        // Çizimli baloncuk (Kutu Kedi) yalnızca metin mesajlarında; sesli mesaj ve arama satırı kendi görünümünde kalır.
+        if bubbleStyle.art != nil, message.audio != nil || message.call != nil { return nil }
         return bubbleStyle
     }
 
@@ -102,6 +104,8 @@ struct ChatBubbleView: View {
 
             footer
         }
+        .frame(minWidth: appliedStyle.flatMap(BubbleLayout.minimumContentSize(for:))?.width,
+               minHeight: appliedStyle.flatMap(BubbleLayout.minimumContentSize(for:))?.height)
         .padding(contentInsets)
         .background { bubbleBackground }
         .overlay(
@@ -163,6 +167,14 @@ struct ChatBubbleView: View {
                 .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// Baloncuk içindeki yazı rengi (açık renkli çizimli baloncukta koyu).
+    private var contentColor: Color {
+        appliedStyle.map { Color(hex: $0.textColorHex) } ?? .white
+    }
+
+    /// Açık zeminli çizimli baloncuk: alıntı ve okundu işareti koyu/bordo çizilir.
+    private var isLightBubble: Bool { appliedStyle?.art != nil }
+
     /// Sticker baloncuksuz gösterilir.
     private var isSticker: Bool { message.sticker != nil && !message.deleted }
 
@@ -178,20 +190,20 @@ struct ChatBubbleView: View {
         } label: {
             HStack(spacing: 8) {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.ftAccentLight)
+                    .fill(isLightBubble ? Color(hex: "#800020") : Color.ftAccentLight)
                     .frame(width: 3)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name(for: reply.senderID))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.ftAccentLight)
+                        .foregroundStyle(isLightBubble ? Color(hex: "#800020") : Color.ftAccentLight)
                     Text(reply.preview.isEmpty ? reply.type.placeholder : reply.preview)
                         .font(.caption)
-                        .foregroundStyle(Color.white.opacity(0.8))
+                        .foregroundStyle(contentColor.opacity(0.8))
                         .lineLimit(2)
                 }
             }
             .padding(6)
-            .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(Color.black.opacity(isLightBubble ? 0.08 : 0.22), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
     }
@@ -208,7 +220,7 @@ struct ChatBubbleView: View {
             }
         }
         .font(.caption2)
-        .foregroundStyle(Color.white.opacity(0.65))
+        .foregroundStyle(contentColor.opacity(0.65))
         .padding(.horizontal, message.media != nil && !message.deleted ? 6 : (isSticker ? 7 : 0))
         .padding(.vertical, isSticker ? 2 : 0)
         .padding(.bottom, message.media != nil && !message.deleted ? 2 : 0)
@@ -219,8 +231,8 @@ struct ChatBubbleView: View {
     private func statusColor(_ status: ChatMessageStatus) -> Color {
         switch status {
         case .failed: return Color.ftDanger
-        case .read: return Color.ftWater
-        case .sending, .delivered: return Color.white.opacity(0.65)
+        case .read: return isLightBubble ? Color(hex: "#800020") : Color.ftWater
+        case .sending, .delivered: return contentColor.opacity(0.65)
         }
     }
 

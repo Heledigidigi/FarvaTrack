@@ -19,6 +19,8 @@ struct BubblePreview: View {
             .foregroundStyle(Color(hex: style.textColorHex))
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
+            .frame(minWidth: BubbleLayout.minimumContentSize(for: style)?.width,
+                   minHeight: BubbleLayout.minimumContentSize(for: style)?.height)
             .padding(EdgeInsets(top: padding.top, leading: padding.leading, bottom: padding.bottom, trailing: padding.trailing))
             .background { BubbleBackgroundView(style: style, assets: assets, mirrored: mirrored, cacheOwner: cacheOwner) }
             .accessibilityElement(children: .combine)
@@ -129,7 +131,15 @@ struct BubblePickerView: View {
             Haptics.selection()
         } label: {
             VStack(spacing: 8) {
-                BubblePreview(style: style, assets: store.assets(for: style, ownerID: owner), text: "Merhaba!", cacheOwner: owner)
+                if style.art != nil {
+                    // Çizimli baloncuk hücreye sığsın diye küçültülür.
+                    BubblePreview(style: style, assets: store.assets(for: style, ownerID: owner), text: "Merhaba!", cacheOwner: owner)
+                        .fixedSize()
+                        .scaleEffect(0.68)
+                        .frame(width: 150, height: 48)
+                } else {
+                    BubblePreview(style: style, assets: store.assets(for: style, ownerID: owner), text: "Merhaba!", cacheOwner: owner)
+                }
                 Text(style.name).font(.caption.weight(.semibold)).lineLimit(1)
             }
             .padding(.vertical, 10)
@@ -139,7 +149,9 @@ struct BubblePickerView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            if style.isPreset {
+            if style.art != nil {
+                EmptyView()
+            } else if style.isPreset {
                 Button { editing = EditorInput(style: style, isNew: true) } label: { Label("Kopyasını düzenle", systemImage: "square.on.square") }
             } else {
                 Button { editing = EditorInput(style: style, isNew: false) } label: { Label("Düzenle", systemImage: "pencil") }
@@ -149,6 +161,8 @@ struct BubblePickerView: View {
         .accessibilityLabel("\(style.name) baloncuğu")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityAction(named: style.isPreset ? "Kopyasını düzenle" : "Düzenle") {
+            // Çizimli baloncuklar düzenleyicide değiştirilemez.
+            guard style.art == nil else { return }
             editing = EditorInput(style: style, isNew: style.isPreset)
         }
     }

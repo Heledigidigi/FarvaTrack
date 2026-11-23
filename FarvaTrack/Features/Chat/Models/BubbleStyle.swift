@@ -21,6 +21,8 @@ struct BubbleStyle: Codable, Equatable, Identifiable {
     var effect: BubbleEffect
     /// `nil` = otomatik (şekilden hesaplanır). Editörde elle ayarlanabilir.
     var manualInsets: BubbleInsets?
+    /// Hazır çizimli baloncuk (ör. Kutu Kedi): şekil/dolgu yerine kendi çizimiyle gösterilir. Eski kayıtlarda yok → `nil`.
+    var art: BubbleArtKind? = nil
 
     static let schemaVersion = 1
     static let maxDecorations = 12
@@ -28,6 +30,12 @@ struct BubbleStyle: Codable, Equatable, Identifiable {
     static let nameLength = 30
 
     var isPreset: Bool { id.hasPrefix(BubblePresets.prefix) }
+}
+
+/// Kendi çizimi ve uzama kuralı olan baloncuklar.
+enum BubbleArtKind: String, Codable {
+    /// Nakış kafa ve patiler sabit, kumaş dokulu gövde kutusu mesajla büyür (`CatBoxGeometry`).
+    case catBox
 }
 
 struct BubbleShapeStyle: Codable, Equatable {

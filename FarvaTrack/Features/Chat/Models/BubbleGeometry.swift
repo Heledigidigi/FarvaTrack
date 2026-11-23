@@ -128,6 +128,11 @@ enum BubbleLayout {
 
     /// Yazının baloncuk içindeki iç boşluğu (kuyruk tarafı daha geniş).
     static func contentPadding(for style: BubbleStyle, mirrored: Bool) -> BubbleInsets {
+        if style.art == .catBox {
+            let p = CatBoxGeometry.contentPadding
+            return BubbleInsets(top: Double(p.top), leading: Double(mirrored ? p.trailing : p.leading),
+                                bottom: Double(p.bottom), trailing: Double(mirrored ? p.leading : p.trailing))
+        }
         let extent = style.shape.tail.extent
         let border = style.border?.width ?? 0
         let horizontal = Double(textPadding.width) + border
@@ -136,6 +141,11 @@ enum BubbleLayout {
         let bottom = vertical + (style.shape.tail == .dots ? Double(extent.height) : 0)
         return BubbleInsets(top: vertical, leading: mirrored ? tailSide : horizontal,
                             bottom: bottom, trailing: mirrored ? horizontal : tailSide)
+    }
+
+    /// İçeriğin en küçük boyutu (çizimli baloncukta kutu bundan küçülmez); diğerlerinde `nil`.
+    static func minimumContentSize(for style: BubbleStyle) -> CGSize? {
+        style.art == .catBox ? CatBoxGeometry.minimumContentSize : nil
     }
 
     /// Süslemenin baloncuk içindeki merkezi: sabitlendiği noktası + kaydırma. Aynalamada sağ/sol değişir.
@@ -195,16 +205,20 @@ enum BubblePresets {
                decorations: [decoration("pati-1", emoji: "🐾", .bottomLeading, offset: CGSize(width: 4, height: -2), size: 16, rotation: -15)]),
         preset("minimal", "Minimal",
                shape: BubbleShapeStyle(cornerRadius: 12, tail: .none),
-               fill: BubbleFill(kind: .solid, colors: ["#2C2C38"], angle: 0))
+               fill: BubbleFill(kind: .solid, colors: ["#2C2C38"], angle: 0)),
+        preset("kutuKedi", "Kutu Kedi",
+               shape: BubbleShapeStyle(cornerRadius: 18, tail: .none),
+               fill: BubbleFill(kind: .solid, colors: ["#F3E6D0"], angle: 0), text: "#3A2A22", art: .catBox)
     ]
 
     static func style(id: String) -> BubbleStyle? { all.first { $0.id == id } }
 
     private static func preset(_ key: String, _ name: String, shape: BubbleShapeStyle, fill: BubbleFill,
                                border: BubbleBorder? = nil, text: String = "#FFFFFF",
-                               decorations: [BubbleDecoration] = [], effect: BubbleEffect = .none) -> BubbleStyle {
+                               decorations: [BubbleDecoration] = [], effect: BubbleEffect = .none,
+                               art: BubbleArtKind? = nil) -> BubbleStyle {
         BubbleStyle(id: prefix + key, version: 1, name: name, shape: shape, fill: fill, border: border,
-                    textColorHex: text, decorations: decorations, drawingAssetID: nil, effect: effect, manualInsets: nil)
+                    textColorHex: text, decorations: decorations, drawingAssetID: nil, effect: effect, manualInsets: nil, art: art)
     }
 
     private static func decoration(_ id: String, emoji: String, _ anchor: BubbleAnchor, offset: CGSize, size: Double, rotation: Double) -> BubbleDecoration {

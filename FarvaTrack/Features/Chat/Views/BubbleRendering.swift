@@ -207,6 +207,14 @@ struct BubbleBackgroundView: View {
     }
 
     var body: some View {
+        if style.art == .catBox {
+            CatBoxBubbleView(mirrored: mirrored)
+        } else {
+            slicedBody
+        }
+    }
+
+    private var slicedBody: some View {
         ZStack {
             if let art {
                 NineSliceArtView(art: art)
