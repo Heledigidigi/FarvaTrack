@@ -30,6 +30,10 @@ struct ChatBubbleView: View {
     var bubbleCacheOwner: String = ""
     /// Arama satırı (8H): geri ara. `nil` = gösterilmez (ör. not sohbeti).
     var onCallBack: (() -> Void)?
+    /// Uzun bas → Bilgi (gönderildi / iletildi / görüldü).
+    var onInfo: () -> Void = {}
+    /// Alıntılanan mesaj fotoğraf/video/sticker ise küçük resmi (cihazda varsa).
+    var quoteThumbnail: URL?
 
     private var message: ChatMessageDTO { item.message }
 
@@ -46,9 +50,9 @@ struct ChatBubbleView: View {
             let padding = BubbleLayout.contentPadding(for: style, mirrored: !item.isMine)
             return EdgeInsets(top: padding.top, leading: padding.leading, bottom: padding.bottom, trailing: padding.trailing)
         }
-        if isSticker { return EdgeInsets() }
-        let media = message.media != nil && !message.deleted
-        return EdgeInsets(top: media ? 4 : 8, leading: media ? 4 : 12, bottom: media ? 4 : 8, trailing: media ? 4 : 12)
+        // Sticker ve fotoğraf/video baloncuksuz, kenarlıksız.
+        if isSticker || isBorderlessMedia { return EdgeInsets() }
+        return EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12)
     }
 
     @ViewBuilder
@@ -88,21 +92,45 @@ struct ChatBubbleView: View {
 
             if let call = message.call, !message.deleted {
                 callRow(call)
-            } else if let sticker = message.sticker, !message.deleted {
-                ChatStickerBubbleContent(item: item, sticker: sticker, onLoad: onLoadSticker)
-            } else if let audio = message.audio, !message.deleted, let player {
-                ChatVoiceBubbleContent(item: item, audio: audio, player: player, onLoad: onLoadAudio, onToggle: onToggleAudio)
-            } else if let media = message.media, !message.deleted {
+            } else if isBorderlessMedia, let media = message.media {
                 ChatMediaBubbleContent(
                     item: item, media: media,
                     onOpen: { item.status == .failed ? onRetry() : onOpenMedia() },
                     onCancelUpload: onCancelUpload, onLoadThumbnail: onLoadThumbnail
                 )
+                .overlay(alignment: .bottomTrailing) {
+                    if hasFooter, caption == nil {
+                        footer(floating: true).padding(6)
+                    }
+                }
+                if let caption {
+                    // Fotoğrafın altına yazılan açıklama: küçük baloncuk.
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(caption)
+                            .font(.body)
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if hasFooter { footer(floating: false) }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(item.isMine ? Color.ftAccent : Color.ftCardElevated,
+                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .frame(width: 250)
+                }
+            } else if let sticker = message.sticker, !message.deleted {
+                ChatStickerBubbleContent(item: item, sticker: sticker, onLoad: onLoadSticker)
+            } else if let audio = message.audio, !message.deleted, let player {
+                ChatVoiceBubbleContent(item: item, audio: audio, player: player, onLoad: onLoadAudio, onToggle: onToggleAudio)
             } else {
                 messageText
             }
 
-            footer
+            if hasFooter, !isBorderlessMedia {
+                footer(floating: isSticker)
+            }
         }
         .frame(minWidth: appliedStyle.flatMap(BubbleLayout.minimumContentSize(for:))?.width,
                minHeight: appliedStyle.flatMap(BubbleLayout.minimumContentSize(for:))?.height)
@@ -111,6 +139,12 @@ struct ChatBubbleView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Color.ftAccentLight, lineWidth: isHighlighted ? 2 : 0)
+        )
+        .background(
+            GeometryReader { geometry in
+                Color.clear.preference(key: ChatBubbleFramePreference.self,
+                                       value: [item.id: geometry.frame(in: .global)])
+            }
         )
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18, style: .continuous))
         .contextMenu { menu }
@@ -178,8 +212,16 @@ struct ChatBubbleView: View {
     /// Sticker baloncuksuz gösterilir.
     private var isSticker: Bool { message.sticker != nil && !message.deleted }
 
+    /// Fotoğraf ve video da baloncuksuz: kenarlık ve arka plan yok, durum simgesi fotoğrafın köşesinde.
+    private var isBorderlessMedia: Bool { message.media != nil && !message.deleted }
+
+    /// Saat baloncukta yazmaz (sohbeti sola kaydırınca görünür); "düzenlendi" ve gönderim durumu kalır.
+    private var hasFooter: Bool {
+        (message.editedAt != nil && !message.deleted) || (item.status != nil && !message.deleted)
+    }
+
     private var bubbleColor: Color {
-        if isSticker { return .clear }
+        if isSticker || isBorderlessMedia { return .clear }
         if message.deleted { return Color.ftCard }
         return item.isMine ? Color.ftAccent : Color.ftCardElevated
     }
@@ -196,10 +238,18 @@ struct ChatBubbleView: View {
                     Text(name(for: reply.senderID))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(isLightBubble ? Color(hex: "#800020") : Color.ftAccentLight)
-                    Text(reply.preview.isEmpty ? reply.type.placeholder : reply.preview)
-                        .font(.caption)
-                        .foregroundStyle(contentColor.opacity(0.8))
-                        .lineLimit(2)
+                    if let text = quoteText(reply) {
+                        Text(text)
+                            .font(.caption)
+                            .foregroundStyle(contentColor.opacity(0.8))
+                            .lineLimit(2)
+                    }
+                }
+                if let quoteThumbnail {
+                    CachedImageView(url: quoteThumbnail)
+                        .frame(width: 40, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .accessibilityHidden(true)
                 }
             }
             .padding(6)
@@ -208,24 +258,41 @@ struct ChatBubbleView: View {
         .buttonStyle(.plain)
     }
 
-    private var footer: some View {
+    /// Alıntı metni: küçük resim varken "📷 Fotoğraf" yazılmaz, yalnızca açıklama (varsa).
+    private func quoteText(_ reply: ChatReplyReference) -> String? {
+        guard quoteThumbnail != nil, reply.type.isMedia || reply.type == .sticker else {
+            return reply.preview.isEmpty ? reply.type.placeholder : reply.preview
+        }
+        let placeholder = reply.type.placeholder
+        var text = reply.preview
+        for prefix in ["📷 ", "🎬 "] where text.hasPrefix(prefix) { text.removeFirst(prefix.count) }
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty || reply.preview == placeholder ? nil : text
+    }
+
+    /// Fotoğrafın altındaki açıklama (yoksa `nil`).
+    private var caption: String? {
+        guard isBorderlessMedia else { return nil }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : message.text
+    }
+
+    private func footer(floating: Bool) -> some View {
         HStack(spacing: 4) {
             if message.editedAt != nil, !message.deleted {
                 Text("düzenlendi")
             }
-            Text(message.createdAt.formatted(date: .omitted, time: .shortened))
             if let status = item.status, !message.deleted {
                 Image(systemName: status.systemImage)
                     .foregroundStyle(statusColor(status))
             }
         }
         .font(.caption2)
-        .foregroundStyle(contentColor.opacity(0.65))
-        .padding(.horizontal, message.media != nil && !message.deleted ? 6 : (isSticker ? 7 : 0))
-        .padding(.vertical, isSticker ? 2 : 0)
-        .padding(.bottom, message.media != nil && !message.deleted ? 2 : 0)
-        // Sticker baloncuksuz: saat okunabilsin diye küçük kapsül.
-        .background(isSticker ? Color.black.opacity(0.4) : .clear, in: Capsule())
+        .foregroundStyle(floating ? Color.white.opacity(0.9) : contentColor.opacity(0.65))
+        .padding(.horizontal, floating ? 7 : 0)
+        .padding(.vertical, floating ? 3 : 0)
+        // Baloncuksuz içerikte (sticker, fotoğraf) okunabilsin diye küçük kapsül.
+        .background(floating ? Color.black.opacity(0.45) : .clear, in: Capsule())
     }
 
     private func statusColor(_ status: ChatMessageStatus) -> Color {
@@ -302,6 +369,7 @@ struct ChatBubbleView: View {
             if item.status == .failed {
                 Button { onRetry() } label: { Label("Tekrar gönder", systemImage: "arrow.clockwise") }
             }
+            Button { onInfo() } label: { Label("Bilgi", systemImage: "info.circle") }
         }
 
         Divider()
@@ -337,6 +405,7 @@ struct ChatBubbleView: View {
             if canCopy { Button("Kopyala", action: onCopy) }
             if item.canEdit { Button("Düzenle", action: onEdit) }
             if item.status == .failed { Button("Tekrar gönder", action: onRetry) }
+            Button("Bilgi", action: onInfo)
         }
         Button("Benden sil", action: onDeleteForMe)
         if item.isMine, !message.deleted {
@@ -389,6 +458,8 @@ struct ChatBubbleView: View {
 struct ChatComposer: View {
     @Bindable var viewModel: ChatViewModel
     var focused: FocusState<Bool>.Binding
+    /// Açık panelin düğmesi klavye simgesine döner (dokununca klavyeye geçilir).
+    var activePanel: ChatInputPanel = .none
     var onGallery: () -> Void = {}
     var onCamera: () -> Void = {}
     var onStickers: () -> Void = {}
@@ -398,10 +469,14 @@ struct ChatComposer: View {
     var body: some View {
         VStack(spacing: 6) {
             if let reply = viewModel.replyingTo {
+                // Fotoğraf/video/sticker yanıtında "Fotoğraf" yazmaz; küçük resmi gösterilir (açıklama varsa o yazar).
+                let visual = ChatReplyVisual(item: reply)
                 contextBar(
                     icon: "arrowshape.turn.up.left.fill",
                     title: reply.isMine ? "Kendi mesajına yanıt" : "\(viewModel.partnerName) kişisine yanıt",
-                    text: reply.displayText
+                    text: visual.text,
+                    thumbnail: visual.thumbnailURL,
+                    isVideo: reply.message.type == .video
                 )
             } else if let editing = viewModel.editing {
                 contextBar(icon: "pencil", title: "Mesajı düzenle", text: editing.message.text)
@@ -414,21 +489,22 @@ struct ChatComposer: View {
                 } else {
                 if viewModel.editing == nil {
                     Button(action: onGallery) {
-                        Image(systemName: "photo.on.rectangle.angled")
+                        Image(systemName: activePanel == .gallery ? "keyboard" : "photo.on.rectangle.angled")
                             .font(.system(size: 22))
                             .frame(width: 36, height: 40)
                     }
                     .foregroundStyle(Color.ftAccentLight)
-                    .accessibilityLabel("Galeriden fotoğraf veya video seç")
+                    .accessibilityLabel(activePanel == .gallery ? "Klavyeye dön" : "Galeri")
+                    .accessibilityHint(activePanel == .gallery ? "" : "Son fotoğraf ve videoları klavyenin yerinde gösterir")
 
                     Button(action: onStickers) {
-                        Image(systemName: "face.smiling")
+                        Image(systemName: activePanel == .stickers ? "keyboard" : "face.smiling")
                             .font(.system(size: 22))
                             .frame(width: 32, height: 40)
                     }
                     .foregroundStyle(Color.ftAccentLight)
-                    .accessibilityLabel("Sticker'larım")
-                    .accessibilityHint("Fotoğraftan sticker oluştur")
+                    .accessibilityLabel(activePanel == .stickers ? "Klavyeye dön" : "Sticker'larım")
+                    .accessibilityHint(activePanel == .stickers ? "" : "Sticker panelini klavyenin yerinde açar")
                 }
 
                 TextField("Mesaj", text: $viewModel.draft, axis: .vertical)
@@ -485,7 +561,7 @@ struct ChatComposer: View {
         .background(Color.ftCard.ignoresSafeArea(edges: .bottom))
     }
 
-    private func contextBar(icon: String, title: String, text: String) -> some View {
+    private func contextBar(icon: String, title: String, text: String, thumbnail: URL? = nil, isVideo: Bool = false) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .foregroundStyle(Color.ftAccentLight)
@@ -494,12 +570,25 @@ struct ChatComposer: View {
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.ftAccentLight)
-                Text(text)
-                    .font(.caption)
-                    .foregroundStyle(Color.ftTextSecondary)
-                    .lineLimit(1)
+                if !text.isEmpty {
+                    Text(text)
+                        .font(.caption)
+                        .foregroundStyle(Color.ftTextSecondary)
+                        .lineLimit(1)
+                }
             }
             Spacer()
+            if let thumbnail {
+                CachedImageView(url: thumbnail)
+                    .frame(width: 38, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay {
+                        if isVideo {
+                            Image(systemName: "play.fill").font(.caption2).foregroundStyle(.white).shadow(radius: 2)
+                        }
+                    }
+                    .accessibilityLabel(isVideo ? "Video" : "Fotoğraf")
+            }
             Button {
                 viewModel.cancelComposerContext()
             } label: {
@@ -511,5 +600,28 @@ struct ChatComposer: View {
         .padding(8)
         .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .contain)
+    }
+}
+
+// MARK: - Yanıtta görsel önizleme
+
+/// Yanıtlanan fotoğraf/video/sticker için küçük resim ve (varsa) açıklama.
+struct ChatReplyVisual {
+    let thumbnailURL: URL?
+    let text: String
+
+    init(item: ChatMessageItem) {
+        let message = item.message
+        if message.media != nil, !message.deleted {
+            thumbnailURL = item.localThumbnailURL
+            let caption = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            text = caption.isEmpty ? (item.localThumbnailURL == nil ? message.type.placeholder : "") : caption
+        } else if message.sticker != nil, !message.deleted, let url = item.localOriginalURL {
+            thumbnailURL = url
+            text = ""
+        } else {
+            thumbnailURL = nil
+            text = item.displayText
+        }
     }
 }

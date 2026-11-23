@@ -7,6 +7,8 @@ struct EditProfileView: View {
 
     @State private var draft: ProfileDraft?
     @State private var photoItem: PhotosPickerItem?
+    /// Seçilen fotoğraf: önce hizalama ekranı açılır, "Seç" denince yüklenir.
+    @State private var cropCandidate: CropCandidate?
     @State private var isSaving = false
     @State private var localError: String?
 
@@ -42,7 +44,20 @@ struct EditProfileView: View {
             }
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }
-                Task { await upload(item) }
+                Task { await prepareCrop(item) }
+            }
+            .fullScreenCover(item: $cropCandidate) { candidate in
+                ProfilePhotoCropView(
+                    image: candidate.image,
+                    onCancel: { cropCandidate = nil },
+                    onChoose: { jpeg in
+                        cropCandidate = nil
+                        Task {
+                            await auth.updateProfilePhoto(jpeg)
+                            _ = takeAuthError()
+                        }
+                    }
+                )
             }
         }
     }
@@ -185,33 +200,18 @@ struct EditProfileView: View {
         return true
     }
 
-    private func upload(_ item: PhotosPickerItem) async {
+    /// Seçilen fotoğraf okunur ve hizalama ekranı açılır.
+    private func prepareCrop(_ item: PhotosPickerItem) async {
         defer { photoItem = nil }
-        guard let data = try? await item.loadTransferable(type: Data.self),
-              let jpeg = ImageCompressor.squareJPEG(from: data) else {
+        guard let data = try? await item.loadTransferable(type: Data.self) else {
             localError = "Fotoğraf okunamadı."
             return
         }
-        await auth.updateProfilePhoto(jpeg)
-        _ = takeAuthError()
-    }
-}
-
-/// Profil fotoğrafını kare kırpıp küçültür (Storage maliyeti ve yükleme süresi için).
-enum ImageCompressor {
-    static func squareJPEG(from data: Data, side: CGFloat = 512, quality: CGFloat = 0.8) -> Data? {
-        guard let image = UIImage(data: data) else { return nil }
-        let length = min(image.size.width, image.size.height)
-        guard length > 0 else { return nil }
-        let scale = side / length
-        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let origin = CGPoint(x: (side - size.width) / 2, y: (side - size.height) / 2)
-
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let rendered = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { _ in
-            image.draw(in: CGRect(origin: origin, size: size))
+        let image = await Task.detached(priority: .userInitiated) { ProfilePhotoRenderer.prepared(from: data) }.value
+        guard let image else {
+            localError = "Fotoğraf okunamadı."
+            return
         }
-        return rendered.jpegData(compressionQuality: quality)
+        cropCandidate = CropCandidate(image: image)
     }
 }

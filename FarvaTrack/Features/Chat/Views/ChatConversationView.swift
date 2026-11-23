@@ -11,8 +11,23 @@ struct ChatConversationView: View {
     /// Galeriden seçilenler; gönderim sayfası (Orijinal / Hızlı) bunlar için açılır.
     @State private var viewerItem: ChatMessageItem?
     @State private var showStickers = false
-    /// Sticker paneli (yazma alanının altında) ve yerleştirme (8E).
-    @State private var showStickerPanel = false
+    /// Klavyenin yerini alan panel (sticker / galeri); klavye yüksekliğinde, animasyonsuz geçişle.
+    @State private var panel: ChatInputPanel = .none
+    @State private var galleryExpanded = false
+    @State private var keyboard = ChatKeyboardObserver()
+    /// Ev çubuğu payı (pencerenin alt güvenli alanı).
+    @State private var homeInset: CGFloat = 0
+    /// Klavyenin o anki yüksekliği (ekranın altından; parmakla kapatırken de her karede güncellenir).
+    @State private var keyboardOverlap: CGFloat = 0
+    /// Kaydırarak yanıtlama: hangi mesaj ve ne kadar çekildi.
+    @State private var swipeReply: (id: String, offset: CGFloat)?
+    /// Sola kaydırınca saatler (Instagram gibi).
+    @State private var timeReveal: CGFloat = 0
+    /// Uzun bas → Bilgi.
+    @State private var infoItem: ChatMessageItem?
+    @FocusState private var findFocused: Bool
+    @State private var scrollToBottomRequest = 0
+    @State private var viewerReplyAction: ChatViewerReplyAction?
     @State private var stickerLibrary = StickerLibraryViewModel()
     @State private var recentIDs: [String] = []
     @State private var placementDraft: PlacementDraft?
@@ -29,6 +44,22 @@ struct ChatConversationView: View {
     private static let bottomID = "chat-bottom"
 
     var body: some View {
+        GeometryReader { root in
+            conversation(fullHeight: root.size.height + root.safeAreaInsets.top, topInset: root.safeAreaInsets.top)
+        }
+        // Klavye ve ev çubuğu payı elle yönetilir: her şey ekranın altına göre ölçülür (klavye kılavuzuyla aynı).
+        .ignoresSafeArea(.keyboard)
+        .ignoresSafeArea(.container, edges: .bottom)
+    }
+
+    /// Yazma alanının ekranın altından yüksekliği: klavye, açık panel ve ev çubuğundan en yükseği.
+    private var lift: CGFloat {
+        ChatPanelLayout.lift(panel: placementDraft == nil && !viewModel.isFinding ? panel : .none,
+                             keyboardHeight: keyboard.height, keyboardOverlap: keyboardOverlap, homeInset: homeInset)
+    }
+
+    @ViewBuilder
+    private func conversation(fullHeight: CGFloat, topInset: CGFloat) -> some View {
         @Bindable var viewModel = viewModel
 
         ScrollViewReader { proxy in
@@ -51,6 +82,31 @@ struct ChatConversationView: View {
                                     )
                                 }
                             )
+                            // Sola kaydırınca tüm baloncuklar kayar, sağda gönderim saatleri belirir;
+                            // tek baloncuğu çekince (kendininkini sola, karşıdakini sağa) o mesaj yanıtlanır.
+                            .offset(x: timeReveal + replyOffset(for: item.id))
+                            .overlay(alignment: item.isMine ? .trailing : .leading) {
+                                let offset = replyOffset(for: item.id)
+                                if offset != 0 {
+                                    Image(systemName: "arrowshape.turn.up.left.fill")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 32, height: 32)
+                                        .background(Color.ftCardElevated, in: Circle())
+                                        // Eşiğe gelince küçük bir sıçrama: "bırakırsan yanıtlayacaksın".
+                                        .scaleEffect(ChatSwipeReply.isTriggered(offset) ? 1.15 : 0.55 + 0.45 * ChatSwipeReply.progress(offset))
+                                        .opacity(ChatSwipeReply.progress(offset))
+                                        .animation(.spring(response: 0.25, dampingFraction: 0.5), value: ChatSwipeReply.isTriggered(offset))
+                                        .padding(.horizontal, 4)
+                                        .accessibilityHidden(true)
+                                }
+                            }
+                            .overlay(alignment: .bottomTrailing) {
+                                if timeReveal < 0 {
+                                    ChatRevealedTime(date: item.message.createdAt, offset: timeReveal)
+                                        .padding(.bottom, item.reactionSummary.isEmpty ? 6 : 18)
+                                }
+                            }
                             .id(item.id)
                     }
 
@@ -69,6 +125,47 @@ struct ChatConversationView: View {
                         Color.clear.preference(key: ChatContentOffsetPreference.self,
                                                value: geometry.frame(in: .named(ChatCoordinateSpace.viewport)).minY)
                     }
+                )
+                .background(
+                    ChatHorizontalPanAttacher(
+                        isEnabled: placementDraft == nil,
+                        shouldBegin: { location, velocity in
+                            if let hit = bubbleHit(at: location), hit.isMine == (velocity.x < 0) { return true }
+                            return velocity.x < 0
+                        },
+                        onBegan: { location, velocity in
+                            if let hit = bubbleHit(at: location), hit.isMine == (velocity.x < 0) {
+                                swipeReply = (hit.id, 0)
+                                return true
+                            }
+                            swipeReply = nil
+                            return false
+                        },
+                        onChanged: { translation in
+                            if let current = swipeReply {
+                                let isMine = viewModel.messages.first { $0.id == current.id }?.isMine ?? true
+                                let offset = ChatSwipeReply.offset(forTranslation: translation, isMine: isMine)
+                                if ChatSwipeReply.isTriggered(offset) != ChatSwipeReply.isTriggered(current.offset) {
+                                    Haptics.impact(.light)
+                                }
+                                swipeReply = (current.id, offset)
+                            } else {
+                                timeReveal = ChatTimeReveal.offset(forTranslation: translation)
+                            }
+                        },
+                        onEnded: {
+                            if let current = swipeReply {
+                                if ChatSwipeReply.isTriggered(current.offset),
+                                   let item = viewModel.messages.first(where: { $0.id == current.id }) {
+                                    viewModel.beginReply(to: item)
+                                    composerFocused = true
+                                }
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { swipeReply = nil }
+                            } else {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { timeReveal = 0 }
+                            }
+                        }
+                    )
                 )
                 .coordinateSpace(name: ChatCoordinateSpace.content)
                 // Panelden sürüklenen sticker: bırakılan nokta doğrudan içerik koordinatındadır (kaydırma hesabı gerekmez).
@@ -107,6 +204,7 @@ struct ChatConversationView: View {
                     }
                 }
                 .onPreferenceChange(MessageFramePreference.self) { metrics.frames = $0 }
+                .onPreferenceChange(ChatBubbleFramePreference.self) { metrics.bubbleFrames = $0 }
                 .onPreferenceChange(ChatContentOffsetPreference.self) { metrics.contentMinY = $0 }
             }
             .coordinateSpace(name: ChatCoordinateSpace.viewport)
@@ -130,6 +228,9 @@ struct ChatConversationView: View {
             .onChange(of: viewModel.messages.last?.id) { _, _ in
                 withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
+            .onChange(of: scrollToBottomRequest) { _, _ in
+                withAnimation(ChatPanelLayout.keyboardAnimation) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+            }
             // Profil sayfasındaki aramadan / medyadan seçilen mesaja git (profil kapanınca).
             .onChange(of: viewModel.pendingJumpMessageID) { _, id in
                 guard let id else { return }
@@ -139,43 +240,92 @@ struct ChatConversationView: View {
                     jump(to: id, proxy: proxy)
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if placementDraft != nil {
-                    placementBar
-                } else {
-                    VStack(spacing: 0) {
+            // Panel açıkken listeye dokununca panel kapanır (klavyedeki gibi).
+            .simultaneousGesture(TapGesture().onEnded {
+                if panel != .none, !galleryExpanded { closePanel() }
+            })
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    if placementDraft != nil {
+                        placementBar
+                    } else if viewModel.isFinding {
+                        ChatFindBar(
+                            viewModel: viewModel,
+                            focused: $findFocused,
+                            onOlder: { _ = viewModel.findOlder() },
+                            onNewer: { _ = viewModel.findNewer() },
+                            onDone: endFind
+                        )
+                    } else {
                         ChatComposer(
                             viewModel: viewModel,
                             focused: $composerFocused,
-                            onGallery: { showPicker = true },
+                            activePanel: panel,
+                            onGallery: { togglePanel(.gallery) },
                             onCamera: { showCamera = true },
-                            onStickers: {
-                                composerFocused = false
-                                withAnimation(.easeOut(duration: 0.2)) { showStickerPanel.toggle() }
-                            },
+                            onStickers: { togglePanel(.stickers) },
                             recorder: recorder,
                             onVoice: { viewModel.sendVoice($0) }
                         )
-                        if showStickerPanel {
-                            ChatStickerPanel(
-                                library: stickerLibrary,
-                                recents: recentStickers,
-                                onSend: { sticker in
-                                    viewModel.sendSticker(fileURL: sticker.fileURL, width: sticker.width, height: sticker.height)
-                                    useRecent(sticker)
-                                },
-                                onPlace: { sticker in placeNearLastMessage(sticker) },
-                                onCreate: { showStickers = true }
-                            )
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
                     }
+                    // Klavyenin / panelin / ev çubuğunun yeri. Panel bunun üstüne (ekranın altından) çizilir.
+                    Color.ftCard.frame(height: lift)
                 }
             }
-            .onChange(of: composerFocused) { _, focused in
-                if focused { showStickerPanel = false }
+            // Find modu: klavye açılır, sorgu değişince en yeni eşleşmeye gidilir.
+            .onChange(of: viewModel.isFinding) { _, finding in
+                if finding {
+                    setPanel(.none)
+                    composerFocused = false
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        findFocused = true
+                    }
+                } else {
+                    highlightedID = nil
+                }
+            }
+            .onChange(of: viewModel.find.current) { _, id in
+                guard let id else {
+                    highlightedID = nil
+                    return
+                }
+                focusFound(id, proxy: proxy)
             }
         }
+        // Panel ekranın altından klavye yüksekliğinde; klavye açılınca onun arkasında kalır.
+        .overlay(alignment: .bottom) {
+            if panel != .none, placementDraft == nil, !viewModel.isFinding {
+                panelView(bottomInset: homeInset, fullHeight: fullHeight, topInset: topInset)
+                    .transition(.move(edge: .bottom))
+            }
+        }
+        .background(
+            ChatKeyboardTracker { overlap, animated, home in
+                let wasHidden = keyboardOverlap < 100
+                if abs(homeInset - home) > 0.5 { homeInset = home }
+                if animated {
+                    withAnimation(ChatPanelLayout.keyboardAnimation) { keyboardOverlap = overlap }
+                } else {
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) { keyboardOverlap = overlap }
+                }
+                if wasHidden, overlap >= 100, panel == .none, isNearBottom {
+                    // Klavye açılırken son mesajlar klavyenin altında kalmasın.
+                    withAnimation(ChatPanelLayout.keyboardAnimation) { scrollToBottomRequest += 1 }
+                }
+            }
+        )
+        .onAppear {
+            keyboard.start()
+            keyboard.onDidShow = {
+                // Klavye panelin üstüne tamamen geldi: panel sessizce kaldırılır (yerleşim değişmez).
+                if panel != .none { setPanel(.none) }
+                galleryExpanded = false
+            }
+        }
+        .onDisappear { keyboard.stop() }
         .sheet(isPresented: $showPicker) {
             // Seçilenler doğrudan gider; kalite Ayarlar → Sohbet → Veri tasarrufu'ndan.
             ChatMediaPicker { items in
@@ -186,9 +336,9 @@ struct ChatConversationView: View {
             .ignoresSafeArea()
         }
         .fullScreenCover(isPresented: $showCamera) {
-            ChatCameraView(stickers: stickerLibrary.stickers) { media in
+            ChatCameraView(stickers: stickerLibrary.stickers) { media, caption in
                 let quality = ChatMediaPreferences.sendQuality(.standard)
-                Task { await viewModel.sendMedia([media], quality: quality) }
+                Task { await viewModel.sendMedia([media], quality: quality, caption: caption) }
             }
         }
         .onAppear { viewModel.outgoingBubble = bubbleStore.selectedRef }
@@ -217,8 +367,15 @@ struct ChatConversationView: View {
                     }
             }
         }
-        .fullScreenCover(item: $viewerItem) { item in
-            ChatMediaViewer(item: item, viewModel: viewModel)
+        .fullScreenCover(item: $viewerItem, onDismiss: runViewerReplyAction) { item in
+            ChatMediaViewer(item: item, viewModel: viewModel, stickers: stickerLibrary.stickers) { quoted, action in
+                // Fotoğrafa yanıt: sohbete dönülür, alıntı hazır, seçilen işlem açılır (kamera, galeri…).
+                viewModel.beginReply(to: quoted)
+                viewerReplyAction = action
+            }
+        }
+        .sheet(item: $infoItem) { item in
+            ChatMessageInfoSheet(item: item, info: viewModel.info(for: item), partnerName: viewModel.partnerName)
         }
         .overlay(alignment: .top) {
             if viewModel.isPreparingMedia {
@@ -360,7 +517,9 @@ struct ChatConversationView: View {
             bubbleStyle: style,
             bubbleAssets: style.map { bubbleStore.assets(for: $0, ownerID: sender) } ?? .empty,
             bubbleCacheOwner: owner,
-            onCallBack: viewModel.kind == .partner ? { CallLauncher.call(viewModel) } : nil
+            onCallBack: viewModel.kind == .partner ? { CallLauncher.call(viewModel) } : nil,
+            onInfo: { infoItem = item },
+            quoteThumbnail: item.message.replyTo.flatMap { viewModel.replyThumbnail(for: $0.messageID) }
         )
         .task(id: item.message.bubble) {
             await bubbleStore.ensure(item.message.bubble, ownerID: sender)
@@ -408,7 +567,7 @@ struct ChatConversationView: View {
             return false
         }
         useRecent(sticker)
-        withAnimation(.easeOut(duration: 0.2)) { showStickerPanel = false }
+        withAnimation(.easeOut(duration: 0.2)) { panel = .none }
         placementDraft = PlacementDraft(
             imageURL: sticker.fileURL, width: sticker.width, height: sticker.height, editingID: nil,
             transform: PlacementTransform(center: location, scale: 1, rotation: 0)
@@ -530,6 +689,124 @@ struct ChatConversationView: View {
         let messages = viewModel.messages
         guard index > 0 else { return true }
         return !Calendar.current.isDate(messages[index].message.createdAt, inSameDayAs: messages[index - 1].message.createdAt)
+    }
+
+    // MARK: Paneller (klavye yüksekliğinde)
+
+    @ViewBuilder
+    private func panelView(bottomInset: CGFloat, fullHeight: CGFloat, topInset: CGFloat) -> some View {
+        switch panel {
+        case .none:
+            EmptyView()
+        case .stickers:
+            ChatStickerPanel(
+                library: stickerLibrary,
+                recents: recentStickers,
+                onSend: { sticker in
+                    viewModel.sendSticker(fileURL: sticker.fileURL, width: sticker.width, height: sticker.height)
+                    useRecent(sticker)
+                },
+                onPlace: { sticker in placeNearLastMessage(sticker) },
+                onCreate: { showStickers = true }
+            )
+            .padding(.bottom, bottomInset)
+            .frame(height: keyboard.height)
+            .background(Color.ftCard)
+        case .gallery:
+            ChatGalleryPanel(
+                collapsedHeight: keyboard.height,
+                expandedHeight: max(keyboard.height, fullHeight - topInset - 8),
+                bottomInset: bottomInset,
+                isExpanded: $galleryExpanded,
+                onSend: { items in
+                    let quality = ChatMediaPreferences.sendQuality(.standard)
+                    Task { await viewModel.sendMedia(items, quality: quality) }
+                    closePanel()
+                },
+                onCamera: {
+                    showCamera = true
+                },
+                onSystemPicker: { showPicker = true },
+                onClose: { closePanel() }
+            )
+        }
+    }
+
+    /// Görüntüleyiciden gelen yanıt işlemi (görüntüleyici kapanınca).
+    private func runViewerReplyAction() {
+        guard let action = viewerReplyAction else { return }
+        viewerReplyAction = nil
+        switch action {
+        case .camera: showCamera = true
+        case .gallery: togglePanel(.gallery)
+        case .stickers: togglePanel(.stickers)
+        case .voice:
+            // Kayıt basılı tutarak yapılır: alıntı hazır, mikrofon düğmesi aynı yerde.
+            recorder.hint = "Yanıtı kaydetmek için mikrofonu basılı tut"
+        }
+    }
+
+    /// Düğmeye basılınca: panel açıksa klavyeye dön, değilse klavyenin yerine paneli koy.
+    /// Panel animasyonsuz gelir; klavye kendi animasyonuyla inerken altında aynı yükseklikte panel hazırdır.
+    private func togglePanel(_ target: ChatInputPanel) {
+        Haptics.selection()
+        if panel == target {
+            // Panelden klavyeye: panel klavye tamamen çıkınca kaldırılır.
+            composerFocused = true
+            return
+        }
+        setPanel(target)
+        galleryExpanded = false
+        composerFocused = false
+    }
+
+    private func setPanel(_ value: ChatInputPanel) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { panel = value }
+    }
+
+    private func closePanel() {
+        galleryExpanded = false
+        // Klavyenin inişiyle aynı yay: panel ve yazma alanı birlikte süzülür.
+        withAnimation(ChatPanelLayout.keyboardAnimation) { panel = .none }
+    }
+
+    private func replyOffset(for id: String) -> CGFloat {
+        guard let swipeReply, swipeReply.id == id else { return 0 }
+        return swipeReply.offset
+    }
+
+    /// Pencere koordinatındaki noktanın altındaki baloncuk.
+    private func bubbleHit(at location: CGPoint) -> (id: String, isMine: Bool)? {
+        guard let id = metrics.bubbleFrames.first(where: { $0.value.insetBy(dx: -6, dy: -4).contains(location) })?.key,
+              let item = viewModel.messages.first(where: { $0.id == id }),
+              !item.message.deleted else { return nil }
+        return (id, item.isMine)
+    }
+
+    /// Son mesaj ekranın altına yakın mı (klavye açılınca alta kaydırmak için).
+    private var isNearBottom: Bool {
+        guard let last = viewModel.messages.last, let frame = metrics.frames[last.id] else { return true }
+        return frame.maxY + metrics.contentMinY <= metrics.viewportSize.height + 120
+    }
+
+    // MARK: Bul
+
+    private func endFind() {
+        findFocused = false
+        viewModel.endFind()
+        highlightedID = nil
+    }
+
+    /// Eşleşen baloncuğa kayar ve arama sürdükçe vurgulu tutar.
+    private func focusFound(_ id: String, proxy: ScrollViewProxy) {
+        guard viewModel.reveal(messageID: id) else { return }
+        highlightedID = id
+        Task {
+            try? await Task.sleep(for: .milliseconds(80))
+            withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
+        }
     }
 
     /// Arama sonucu ya da alıntıya dokununca mesaja gider ve kısa süre vurgular.

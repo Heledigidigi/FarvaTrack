@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftData
+import UIKit
 
 /// Uygulama açıkken gelen mesaj için üstte kısa süre görünen şerit (sistem bildirimi yerine).
 struct ChatBanner: Identifiable, Equatable {
@@ -18,7 +19,15 @@ final class ChatHub {
     let personal: ChatViewModel
 
     /// Uygulama önde mi.
-    var isAppActive = true { didSet { updateVisibility() } }
+    var isAppActive = true {
+        didSet {
+            updateVisibility()
+            guard isAppActive != oldValue else { return }
+            if isAppActive { startPresence() } else { stopPresence() }
+        }
+    }
+    /// Önde olduğum sürece dakikada bir "çevrimiçi" sinyali.
+    @ObservationIgnored private var presenceTask: Task<Void, Never>?
     /// Sohbet sekmesi ekranda mı.
     var isTabVisible = false { didSet { updateVisibility() } }
     /// Açık konuşma: yalnızca ekrandaki odanın mesajları okundu sayılır.
@@ -73,9 +82,12 @@ final class ChatHub {
     func configure(context: ModelContext, user: AppUser) {
         partner.configure(context: context, user: user)
         personal.configure(context: context, user: user)
+        if isAppActive, presenceTask == nil { startPresence() }
     }
 
     func reset() {
+        presenceTask?.cancel()
+        presenceTask = nil
         partner.reset()
         personal.reset()
         openConversation = nil
@@ -89,6 +101,36 @@ final class ChatHub {
     func tick() {
         partner.tick()
         personal.tick()
+    }
+
+    // MARK: Çevrimiçi / son görülme
+
+    private func startPresence() {
+        presenceTask?.cancel()
+        presenceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                // Bekleme sırasında merkez tutulmaz (zayıf başvuru).
+                guard let wrote = await self?.partner.updatePresence(online: true) else { return }
+                // Oda henüz yüklenmediyse ya da çevrimdışıysak kısa aralıkla yeniden denenir.
+                try? await Task.sleep(for: .seconds(wrote ? ChatPresence.heartbeat : 5))
+            }
+        }
+    }
+
+    /// Arka plana geçerken son görülme zamanı yazılır; sistem uygulamayı askıya almadan bitsin diye kısa ek süre istenir.
+    private func stopPresence() {
+        presenceTask?.cancel()
+        presenceTask = nil
+        let partner = partner
+        var backgroundTask = UIBackgroundTaskIdentifier.invalid
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "chat-presence") {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
+        Task {
+            await partner.updatePresence(online: false)
+            if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
+        }
     }
 
     private func updateVisibility() {

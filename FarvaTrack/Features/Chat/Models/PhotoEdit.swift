@@ -5,13 +5,127 @@ import Foundation
 
 /// Tüm konumlar ORİJİNAL fotoğrafa göre 0…1 oranlarıdır; kırpma tahribatsızdır (yalnızca görünen bölge).
 /// Böylece kırpma sonradan değişse de çizimler ve katmanlar yerinde kalır.
+
+/// Çizim rengi (sRGB, 0…1). Hazır paletin dışında fotoğraftan ya da renk seçiciden gelebilir.
+struct PhotoEditColor: Equatable, Hashable, Codable {
+    var red: Double
+    var green: Double
+    var blue: Double
+    var alpha: Double = 1
+
+    static let white = PhotoEditColor(red: 1, green: 1, blue: 1)
+    static let black = PhotoEditColor(red: 0, green: 0, blue: 0)
+
+    /// Kalem panelindeki hazır renkler.
+    static let palette: [PhotoEditColor] = [
+        .white, .black,
+        PhotoEditColor(red: 0.55, green: 0.55, blue: 0.58),
+        PhotoEditColor(red: 0.85, green: 0.12, blue: 0.22),
+        PhotoEditColor(red: 1, green: 0.45, blue: 0.1),
+        PhotoEditColor(red: 1, green: 0.8, blue: 0.1),
+        PhotoEditColor(red: 0.2, green: 0.78, blue: 0.35),
+        PhotoEditColor(red: 0.1, green: 0.75, blue: 0.8),
+        PhotoEditColor(red: 0.15, green: 0.5, blue: 1),
+        PhotoEditColor(red: 0.45, green: 0.3, blue: 0.95),
+        PhotoEditColor(red: 1, green: 0.45, blue: 0.7),
+        PhotoEditColor(red: 0.5, green: 0.0, blue: 0.13)
+    ]
+
+    /// Eski yazı paletiyle uyum (yazı katmanları dizinle saklanır).
+    static func legacy(_ index: Int) -> PhotoEditColor {
+        let table: [PhotoEditColor] = [
+            .white, .black, PhotoEditColor(red: 0.85, green: 0.12, blue: 0.22), PhotoEditColor(red: 1, green: 0.8, blue: 0.1),
+            PhotoEditColor(red: 0.2, green: 0.78, blue: 0.35), PhotoEditColor(red: 0.15, green: 0.5, blue: 1), PhotoEditColor(red: 1, green: 0.45, blue: 0.7)
+        ]
+        return table[min(max(index, 0), table.count - 1)]
+    }
+
+    /// Açık renk mi (önizleme halkasının kontrastı için).
+    var isLight: Bool { 0.299 * red + 0.587 * green + 0.114 * blue > 0.6 }
+}
+
+/// Kalem türleri.
+enum PhotoEditBrush: String, CaseIterable, Codable, Identifiable {
+    case pen, marker, highlighter, neon
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .pen: return "Kalem"
+        case .marker: return "Keçeli"
+        case .highlighter: return "Fosforlu"
+        case .neon: return "Neon"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .pen: return "pencil.tip"
+        case .marker: return "paintbrush.pointed"
+        case .highlighter: return "highlighter"
+        case .neon: return "sparkles"
+        }
+    }
+
+    /// Kalınlık çarpanı (ayardaki boyuta göre).
+    var widthFactor: CGFloat {
+        switch self {
+        case .pen: return 1
+        case .marker: return 1.6
+        case .highlighter: return 3
+        case .neon: return 1.2
+        }
+    }
+
+    var opacity: Double {
+        switch self {
+        case .pen, .neon: return 1
+        case .marker: return 0.9
+        case .highlighter: return 0.42
+        }
+    }
+}
+
 struct PhotoEditStroke: Identifiable, Equatable {
     var id = UUID()
     /// Noktalar (x: genişliğe, y: yüksekliğe oran).
     var points: [CGPoint]
-    var colorIndex: Int
-    /// Çizgi kalınlığı, orijinal genişliğe oran.
+    var color: PhotoEditColor
+    /// Çizgi kalınlığı, orijinal genişliğe oran (kalem türü çarpanı uygulanmış).
     var width: CGFloat
+    var brush: PhotoEditBrush = .pen
+    /// Silgi: yalnızca çizimleri (fotoğrafı değil) kalem gibi çizdiği yerden siler.
+    var isEraser = false
+
+    init(points: [CGPoint], color: PhotoEditColor, width: CGFloat, brush: PhotoEditBrush = .pen, isEraser: Bool = false) {
+        self.points = points
+        self.color = color
+        self.width = width
+        self.brush = brush
+        self.isEraser = isEraser
+    }
+
+    /// Eski palet dizinli kullanım (testler ve uyumluluk).
+    init(points: [CGPoint], colorIndex: Int, width: CGFloat) {
+        self.init(points: points, color: .legacy(colorIndex), width: width)
+    }
+}
+
+/// Kalem ayarları (cihazda saklanır).
+struct PhotoEditBrushSettings: Equatable {
+    /// Ekrandaki kalınlık (nokta).
+    var size: CGFloat = 7
+    /// Çizimin parmağın ne kadar üstünde olacağı (nokta). 0: tam parmağın altı.
+    var offset: CGFloat = 0
+
+    static let sizeRange: ClosedRange<CGFloat> = 2...40
+    static let offsetRange: ClosedRange<CGFloat> = 0...100
+
+    /// Parmak noktası → çizim noktası (yukarı doğru öteleme).
+    func drawPoint(forTouch touch: CGPoint) -> CGPoint {
+        CGPoint(x: touch.x, y: touch.y - offset)
+    }
 }
 
 struct PhotoEditLayer: Identifiable, Equatable {
@@ -100,7 +214,10 @@ enum PhotoEditGeometry {
     }
 
     enum CropHandle: CaseIterable {
-        case topLeft, topRight, bottomLeft, bottomRight, move
+        case topLeft, topRight, bottomLeft, bottomRight, top, bottom, left, right, move
+
+        static let corners: [CropHandle] = [.topLeft, .topRight, .bottomLeft, .bottomRight]
+        static let edges: [CropHandle] = [.top, .bottom, .left, .right]
     }
 
     /// Kırpma çerçevesini köşeden çekme ya da taşıma (öteleme orijinale oran). Sonuç resmin içinde kalır.
@@ -124,6 +241,14 @@ enum PhotoEditGeometry {
         case .bottomRight:
             maxX = max(min(1, start.maxX + translation.width), minX + minSide)
             maxY = max(min(1, start.maxY + translation.height), minY + minSide)
+        case .top:
+            minY = min(max(0, start.minY + translation.height), maxY - minSide)
+        case .bottom:
+            maxY = max(min(1, start.maxY + translation.height), minY + minSide)
+        case .left:
+            minX = min(max(0, start.minX + translation.width), maxX - minSide)
+        case .right:
+            maxX = max(min(1, start.maxX + translation.width), minX + minSide)
         }
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
     }
@@ -184,5 +309,57 @@ enum PhotoEditGeometry {
         guard lengthSquared > 0 else { return distance(p, a) }
         let t = min(max(((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared, 0), 1)
         return distance(p, CGPoint(x: a.x + t * dx, y: a.y + t * dy))
+    }
+}
+
+// MARK: - Katman hareketi (artımlı; taşı + büyüt + döndür aynı anda)
+
+extension PhotoEditLayer {
+    /// Hareket parçası uygulanmış hali. `translation` orijinale oran; ölçek sınırlanır.
+    func applying(translation: CGSize, scale factor: CGFloat, rotation: Double) -> PhotoEditLayer {
+        var copy = self
+        copy.center = CGPoint(x: center.x + translation.width, y: center.y + translation.height)
+        copy.scale = min(max(scale * factor, PhotoEditLayer.scaleRange.lowerBound), PhotoEditLayer.scaleRange.upperBound)
+        copy.rotation = rotation + self.rotation
+        return copy
+    }
+}
+
+// MARK: - Fotoğraftan renk seçme
+
+/// Bir görüntünün piksellerinden renk okur (renk damlalığı).
+struct PhotoEditPixelSampler {
+    let width: Int
+    let height: Int
+    private let pixels: [UInt8]
+
+    init?(cgImage: CGImage) {
+        let width = cgImage.width, height = cgImage.height
+        guard width > 0, height > 0 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn: Bool = buffer.withUnsafeMutableBytes { raw in
+            guard let context = CGContext(data: raw.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+        self.width = width
+        self.height = height
+        self.pixels = buffer
+    }
+
+    /// `unit`: görüntüye oran (0…1, sol üstten). Dışarıdaysa en yakın kenar pikseli.
+    func color(atUnit unit: CGPoint) -> PhotoEditColor {
+        let x = min(max(Int(unit.x * CGFloat(width)), 0), width - 1)
+        let y = min(max(Int(unit.y * CGFloat(height)), 0), height - 1)
+        let index = (y * width + x) * 4
+        let alpha = Double(pixels[index + 3]) / 255
+        guard alpha > 0 else { return .black }
+        // Önceden çarpılmış değerler geri bölünür.
+        return PhotoEditColor(red: min(1, Double(pixels[index]) / 255 / alpha),
+                              green: min(1, Double(pixels[index + 1]) / 255 / alpha),
+                              blue: min(1, Double(pixels[index + 2]) / 255 / alpha))
     }
 }

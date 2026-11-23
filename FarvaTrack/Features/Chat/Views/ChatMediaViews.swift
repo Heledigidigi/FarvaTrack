@@ -155,7 +155,7 @@ struct ChatMediaBubbleContent: View {
     let onCancelUpload: () -> Void
     let onLoadThumbnail: () async -> Void
 
-    private static let maxWidth: CGFloat = 240
+    private static let maxWidth: CGFloat = 250
 
     /// Çok uzun / çok geniş medyada baloncuk makul sınırlarda kalır.
     private var displaySize: CGSize {
@@ -173,7 +173,8 @@ struct ChatMediaBubbleContent: View {
             overlay
         }
         .frame(width: displaySize.width, height: displaySize.height)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // Baloncuksuz: fotoğrafın kendisi yuvarlatılmış köşeli.
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture {
             guard !item.isUploading else { return }

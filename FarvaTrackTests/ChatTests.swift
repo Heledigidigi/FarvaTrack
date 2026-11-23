@@ -130,6 +130,25 @@ final class MockChatSync: ChatSyncing {
         typing.append(isTyping)
     }
 
+    // Arka planda kendiliğinden çalışan yazımlar `nextErrors` sırasını tüketmez (diğer testler etkilenmesin).
+    private(set) var deliveries: [[String]] = []
+    func markDelivered(messageIDs: [String], chatID: String, at: Date) async throws {
+        if isOffline { throw AppError.network }
+        mockLock.withLock { deliveries.append(messageIDs) }
+    }
+
+    private(set) var photoUpdates: [String?] = []
+    func updateMemberPhoto(_ photoURL: String?, chatID: String, userID: String) async throws {
+        if isOffline { throw AppError.network }
+        mockLock.withLock { photoUpdates.append(photoURL) }
+    }
+
+    private(set) var presences: [ChatPresence] = []
+    func setPresence(_ presence: ChatPresence, chatID: String, userID: String) async throws {
+        if isOffline { throw AppError.network }
+        mockLock.withLock { presences.append(presence) }
+    }
+
     func purgeUserData(userID: String) async throws {}
 }
 

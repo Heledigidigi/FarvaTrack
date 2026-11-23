@@ -7,14 +7,15 @@ import SwiftUI
 struct ChatContactProfileView: View {
     let viewModel: ChatViewModel
     @Binding var showBubbles: Bool
-    /// Aramadan bir mesaj seçilince profil (ve üstündekiler) kapanır, konuşma oraya kayar.
+    /// Medya/bağlantıdan "Sohbette göster": profil (ve üstündekiler) kapanır, konuşma oraya kayar.
     let onJump: (String) -> Void
+    /// "Ara": profil kapanır, konuşmada alttaki arama çubuğu açılır (Ctrl+F gibi).
+    let onFind: () -> Void
 
     @Environment(BubbleStyleStore.self) private var bubbleStore
     @State private var media: [ChatMessageItem] = []
     @State private var links: [ChatSharedLink] = []
     @State private var viewerItem: ChatMessageItem?
-    @State private var showSearch = false
 
     private var isPartner: Bool { viewModel.kind == .partner }
 
@@ -76,9 +77,6 @@ struct ChatContactProfileView: View {
         .navigationTitle(isPartner ? "Kişi bilgisi" : "Notlarım")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
-        .navigationDestination(isPresented: $showSearch) {
-            ChatMessageSearchView(viewModel: viewModel, onJump: onJump)
-        }
         .fullScreenCover(item: $viewerItem) { item in
             ChatMediaViewer(item: item, viewModel: viewModel)
         }
@@ -88,9 +86,9 @@ struct ChatContactProfileView: View {
 
     private var header: some View {
         VStack(spacing: 12) {
-            if isPartner {
-                AvatarView(name: viewModel.partnerName, photoURL: nil)
-                    .frame(width: 104, height: 104)
+            if isPartner || viewModel.partnerPhotoURL != nil {
+                PresenceAvatarView(name: viewModel.partnerName, photoURL: viewModel.partnerPhotoURL,
+                                   presence: viewModel.partnerPresence, size: 104)
             } else {
                 Image(systemName: "note.text")
                     .font(.system(size: 42))
@@ -102,9 +100,15 @@ struct ChatContactProfileView: View {
             Text(viewModel.partnerName)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
-            Text(isPartner ? "Özel sohbet" : "Yalnızca sen görürsün")
-                .font(.subheadline)
-                .foregroundStyle(Color.ftTextSecondary)
+            if isPartner, let presence = viewModel.partnerPresence.text(now: viewModel.now) {
+                Text(presence)
+                    .font(.subheadline)
+                    .foregroundStyle(viewModel.partnerPresence.isOnline ? Color.ftOnline : Color.ftTextSecondary)
+            } else {
+                Text(isPartner ? "Özel sohbet" : "Yalnızca sen görürsün")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.ftTextSecondary)
+            }
 
             HStack(spacing: 12) {
                 if isPartner {
@@ -114,9 +118,10 @@ struct ChatContactProfileView: View {
                     .disabled(CallManager.shared.phase.isActive)
                 }
                 actionButton("Ara", systemImage: "magnifyingglass") {
-                    showSearch = true
+                    onFind()
                 }
                 .accessibilityLabel("Mesajlarda ara")
+                .accessibilityHint("Sohbete döner ve altta arama çubuğunu açar")
             }
             .padding(.top, 6)
         }
@@ -146,85 +151,6 @@ struct ChatContactProfileView: View {
     private func reload() {
         media = viewModel.sharedMedia()
         links = viewModel.sharedLinks()
-    }
-}
-
-// MARK: - Mesajlarda ara (yazım hatasına dayanıklı)
-
-struct ChatMessageSearchView: View {
-    let viewModel: ChatViewModel
-    let onJump: (String) -> Void
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        @Bindable var viewModel = viewModel
-        List {
-            Section {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(Color.ftTextSecondary)
-                    TextField("Mesajlarda ara", text: $viewModel.searchQuery)
-                        .focused($focused)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.search)
-                    if !viewModel.searchQuery.isEmpty {
-                        Button { viewModel.searchQuery = "" } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(Color.ftTextSecondary)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Aramayı temizle")
-                    }
-                }
-            } footer: {
-                if viewModel.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text("Bir ya da birkaç kelime yaz. Yazım hatası olsa da yakın sonuçlar bulunur.")
-                }
-            }
-            .listRowBackground(Color.ftCard)
-
-            if !viewModel.searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
-                if viewModel.searchResults.isEmpty {
-                    Text("Sonuç bulunamadı")
-                        .foregroundStyle(Color.ftTextSecondary)
-                        .listRowBackground(Color.clear)
-                } else {
-                    Section("\(viewModel.searchResults.count) sonuç") {
-                        ForEach(viewModel.searchResults) { item in
-                            Button {
-                                let id = item.id
-                                focused = false
-                                onJump(id)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text(item.isMine ? "Sen" : viewModel.partnerName)
-                                            .font(.subheadline.weight(.semibold))
-                                        Spacer()
-                                        Text(item.message.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                            .font(.caption)
-                                            .foregroundStyle(Color.ftTextSecondary)
-                                    }
-                                    Text(item.message.text)
-                                        .font(.subheadline)
-                                        .lineLimit(3)
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                            .accessibilityHint("Sohbette bu mesaja gider")
-                        }
-                    }
-                    .listRowBackground(Color.ftCard)
-                }
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .scrollDismissesKeyboard(.interactively)
-        .background(Color.ftBackground.ignoresSafeArea())
-        .navigationTitle("Ara")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .tabBar)
-        .onAppear { focused = true }
-        .onDisappear { viewModel.searchQuery = "" }
     }
 }
 

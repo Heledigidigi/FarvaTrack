@@ -266,7 +266,8 @@ struct ChatCameraView: View {
     /// Fotoğrafa eklenebilecek kişisel stickerlar.
     var stickers: [StickerItem] = []
     /// Kalite Ayarlar → Sohbet → Veri tasarrufu'ndan seçilir (çağıran uygular).
-    let onSend: (PickedMedia) -> Void
+    /// İkinci değer fotoğrafın altına yazılan açıklama.
+    let onSend: (PickedMedia, String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var camera = ChatCameraModel()
     @State private var isPressing = false
@@ -439,7 +440,7 @@ struct ChatCameraView: View {
                 image: editorImage,
                 stickers: stickers,
                 onClose: { retake() },
-                onSend: { edited in send(media, edited: edited) },
+                onSend: { edited, caption in send(media, edited: edited, caption: caption) },
                 onSave: { edited in await save(media, edited: edited) }
             )
         } else {
@@ -525,16 +526,16 @@ struct ChatCameraView: View {
         camera.discardCapture()
     }
 
-    private func send(_ media: PickedMedia, edited: UIImage?) {
+    private func send(_ media: PickedMedia, edited: UIImage?, caption: String = "") {
         Haptics.impact(.medium)
         var outgoing = media
-        if let edited, let url = Self.writeEdited(edited) {
+        if let edited, let url = ChatEditedImage.write(edited) {
             try? FileManager.default.removeItem(at: media.fileURL)
             outgoing = PickedMedia(fileURL: url, kind: .image)
         }
         camera.releaseCapture()
         editorImage = nil
-        onSend(outgoing)
+        onSend(outgoing, caption)
         dismiss()
     }
 
@@ -543,7 +544,7 @@ struct ChatCameraView: View {
         var url = media.fileURL
         var temporary: URL?
         if let edited {
-            guard let written = Self.writeEdited(edited) else { return "Kaydedilemedi" }
+            guard let written = ChatEditedImage.write(edited) else { return "Kaydedilemedi" }
             url = written
             temporary = written
         }
@@ -561,18 +562,6 @@ struct ChatCameraView: View {
         }
     }
 
-    /// Düzenlenen fotoğraf HEIC olarak (desteklenmiyorsa JPEG) geçici klasöre yazılır.
-    private static func writeEdited(_ image: UIImage) -> URL? {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ChatPicked", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        if let data = image.heicData() {
-            let url = directory.appendingPathComponent("\(UUID().uuidString).heic")
-            if (try? data.write(to: url)) != nil { return url }
-        }
-        guard let data = image.jpegData(compressionQuality: 0.95) else { return nil }
-        let url = directory.appendingPathComponent("\(UUID().uuidString).jpg")
-        return (try? data.write(to: url)) != nil ? url : nil
-    }
 }
 
 /// Kamerada çekilen videonun sessiz döngülü önizlemesi.

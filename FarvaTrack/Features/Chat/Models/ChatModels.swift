@@ -62,7 +62,7 @@ struct ChatReplyReference: Codable, Equatable, Hashable {
     var type: ChatMessageType
 
     static func make(from message: ChatMessageDTO) -> ChatReplyReference {
-        let base = message.deleted ? "Bu mesaj silindi" : (message.type == .text ? message.text : message.type.placeholder)
+        let base = message.deleted ? "Bu mesaj silindi" : ChatText.summary(of: message)
         return ChatReplyReference(
             messageID: message.id,
             senderID: message.senderID,
@@ -81,6 +81,8 @@ struct ChatMessageDTO: Equatable, Identifiable {
     var text: String
     var createdAt: Date
     var readAt: Date?
+    /// Mesaj alıcının cihazına ulaştığında (yalnızca alıcı, bir kez yazar).
+    var deliveredAt: Date?
     var replyTo: ChatReplyReference?
     /// uid → emoji. Her katılımcının en fazla bir tepkisi olur.
     var reactions: [String: String]
@@ -118,6 +120,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         sticker: ChatSticker? = nil,
         bubble: ChatBubbleRef? = nil,
         call: ChatCallInfo? = nil,
+        deliveredAt: Date? = nil,
         hasPendingWrites: Bool = false
     ) {
         self.id = id
@@ -136,6 +139,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         self.sticker = sticker
         self.bubble = bubble
         self.call = call
+        self.deliveredAt = deliveredAt
         self.hasPendingWrites = hasPendingWrites
     }
 }
@@ -160,6 +164,10 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
     var lastMessage: ChatLastMessage?
     /// uid → son "yazıyor" sinyalinin zamanı.
     var typing: [String: Date]
+    /// uid → profil fotoğrafının adresi. Profiller birbirine kapalı olduğu için her üye kendininkini odaya yazar.
+    var photos: [String: String]
+    /// uid → çevrimiçi bilgisi (her üye yalnızca kendininkini yazar).
+    var presence: [String: ChatPresence]
 
     init(
         id: String,
@@ -167,7 +175,9 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
         names: [String: String] = [:],
         createdAt: Date,
         lastMessage: ChatLastMessage? = nil,
-        typing: [String: Date] = [:]
+        typing: [String: Date] = [:],
+        photos: [String: String] = [:],
+        presence: [String: ChatPresence] = [:]
     ) {
         self.id = id
         self.members = members
@@ -175,6 +185,31 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.lastMessage = lastMessage
         self.typing = typing
+        self.photos = photos
+        self.presence = presence
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, members, names, createdAt, lastMessage, typing, photos, presence
+    }
+
+    /// Eski sürümün önbelleğe yazdığı odalarda `photos` / `presence` yoktur.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        members = try container.decode([String].self, forKey: .members)
+        names = try container.decodeIfPresent([String: String].self, forKey: .names) ?? [:]
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        lastMessage = try container.decodeIfPresent(ChatLastMessage.self, forKey: .lastMessage)
+        typing = try container.decodeIfPresent([String: Date].self, forKey: .typing) ?? [:]
+        photos = try container.decodeIfPresent([String: String].self, forKey: .photos) ?? [:]
+        presence = try container.decodeIfPresent([String: ChatPresence].self, forKey: .presence) ?? [:]
+    }
+
+    /// Üyenin profil fotoğrafı (boşsa `nil`).
+    func photoURL(of userID: String) -> String? {
+        guard let value = photos[userID]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
     }
 
     func otherMember(of userID: String) -> String? {
@@ -306,6 +341,16 @@ struct ChatSharedLink: Identifiable, Equatable {
 
 enum ChatText {
     static let turkish = Locale(identifier: "tr_TR")
+
+    /// Listede / alıntıda kısa metin: metin mesajında metnin kendisi, açıklamalı fotoğrafta "📷 açıklama".
+    static func summary(of message: ChatMessageDTO) -> String {
+        if message.type == .text { return message.text }
+        let caption = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.type.isMedia, !caption.isEmpty {
+            return "\(message.type == .video ? "🎬" : "📷") \(caption)"
+        }
+        return message.type.placeholder
+    }
 
     /// Arama: büyük/küçük harf ve aksan duyarsız, Türkçe kurallarıyla (İ/ı).
     static func matches(_ text: String, query: String) -> Bool {

@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import FarvaTrack
 
 final class PhotoEditTests: XCTestCase {
@@ -79,5 +80,63 @@ final class PhotoEditTests: XCTestCase {
         XCTAssertEqual(StickerDragPayload.stickerID(from: StickerDragPayload.text(for: "abc")), "abc")
         XCTAssertNil(StickerDragPayload.stickerID(from: "abc"), "başka uygulamadan gelen yazı sticker değildir")
         XCTAssertNil(StickerDragPayload.stickerID(from: StickerDragPayload.prefix))
+    }
+}
+
+final class PhotoEditToolTests: XCTestCase {
+    func testEdgeHandlesMoveOnlyOneSide() {
+        let start = CGRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)
+        let top = PhotoEditGeometry.adjust(start, handle: .top, translation: CGSize(width: 0.3, height: -0.1))
+        XCTAssertEqual(top.minX, 0.2, accuracy: 1e-9, "üst kenar yatayda oynamaz")
+        XCTAssertEqual(top.minY, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(top.maxY, 0.8, accuracy: 1e-9)
+        let right = PhotoEditGeometry.adjust(start, handle: .right, translation: CGSize(width: 0.5, height: 0.2))
+        XCTAssertEqual(right.maxX, 1, accuracy: 1e-9, "resmin dışına çıkmaz")
+        XCTAssertEqual(right.minY, 0.2, accuracy: 1e-9)
+        let squeezed = PhotoEditGeometry.adjust(start, handle: .left, translation: CGSize(width: 0.9, height: 0))
+        XCTAssertEqual(squeezed.width, PhotoEditGeometry.minimumCropSide, accuracy: 1e-9)
+    }
+
+    func testLayerGesturePiecesAccumulate() {
+        var layer = PhotoEditLayer(content: .sticker(id: "s", aspect: 1), center: CGPoint(x: 0.5, y: 0.5))
+        // Taşırken döndürme ve büyütme aynı anda gelir; hiçbiri diğerini geri almaz.
+        layer = layer.applying(translation: CGSize(width: 0.1, height: 0), scale: 1, rotation: 0)
+        layer = layer.applying(translation: .zero, scale: 1.5, rotation: 0.3)
+        layer = layer.applying(translation: CGSize(width: 0, height: 0.1), scale: 1, rotation: 0.2)
+        XCTAssertEqual(layer.center.x, 0.6, accuracy: 1e-9)
+        XCTAssertEqual(layer.center.y, 0.6, accuracy: 1e-9)
+        XCTAssertEqual(layer.scale, 1.5, accuracy: 1e-9)
+        XCTAssertEqual(layer.rotation, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(layer.applying(translation: .zero, scale: 100, rotation: 0).scale, PhotoEditLayer.scaleRange.upperBound)
+    }
+
+    func testBrushOffsetMovesDrawPointUp() {
+        let settings = PhotoEditBrushSettings(size: 10, offset: 40)
+        XCTAssertEqual(settings.drawPoint(forTouch: CGPoint(x: 100, y: 200)), CGPoint(x: 100, y: 160))
+        XCTAssertEqual(PhotoEditBrushSettings().drawPoint(forTouch: CGPoint(x: 5, y: 5)), CGPoint(x: 5, y: 5))
+        let legacy = PhotoEditStroke(points: [.zero], colorIndex: 2, width: 0.01)
+        XCTAssertEqual(legacy.color, PhotoEditColor.legacy(2))
+        XCTAssertFalse(legacy.isEraser)
+    }
+
+    func testPixelSamplerReadsColors() throws {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 1), format: {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            return format
+        }()).image { context in
+            UIColor(red: 1, green: 0, blue: 0, alpha: 1).setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+            UIColor(red: 0, green: 0, blue: 1, alpha: 1).setFill()
+            context.fill(CGRect(x: 1, y: 0, width: 1, height: 1))
+        }
+        let sampler = try XCTUnwrap(image.cgImage.flatMap(PhotoEditPixelSampler.init(cgImage:)))
+        let left = sampler.color(atUnit: CGPoint(x: 0.1, y: 0.5))
+        let right = sampler.color(atUnit: CGPoint(x: 0.9, y: 0.5))
+        XCTAssertGreaterThan(left.red, 0.9)
+        XCTAssertLessThan(left.blue, 0.1)
+        XCTAssertGreaterThan(right.blue, 0.9)
+        // Dışarıdaki nokta kenar pikseline sabitlenir.
+        XCTAssertEqual(sampler.color(atUnit: CGPoint(x: 5, y: -3)), right)
     }
 }
