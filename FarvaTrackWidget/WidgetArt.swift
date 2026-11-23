@@ -229,3 +229,35 @@ enum WidgetFill {
         }
     }
 }
+
+/// Tasarım tuvalindeki (170×170) bir bölgeyi gerçek boyuta çevirip yalnızca orayı dokunulabilir yapar.
+/// Böylece widget'ı düzenlemek için köşelerden uzun basınca kayıt eklenmez.
+struct ArtHotspot<Label: View>: View {
+    let rect: CGRect
+    @ViewBuilder var content: () -> Label
+
+    var body: some View {
+        GeometryReader { geo in
+            let s = min(geo.size.width, geo.size.height) / 170
+            let ox = (geo.size.width - 170 * s) / 2
+            let oy = (geo.size.height - 170 * s) / 2
+            content()
+                .frame(width: rect.width * s, height: rect.height * s)
+                .position(x: ox + rect.midX * s, y: oy + rect.midY * s)
+        }
+    }
+}
+
+/// Widget'taki küçük "Geri al" düğmesi.
+struct UndoCapsule: View {
+    var dark: Color = Color(hex: 0x3A2418, opacity: 0.82)
+
+    var body: some View {
+        Text("Geri al")
+            .font(.system(size: 10, weight: .heavy, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(dark, in: Capsule())
+    }
+}

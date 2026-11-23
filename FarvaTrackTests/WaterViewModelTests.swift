@@ -16,9 +16,13 @@ final class MockWaterWidget: WaterWidgetStoring {
     var pending: [PendingWaterAdd] = []
     private(set) var published: [WaterSnapshot] = []
 
+    var undos: [UUID] = []
+
     func pendingAdds() -> [PendingWaterAdd] { pending }
     func removePending(ids: [UUID]) { pending.removeAll { ids.contains($0.id) } }
     func publish(_ snapshot: WaterSnapshot) { published.append(snapshot) }
+    func pendingUndos() -> [UUID] { undos }
+    func removeUndos(ids: [UUID]) { undos.removeAll { ids.contains($0) } }
 }
 
 @MainActor
@@ -84,6 +88,21 @@ final class WaterViewModelTests: XCTestCase {
         XCTAssertEqual(try entries().count, 0)
         XCTAssertNil(sut.undoToken)
         XCTAssertEqual(sync.deleted.count, 1)
+        XCTAssertEqual(widget.published.last?.totalMl, 0)
+    }
+
+    func testWidgetUndoDeletesImportedAdd() async throws {
+        let addID = UUID()
+        widget.pending = [PendingWaterAdd(id: addID, amountMl: 250, date: .now)]
+        sut.importWidgetAdds()
+        await settleTasks()
+        XCTAssertEqual(widget.published.last?.totalMl ?? 250, 250)
+
+        // Uygulama eklemeyi aktardıktan sonra widget'tan "Geri al" geldi.
+        widget.undos = [addID]
+        sut.importWidgetAdds()
+        await settleTasks()
+        XCTAssertTrue(widget.undos.isEmpty)
         XCTAssertEqual(widget.published.last?.totalMl, 0)
     }
 

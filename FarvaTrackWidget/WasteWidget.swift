@@ -242,13 +242,16 @@ struct WasteWidgetView: View {
 
     private var catView: some View {
         ZStack(alignment: .topLeading) {
-            Button(intent: AddWasteIntent()) {
-                LitterBoxArt(count: entry.count)
-                    .contentShape(Rectangle())
+            // Sadece kedinin kendisi dokunulabilir; köşelerden uzun basmak kayıt eklemez.
+            LitterBoxArt(count: entry.count)
+            ArtHotspot(rect: CGRect(x: 48, y: 40, width: 76, height: 104)) {
+                Button(intent: AddWasteIntent()) {
+                    Color.clear.contentShape(Ellipse())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Ritim, bugün \(entry.count) kayıt")
+                .accessibilityHint("Bir kayıt ekler")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Ritim, bugün \(entry.count) kayıt")
-            .accessibilityHint("Bir kayıt ekler")
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("\(entry.count)")
@@ -280,14 +283,7 @@ struct WasteWidgetView: View {
 
                 VStack {
                     Spacer(minLength: 0)
-                    Button(intent: UndoWasteIntent()) {
-                        Text("Geri al")
-                            .font(.system(size: 10, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 5)
-                            .background(Color(hex: 0x3A2418, opacity: 0.82), in: Capsule())
-                    }
+                    Button(intent: UndoWasteIntent()) { UndoCapsule() }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Son kaydı geri al")
                 }
@@ -298,7 +294,20 @@ struct WasteWidgetView: View {
 
     /// Gizli mod: karakter yok, sade sayaç.
     private var secretView: some View {
-        Button(intent: AddWasteIntent()) {
+        ZStack {
+            secretContent
+            ArtHotspot(rect: CGRect(x: 40, y: 40, width: 90, height: 90)) {
+                Button(intent: AddWasteIntent()) {
+                    Color.clear.contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Ritim, bugün \(entry.count) kayıt")
+                .accessibilityHint("Bir kayıt ekler")
+            }
+        }
+    }
+
+    private var secretContent: some View {
             VStack(spacing: 4) {
                 Text("Ritim")
                     .font(.caption.weight(.heavy))
@@ -314,11 +323,7 @@ struct WasteWidgetView: View {
                     .privacySensitive()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Ritim, bugün \(entry.count) kayıt")
-        .accessibilityHint("Bir kayıt ekler")
+            .accessibilityHidden(true)
     }
 }
 

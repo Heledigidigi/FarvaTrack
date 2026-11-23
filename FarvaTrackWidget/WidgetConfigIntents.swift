@@ -101,3 +101,16 @@ struct UndoWasteIntent: AppIntent {
         return .result()
     }
 }
+
+/// Su widget'ındaki "Geri al" düğmesi.
+struct UndoWaterIntent: AppIntent {
+    static var title: LocalizedStringResource = "Suyu Geri Al"
+    static var description = IntentDescription("Widget'tan eklenen son suyu geri alır.")
+
+    init() {}
+
+    func perform() async throws -> some IntentResult {
+        SharedStore.undoLastWaterFromWidget()
+        return .result()
+    }
+}
