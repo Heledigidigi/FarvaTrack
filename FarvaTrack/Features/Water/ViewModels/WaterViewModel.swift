@@ -183,6 +183,8 @@ final class WaterViewModel {
 
         widget.removePending(ids: ids)
         inserted.forEach(scheduleUpload)
+        // Widget'tan gelen eklemeler aktarılınca widget toplamı uygulamanın kayıtlarıyla eşitlenir.
+        publishWidgetSnapshot()
     }
 
     /// Widget'tan geri alınan ama uygulamaya çoktan aktarılmış kayıtları siler.
