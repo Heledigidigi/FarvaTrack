@@ -45,3 +45,49 @@ struct CatBoxBubbleView: View {
         .accessibilityHidden(true)
     }
 }
+
+/// Kutu Kedi'nin durum işareti: arkasız, düz tik. Karın çizgisinin üstüne biner; hem krem gövdede hem
+/// koyu sohbet zemininde görünsün diye orta tonlar kullanılır.
+struct CatBoxStatusMark: View {
+    let status: ChatMessageStatus
+
+    static let size = CGSize(width: 16, height: 10)
+    private static let neutral = Color(hex: "#9A8877")
+
+    var body: some View {
+        switch status {
+        case .sending:
+            Image(systemName: "clock")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Self.neutral)
+        case .failed:
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.ftDanger)
+        case .delivered:
+            TickShape(double: false)
+                .stroke(Self.neutral, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+        case .read:
+            TickShape(double: true)
+                .stroke(Color.ftWater, style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+        }
+    }
+
+    /// Tek ya da çift tik (16×10 kutuda).
+    struct TickShape: Shape {
+        let double: Bool
+
+        func path(in rect: CGRect) -> Path {
+            let sx = rect.width / 16, sy = rect.height / 10
+            func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * sx, y: rect.minY + y * sy) }
+            var path = Path()
+            if double {
+                path.move(to: p(1, 5)); path.addLine(to: p(4.4, 8.4)); path.addLine(to: p(11.2, 1.6))
+                path.move(to: p(7, 7.6)); path.addLine(to: p(7.8, 8.4)); path.addLine(to: p(14.6, 1.6))
+            } else {
+                path.move(to: p(3, 5)); path.addLine(to: p(6.4, 8.4)); path.addLine(to: p(13.4, 1.6))
+            }
+            return path
+        }
+    }
+}

@@ -128,14 +128,30 @@ struct ChatBubbleView: View {
                 messageText
             }
 
-            if hasFooter, !isBorderlessMedia {
+            if hasFooter, !isBorderlessMedia, !isCatBox {
                 footer(floating: isSticker)
+            } else if isCatBox, message.editedAt != nil {
+                // Kutu Kedi: durum tiki kedinin dışında; "düzenlendi" yazısı metnin altında kalır.
+                Text("düzenlendi")
+                    .font(.caption2)
+                    .foregroundStyle(contentColor.opacity(0.6))
             }
         }
         .frame(minWidth: appliedStyle.flatMap(BubbleLayout.minimumContentSize(for:))?.width,
                minHeight: appliedStyle.flatMap(BubbleLayout.minimumContentSize(for:))?.height)
         .padding(contentInsets)
         .background { bubbleBackground }
+        .overlay(alignment: item.isMine ? .bottomTrailing : .bottomLeading) {
+            if isCatBox, let status = item.status, !message.deleted {
+                let offset = CatBoxGeometry.statusMarkOffset
+                CatBoxStatusMark(status: status)
+                    .frame(width: CatBoxStatusMark.size.width, height: CatBoxStatusMark.size.height)
+                    .offset(x: item.isMine ? CatBoxStatusMark.size.width / 2 - offset.width : offset.width - CatBoxStatusMark.size.width / 2,
+                            y: CatBoxStatusMark.size.height / 2 - offset.height)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(Color.ftAccentLight, lineWidth: isHighlighted ? 2 : 0)
@@ -208,6 +224,9 @@ struct ChatBubbleView: View {
 
     /// Açık zeminli çizimli baloncuk: alıntı ve okundu işareti koyu/bordo çizilir.
     private var isLightBubble: Bool { appliedStyle?.art != nil }
+
+    /// Kutu Kedi baloncuğu: durum tiki baloncuğun dışında, sağ alt köşede.
+    private var isCatBox: Bool { appliedStyle?.art == .catBox }
 
     /// Sticker baloncuksuz gösterilir.
     private var isSticker: Bool { message.sticker != nil && !message.deleted }

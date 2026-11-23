@@ -88,17 +88,27 @@ enum CatBoxGeometry {
     /// Kenardan taşma payı (nokta).
     static let margin: CGFloat = 6
 
+    /// İçeriğin kutunun üst kenarından ve karın çizgisinden uzaklığı (eşit: metin dikeyde ortada kalır).
+    static let verticalInset: CGFloat = 55
+
     /// Mesaj içeriğinin baloncuk kenarlarına uzaklığı (nokta). Gövde büyüse de sabit kalır.
     static var contentPadding: (top: CGFloat, leading: CGFloat, bottom: CGFloat, trailing: CGFloat) {
-        (top: 45 * scale + margin,
+        (top: verticalInset * scale + margin,
          leading: (840 - left) * scale + margin,
-         bottom: 155 * scale,
+         bottom: (70 + verticalInset) * scale,
          trailing: 140 * scale)
     }
 
     /// Kutunun en küçük hali için içerik alanı (nokta).
     static var minimumContentSize: CGSize {
-        CGSize(width: (baseRight - 50 - 840) * scale, height: ((belly - 85) - (baseTop + 45)) * scale)
+        CGSize(width: (baseRight - 50 - 840) * scale,
+               height: ((belly - verticalInset) - (baseTop + verticalInset)) * scale)
+    }
+
+    /// Durum tikinin merkezi, baloncuğun sağ alt köşesinden (nokta): arka bacak ile karın çizgisinin
+    /// birleştiği köşe, karın çizgisinin üstünde (yarısı kedinin içinde, yarısı dışında).
+    static var statusMarkOffset: CGSize {
+        CGSize(width: 160 * scale, height: 70 * scale - 1)
     }
 
     struct Layout: Equatable {

@@ -75,4 +75,39 @@ final class CatBoxBubbleTests: XCTestCase {
         let old = try JSONSerialization.data(withJSONObject: json)
         XCTAssertNil(try BubbleStyle.decode(json: old).art)
     }
+
+    func testTextIsVerticallyCenteredInBox() {
+        let content = CGSize(width: 120, height: 21)
+        let size = CatBoxGeometry.bubbleSize(content: content)
+        let layout = CatBoxGeometry.layout(for: size)
+        let p = CatBoxGeometry.contentPadding
+        let minimum = CatBoxGeometry.minimumContentSize
+        let inverse = layout.transform.inverted()
+        // İçerik alanı en küçük yükseklikte; metin onun ortasında. Alanın kutuya uzaklığı üstte ve altta eşit.
+        let top = CGPoint(x: 0, y: p.top).applying(inverse).y
+        let bottom = CGPoint(x: 0, y: p.top + max(content.height, minimum.height)).applying(inverse).y
+        XCTAssertEqual(top - layout.top, CatBoxGeometry.belly - bottom, accuracy: 0.5)
+    }
+
+    func testStatusMarkSitsOnBellyLineNearFoot() {
+        let size = CatBoxGeometry.bubbleSize(content: CGSize(width: 100, height: 21))
+        let layout = CatBoxGeometry.layout(for: size)
+        let offset = CatBoxGeometry.statusMarkOffset
+        let center = CGPoint(x: size.width - offset.width, y: size.height - offset.height).applying(layout.transform.inverted())
+        XCTAssertEqual(center.y, CatBoxGeometry.belly, accuracy: 10, "karın çizgisinin üstünde")
+        XCTAssertLessThan(center.x, layout.right, "arka bacağın solunda")
+        XCTAssertGreaterThan(center.x, layout.right - 120)
+    }
+}
+
+final class ChatPanelLayoutGapTests: XCTestCase {
+    func testBottomGapIsSubtractedFromLift() {
+        XCTAssertEqual(ChatPanelLayout.bottomGap(viewMaxY: 810, windowHeight: 844), 34)
+        XCTAssertEqual(ChatPanelLayout.bottomGap(viewMaxY: 844, windowHeight: 844), 0)
+        XCTAssertEqual(ChatPanelLayout.bottomGap(viewMaxY: 843.8, windowHeight: 844), 0, "yarım noktadan küçük fark yok sayılır")
+        XCTAssertEqual(ChatPanelLayout.bottomGap(viewMaxY: 500, windowHeight: nil), 0)
+        XCTAssertEqual(ChatPanelLayout.visibleLift(336, bottomGap: 34), 302)
+        XCTAssertEqual(ChatPanelLayout.visibleLift(20, bottomGap: 34), 0)
+        XCTAssertEqual(ChatPanelLayout.visibleLift(336, bottomGap: -5), 336)
+    }
 }

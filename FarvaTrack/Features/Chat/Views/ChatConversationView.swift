@@ -17,6 +17,9 @@ struct ChatConversationView: View {
     @State private var keyboard = ChatKeyboardObserver()
     /// Ev çubuğu payı (pencerenin alt güvenli alanı).
     @State private var homeInset: CGFloat = 0
+    /// Yazma alanının altındaki boşluğun alt kenarı ile pencerenin alt kenarı arasındaki pay (sıfır olmalı;
+    /// değilse klavye ölçüsünden düşülür, yoksa yazma alanı ile klavye arasında boşluk kalır).
+    @State private var bottomGap: CGFloat = 0
     /// Klavyenin o anki yüksekliği (ekranın altından; parmakla kapatırken de her karede güncellenir).
     @State private var keyboardOverlap: CGFloat = 0
     /// Kaydırarak yanıtlama: hangi mesaj ve ne kadar çekildi.
@@ -52,10 +55,18 @@ struct ChatConversationView: View {
         .ignoresSafeArea(.container, edges: .bottom)
     }
 
-    /// Yazma alanının ekranın altından yüksekliği: klavye, açık panel ve ev çubuğundan en yükseği.
+    /// Yazma alanının görünümün altından yüksekliği: klavye, açık panel ve ev çubuğundan en yükseği,
+    /// görünümün pencere altına uzanmayan payı düşülerek.
     private var lift: CGFloat {
-        ChatPanelLayout.lift(panel: placementDraft == nil && !viewModel.isFinding ? panel : .none,
-                             keyboardHeight: keyboard.height, keyboardOverlap: keyboardOverlap, homeInset: homeInset)
+        ChatPanelLayout.visibleLift(
+            ChatPanelLayout.lift(panel: placementDraft == nil && !viewModel.isFinding ? panel : .none,
+                                 keyboardHeight: keyboard.height, keyboardOverlap: keyboardOverlap, homeInset: homeInset),
+            bottomGap: bottomGap)
+    }
+
+    private func updateBottomGap(rootMaxY: CGFloat) {
+        let gap = ChatPanelLayout.bottomGap(viewMaxY: rootMaxY, windowHeight: ChatPanelLayout.keyWindowHeight())
+        if abs(gap - bottomGap) > 0.5 { bottomGap = gap }
     }
 
     @ViewBuilder
@@ -269,7 +280,14 @@ struct ChatConversationView: View {
                         )
                     }
                     // Klavyenin / panelin / ev çubuğunun yeri. Panel bunun üstüne (ekranın altından) çizilir.
+                    // Alt kenarı pencerenin altına oturmuyorsa (devralınan güvenli alan payı) aradaki pay ölçülüp
+                    // düşülür; yoksa klavye ile yazma alanı arasında boşluk kalır.
                     Color.ftCard.frame(height: lift)
+                        .background(GeometryReader { spacer in
+                            Color.clear
+                                .onAppear { updateBottomGap(rootMaxY: spacer.frame(in: .global).maxY) }
+                                .onChange(of: spacer.frame(in: .global).maxY) { _, maxY in updateBottomGap(rootMaxY: maxY) }
+                        })
                 }
             }
             // Find modu: klavye açılır, sorgu değişince en yeni eşleşmeye gidilir.

@@ -25,6 +25,25 @@ enum ChatPanelLayout {
         max(keyboardOverlap, panel == .none ? 0 : keyboardHeight, homeInset)
     }
 
+    /// Görünüm pencerenin altına kadar uzanmıyorsa (ör. gizli sekme çubuğunun payı) ölçüler bu kadar azaltılır.
+    static func visibleLift(_ value: CGFloat, bottomGap: CGFloat) -> CGFloat {
+        max(0, value - max(0, bottomGap))
+    }
+
+    /// Görünümün alt kenarından pencerenin altına kalan pay (yarım noktadan küçükse sıfır).
+    static func bottomGap(viewMaxY: CGFloat, windowHeight: CGFloat?) -> CGFloat {
+        guard let windowHeight, windowHeight > 0 else { return 0 }
+        let gap = windowHeight - viewMaxY
+        return gap > 0.5 ? gap : 0
+    }
+
+    @MainActor
+    static func keyWindowHeight() -> CGFloat? {
+        UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first?.bounds.height
+    }
+
     /// Klavyenin kendi hareketine çok yakın yay (UIKit klavye eğrisi).
     static let keyboardAnimation = Animation.interpolatingSpring(mass: 3, stiffness: 1000, damping: 500, initialVelocity: 0)
 

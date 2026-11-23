@@ -149,8 +149,13 @@ struct ChatRoomContent: View {
         .toolbar(viewModel.phase == .ready ? .hidden : .visible, for: .tabBar)
         .toolbar {
             if viewModel.phase == .ready {
-                // Başlığa dokununca kişi profili (WhatsApp'taki gibi).
+                // Ortadaki başlık boş: kişi solda, geri okunun yanında (WhatsApp gibi). Başlık metni
+                // yine de geri düğmesi için `navigationTitle` olarak kalır.
                 ToolbarItem(placement: .principal) {
+                    Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+                }
+                // Başlığa dokununca kişi profili (WhatsApp'taki gibi).
+                ToolbarItem(placement: .topBarLeading) {
                     Button { showProfile = true } label: {
                         HStack(spacing: 8) {
                             if viewModel.kind == .partner {

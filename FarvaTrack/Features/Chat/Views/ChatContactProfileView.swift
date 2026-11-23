@@ -212,9 +212,6 @@ struct ChatSharedContentView: View {
                 LazyVGrid(columns: columns, spacing: 2) {
                     ForEach(media) { item in
                         ChatSharedMediaCell(item: item, viewModel: viewModel)
-                            .aspectRatio(1, contentMode: .fill)
-                            .clipped()
-                            .contentShape(Rectangle())
                             .onTapGesture { viewerItem = item }
                             .contextMenu {
                                 Button { onJump(item.id) } label: { Label("Sohbette göster", systemImage: "text.bubble") }
@@ -274,22 +271,28 @@ struct ChatSharedMediaCell: View {
     @State private var url: URL?
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            Color.ftCardElevated
-            CachedImageView(url: url ?? item.localThumbnailURL)
-            if item.message.type == .video {
-                HStack(spacing: 3) {
-                    Image(systemName: "video.fill")
-                    if let duration = item.message.media?.duration {
-                        Text(Duration.seconds(duration).formatted(.time(pattern: .minuteSecond)))
-                    }
-                }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white)
-                .shadow(radius: 2)
-                .padding(5)
+        // Kare hücre: boyutu ızgaradan alır, fotoğraf ortadan kırpılarak doldurur (taşmaz, üst üste binmez).
+        Color.ftCardElevated
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                CachedImageView(url: url ?? item.localThumbnailURL, contentMode: .fill)
             }
-        }
+            .overlay(alignment: .bottomLeading) {
+                if item.message.type == .video {
+                    HStack(spacing: 3) {
+                        Image(systemName: "video.fill")
+                        if let duration = item.message.media?.duration {
+                            Text(Duration.seconds(duration).formatted(.time(pattern: .minuteSecond)))
+                        }
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .shadow(radius: 2)
+                    .padding(5)
+                }
+            }
+            .clipped()
+            .contentShape(Rectangle())
         .accessibilityElement()
         .accessibilityLabel(item.message.type == .video ? "Video" : "Fotoğraf")
         .accessibilityAddTraits(.isButton)
