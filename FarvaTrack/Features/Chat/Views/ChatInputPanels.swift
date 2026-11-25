@@ -776,6 +776,16 @@ struct GalleryAssetPreview: View {
         min(1, hypot(drag.width, drag.height) / 240)
     }
 
+    private var backdropOpacity: Double {
+        guard appeared, !closing else { return 0 }
+        return 1 - Double(dragProgress) * 0.6
+    }
+
+    private var imageScale: CGFloat {
+        let base: CGFloat = appeared && !closing ? 1 : 0.82
+        return base * (1 - dragProgress * 0.15)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack {
@@ -783,7 +793,7 @@ struct GalleryAssetPreview: View {
                 Rectangle()
                     .fill(.ultraThinMaterial)
                     .overlay(Color.black.opacity(0.25))
-                    .opacity(appeared && !closing ? 1 - dragProgress * 0.6 : 0)
+                    .opacity(backdropOpacity)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture { close() }
@@ -812,7 +822,7 @@ struct GalleryAssetPreview: View {
                     }
                 }
                 .shadow(color: .black.opacity(0.3), radius: 18, y: 8)
-                .scaleEffect((appeared && !closing ? 1 : 0.82) * (1 - dragProgress * 0.15))
+                .scaleEffect(imageScale)
                 .opacity(appeared && !closing ? 1 : 0)
                 .offset(drag)
                 .accessibilityLabel(asset.mediaType == .video ? "Video önizlemesi" : "Fotoğraf önizlemesi")
