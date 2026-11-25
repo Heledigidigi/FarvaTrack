@@ -216,6 +216,8 @@ final class FirebaseManager: FirebaseServicing {
         try await perform {
             try await ChatService().purgeUserData(userID: uid)
         }
+        // Kullanıcı adı ve arkadaşlık istekleri.
+        try? await FriendService().purge(userID: uid)
 
         // Sticker PNG'leri (belgeleri yukarıda alt koleksiyonlarla silindi).
         try? await StickerService().purge(userID: uid)

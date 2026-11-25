@@ -34,6 +34,13 @@ protocol ChatSyncing: AnyObject {
         onError: @escaping @MainActor (AppError) -> Void
     ) -> ChatSubscription
 
+    /// Kullanıcının üye olduğu tüm odalar (arkadaşlarla odalar + not sohbeti).
+    func observeRooms(
+        userID: String,
+        onChange: @escaping @MainActor (_ rooms: [ChatRoomDTO], _ isFromCache: Bool) -> Void,
+        onError: @escaping @MainActor (AppError) -> Void
+    ) -> ChatSubscription
+
     /// En yeni `limit` mesaj (yeniden eskiye).
     func observeRecentMessages(
         chatID: String,
@@ -213,8 +220,8 @@ final class ChatService: ChatSyncing {
         onChange: @escaping @MainActor (ChatRoomDTO?, Bool) -> Void,
         onError: @escaping @MainActor (AppError) -> Void
     ) -> ChatSubscription {
-        // Kullanıcının en fazla iki odası olur (karşılıklı + not); tür istemcide ayrılır.
-        guard let query = try? chats().whereField(ChatField.members, arrayContains: userID).limit(to: 5) else {
+        // Tür istemcide ayrılır (arkadaşlar çoğalabileceği için sınır geniş).
+        guard let query = try? chats().whereField(ChatField.members, arrayContains: userID).limit(to: 200) else {
             Task { @MainActor in onError(.firebaseNotConfigured) }
             return .none
         }
@@ -229,6 +236,28 @@ final class ChatService: ChatSyncing {
                 .first { ChatRoomKind.of($0, userID: userID) == kind }
             let fromCache = snapshot.metadata.isFromCache
             Task { @MainActor in onChange(room, fromCache) }
+        }
+        return ChatSubscription { registration.remove() }
+    }
+
+    func observeRooms(
+        userID: String,
+        onChange: @escaping @MainActor ([ChatRoomDTO], Bool) -> Void,
+        onError: @escaping @MainActor (AppError) -> Void
+    ) -> ChatSubscription {
+        guard let query = try? chats().whereField(ChatField.members, arrayContains: userID).limit(to: 200) else {
+            Task { @MainActor in onError(.firebaseNotConfigured) }
+            return .none
+        }
+        let registration = query.addSnapshotListener { snapshot, error in
+            if let error {
+                Task { @MainActor in onError(AppError.map(error)) }
+                return
+            }
+            guard let snapshot else { return }
+            let rooms = snapshot.documents.compactMap { ChatFirestoreMapper.room(id: $0.documentID, data: $0.data()) }
+            let fromCache = snapshot.metadata.isFromCache
+            Task { @MainActor in onChange(rooms, fromCache) }
         }
         return ChatSubscription { registration.remove() }
     }

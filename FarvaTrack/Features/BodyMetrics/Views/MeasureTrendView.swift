@@ -19,6 +19,15 @@ struct MeasureTrendView: View {
         _measurements = Query(filter: #Predicate<MeasurementEntry> { $0.ownerID == ownerID }, sort: \.date)
         _weights = Query(filter: #Predicate<WeightEntry> { $0.ownerID == ownerID }, sort: \.date)
         self.primary = primary
+        // Grafik en son bırakıldığı gibi açılır (aralık, gösterim, karşılaştırmalar).
+        let saved = MeasureTrendState.load(primary)
+        _compared = State(initialValue: saved.compared)
+        _range = State(initialValue: saved.range)
+        _mode = State(initialValue: saved.mode)
+    }
+
+    private func persist() {
+        MeasureTrendState(range: range, mode: mode, compared: compared).save(primary)
     }
 
     private var activeSeries: [TrendSeries] { [.measure(primary)] + compared }
@@ -131,7 +140,10 @@ struct MeasureTrendView: View {
         .navigationTitle(primary.title)
         .onChange(of: compared) { _, _ in
             if !TrendComparison.allowedModes(for: activeSeries).contains(self.mode) { self.mode = .percent }
+            persist()
         }
+        .onChange(of: range) { _, _ in persist() }
+        .onChange(of: mode) { _, _ in persist() }
     }
 
     // MARK: - Grafik

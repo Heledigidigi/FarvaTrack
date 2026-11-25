@@ -14,9 +14,9 @@ struct DashboardView: View {
         Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
     }
 
-    /// Biyolojik atık ayrı bir küçük satırda, su ise halkada gösterildiği için modül kutularında yer almaz.
+    /// Su halkada gösterildiği için modül kutularında yer almaz.
     private var visibleRoutes: [AppRoute] {
-        AppRoute.allCases.filter { $0 != .biologicalWaste && $0 != .water }
+        AppRoute.allCases.filter { $0 != .water }
     }
 
     var body: some View {
@@ -35,7 +35,6 @@ struct DashboardView: View {
                     statGrid
                     weeklyStepsCard
                     modulesSection
-                    wasteRow
                 }
                 .redacted(reason: viewModel.hasLoaded ? [] : .placeholder)
                 .padding(.horizontal, Constants.Layout.screenPadding)
@@ -237,32 +236,6 @@ struct DashboardView: View {
                 )
             }
 
-            Button {
-                Haptics.impact(.light)
-                router.select(.exercise)
-            } label: {
-                StatCard(
-                    title: "Egzersiz",
-                    value: "\(viewModel.summary.workoutMinutes)",
-                    unit: "dk",
-                    systemImage: "dumbbell.fill",
-                    tint: Color.ftExercise,
-                    subtitle: "Bugünkü antrenman süresi",
-                    showsChevron: true
-                )
-            }
-
-            NavigationLink(value: AppRoute.steps) {
-                StatCard(
-                    title: "Yakılan",
-                    value: viewModel.summary.caloriesBurned.formatted(),
-                    unit: "kcal",
-                    systemImage: "flame.fill",
-                    tint: Color.ftCalories,
-                    subtitle: "\(viewModel.summary.distanceKm.formatted(.number.precision(.fractionLength(1)))) km yürüdün",
-                    showsChevron: true
-                )
-            }
         }
         .buttonStyle(.plain)
     }
@@ -323,35 +296,6 @@ struct DashboardView: View {
             }
             .buttonStyle(.plain)
         }
-    }
-}
-
-// MARK: - Biyolojik atık satırı
-private extension DashboardView {
-    var wasteRow: some View {
-        NavigationLink(value: AppRoute.biologicalWaste) {
-            HStack(spacing: 12) {
-                Image(systemName: AppRoute.biologicalWaste.systemImage)
-                    .font(.subheadline)
-                    .foregroundStyle(Color.ftWaste)
-                    .frame(width: 32, height: 32)
-                    .background(Color.ftWaste.opacity(0.18), in: Circle())
-                Text(AppRoute.biologicalWaste.title)
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                Text("Bugün \(viewModel.summary.wasteCount)")
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(Color.ftTextSecondary)
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.ftTextSecondary.opacity(0.6))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.ftCard, in: RoundedRectangle(cornerRadius: Constants.Layout.cornerRadius, style: .continuous))
-            .accessibilityElement(children: .combine)
-        }
-        .buttonStyle(.plain)
     }
 }
 

@@ -178,18 +178,20 @@ final class ChatPushFlowTests: XCTestCase {
         counter = 0
         let defaults = makeTestDefaults("pushflow.\(name)")
         let root = makeTemporaryDirectory()
-        func make(_ kind: ChatRoomKind) -> ChatViewModel {
+        func make(_ kind: ChatRoomKind, chatID: String? = nil) -> ChatViewModel {
             ChatViewModel(kind: kind, sync: sync, mediaStore: MockMediaStore(), processor: MockMediaProcessor(),
                           files: ChatMediaFiles(persistentRoot: root.appendingPathComponent("s"), cacheRoot: root.appendingPathComponent("c")),
                           defaults: defaults, notifier: notifier, clock: { [unowned self] in self.now },
                           makeID: { [unowned self] in
                               self.counter += 1
                               return "\(kind.rawValue)-\(self.counter)"
-                          })
+                          }, chatID: chatID)
         }
-        hub = ChatHub(partner: make(.partner), personal: make(.personal))
+        let friendService = MockFriendSync()
+        hub = ChatHub(sync: sync, personal: make(.personal), friends: FriendsViewModel(service: friendService),
+                      friendService: friendService, defaults: defaults) { make(.partner, chatID: $0) }
         hub.configure(context: container.mainContext, user: me)
-        sync.roomHandlers[.partner]?(partnerRoom, false)
+        sync.roomsHandler?([partnerRoom, personalRoom], false)
         sync.roomHandlers[.personal]?(personalRoom, false)
         await settle()
     }
@@ -206,15 +208,15 @@ final class ChatPushFlowTests: XCTestCase {
     private func settle() async {
         for _ in 0..<3 {
             await settleTasks()
-            await hub.partner.flushOutbox()
+            await hub.rooms["friend_me"]?.flushOutbox()
             await hub.personal.flushOutbox()
         }
     }
 
     func testRecipientIsNotifiedAfterMessageIsWritten() async {
         sync.isOffline = true
-        hub.partner.draft = "Akşam spor?"
-        hub.partner.send()
+        hub.rooms["friend_me"]!.draft = "Akşam spor?"
+        hub.rooms["friend_me"]!.send()
         await settle()
         XCTAssertTrue(notifier.calls.isEmpty, "mesaj sunucuya yazılmadan bildirim istenmez")
 
@@ -231,14 +233,14 @@ final class ChatPushFlowTests: XCTestCase {
     func testBannerForNewIncomingMessageOnlyWhenConversationNotOpen() {
         hub.isTabVisible = false
         sync.messageHandlers["friend_me"]?([ChatMessageDTO(id: "r1", senderID: "friend", text: "Neredesin?", createdAt: now)])
-        XCTAssertEqual(hub.banner, ChatBanner(id: "r1", kind: .partner, title: "Elif", body: "Neredesin?"))
+        XCTAssertEqual(hub.banner, ChatBanner(id: "r1", destination: .room("friend_me"), title: "Elif", body: "Neredesin?"))
 
-        hub.open(.partner)
+        hub.open(.room("friend_me"))
         XCTAssertNil(hub.banner)
-        XCTAssertEqual(hub.pendingOpen, .partner)
-        XCTAssertEqual(hub.kind(forChatID: "friend_me"), .partner)
-        XCTAssertEqual(hub.kind(forChatID: "me_me"), .personal)
-        XCTAssertNil(hub.kind(forChatID: "x_y"))
+        XCTAssertEqual(hub.pendingOpen, .room("friend_me"))
+        XCTAssertEqual(hub.destination(forChatID: "friend_me"), .room("friend_me"))
+        XCTAssertEqual(hub.destination(forChatID: "me_me"), .personal)
+        XCTAssertNil(hub.destination(forChatID: "x_y"))
 
         // Aynı mesaj tekrar gelirse (dinleyici güncellemesi) şerit yeniden çıkmaz; eski mesajlar da çıkarmaz.
         sync.messageHandlers["friend_me"]?([
@@ -249,7 +251,7 @@ final class ChatPushFlowTests: XCTestCase {
 
         // Konuşma açıkken şerit yok.
         hub.isTabVisible = true
-        hub.openConversation = .partner
+        hub.openConversation = .room("friend_me")
         sync.messageHandlers["friend_me"]?([ChatMessageDTO(id: "r2", senderID: "friend", text: "?", createdAt: now)])
         XCTAssertNil(hub.banner)
 

@@ -118,3 +118,48 @@ enum TrendComparison {
         )
     }
 }
+
+// MARK: - Grafiğin son hali (ölçü başına saklanır)
+
+/// Kullanıcı bir ölçünün grafiğinden çıkınca aralık, gösterim ve karşılaştırılan seriler korunur;
+/// aynı ölçüye tekrar girince grafik bıraktığı gibi açılır.
+struct MeasureTrendState: Equatable {
+    var range: TrendRange = .sixMonths
+    var mode: TrendMode = .value
+    var compared: [TrendSeries] = []
+
+    static func key(for measure: BodyMeasure) -> String { "measureTrend.\(measure.rawValue)" }
+
+    /// "6A|value|weight,arm"
+    var encoded: String {
+        "\(range.rawValue)|\(mode.rawValue)|\(compared.map(\.id).joined(separator: ","))"
+    }
+
+    /// Bozuk ya da eski kayıtta bilinmeyen parçalar atlanır; ana ölçü karşılaştırmalardan çıkarılır.
+    init(encoded: String?, primary: BodyMeasure) {
+        guard let encoded else { return }
+        let parts = encoded.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+        if let first = parts.first, let range = TrendRange(rawValue: first) { self.range = range }
+        if parts.count > 1, let mode = TrendMode(rawValue: parts[1]) { self.mode = mode }
+        if parts.count > 2 {
+            var seen = Set<TrendSeries>()
+            compared = parts[2].split(separator: ",").compactMap { id in
+                TrendSeries.all.first { $0.id == String(id) }
+            }.filter { $0 != .measure(primary) && seen.insert($0).inserted }
+        }
+    }
+
+    init(range: TrendRange = .sixMonths, mode: TrendMode = .value, compared: [TrendSeries] = []) {
+        self.range = range
+        self.mode = mode
+        self.compared = compared
+    }
+
+    static func load(_ primary: BodyMeasure, defaults: UserDefaults = .standard) -> MeasureTrendState {
+        MeasureTrendState(encoded: defaults.string(forKey: key(for: primary)), primary: primary)
+    }
+
+    func save(_ primary: BodyMeasure, defaults: UserDefaults = .standard) {
+        defaults.set(encoded, forKey: Self.key(for: primary))
+    }
+}

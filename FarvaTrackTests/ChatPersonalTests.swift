@@ -36,8 +36,10 @@ final class ChatPersonalRoomTests: XCTestCase {
     private var store: MockMediaStore!
     private var root: URL!
     private var defaults: UserDefaults!
-    private var partner: ChatViewModel!
     private var personal: ChatViewModel!
+    private var friendService: MockFriendSync!
+    /// Arkadaş odası `ChatHub` tarafından açılır.
+    private var partner: ChatViewModel! { hub.rooms["friend_me"] }
     private var hub: ChatHub!
     private var counter = 0
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -56,9 +58,10 @@ final class ChatPersonalRoomTests: XCTestCase {
         root = makeTemporaryDirectory()
         defaults = makeTestDefaults("personal.\(name)")
         counter = 0
-        partner = makeViewModel(.partner)
         personal = makeViewModel(.personal)
-        hub = ChatHub(partner: partner, personal: personal)
+        friendService = MockFriendSync()
+        hub = ChatHub(sync: sync, personal: personal, friends: FriendsViewModel(service: friendService),
+                      friendService: friendService, defaults: defaults) { [unowned self] in self.makeViewModel(.partner, chatID: $0) }
         hub.configure(context: container.mainContext, user: me)
     }
 
@@ -67,68 +70,72 @@ final class ChatPersonalRoomTests: XCTestCase {
         hub.reset()
         await settleTasks()
         hub = nil
-        partner = nil
         personal = nil
         container = nil
         try? FileManager.default.removeItem(at: root)
         try await super.tearDown()
     }
 
-    private func makeViewModel(_ kind: ChatRoomKind) -> ChatViewModel {
+    private func makeViewModel(_ kind: ChatRoomKind, chatID: String? = nil) -> ChatViewModel {
         ChatViewModel(kind: kind, sync: sync, mediaStore: store, processor: MockMediaProcessor(),
                       files: ChatMediaFiles(persistentRoot: root.appendingPathComponent("s"), cacheRoot: root.appendingPathComponent("c")),
                       defaults: defaults, clock: { [unowned self] in self.now },
                       makeID: { [unowned self] in
                           self.counter += 1
                           return "\(kind.rawValue)-\(self.counter)"
-                      })
+                      }, chatID: chatID)
     }
 
     private func settle() async {
         for _ in 0..<3 {
             await settleTasks()
-            await partner.flushOutbox()
+            await partner?.flushOutbox()
             await personal.flushOutbox()
         }
     }
 
     private func openBothRooms() async {
-        sync.roomHandlers[.partner]?(partnerRoom, false)
+        sync.roomsHandler?([partnerRoom, personalRoom], false)
         sync.roomHandlers[.personal]?(personalRoom, false)
         await settle()
     }
 
-    func testEachModelObservesItsOwnKind() {
-        XCTAssertEqual(Set(sync.observedKinds), [.partner, .personal])
-        // Sunucu dinleyicisi yanlış türü getirse bile model almaz.
-        sync.roomHandlers[.partner]?(personalRoom, false)
-        XCTAssertNotEqual(partner.phase, .ready)
-        sync.roomHandlers[.personal]?(personalRoom, false)
-        XCTAssertEqual(personal.phase, .ready)
-        XCTAssertEqual(personal.partnerName, "Ben (Sen)")
-        XCTAssertTrue(hub.showsRoomList, "not sohbeti varsa liste gösterilir")
+    func testHubOpensOneModelPerFriendRoomAndNoteSeparately() async {
+        XCTAssertEqual(sync.observedKinds, [.personal], "arkadaş odaları tek listeden gelir")
+        let second = ChatRoomDTO(id: "me_zeynep", members: ["me", "zeynep"], names: ["zeynep": "Zeynep", "me": "Ben"], createdAt: now)
+        sync.roomsHandler?([partnerRoom, personalRoom, second], false)
+        await settle()
+        XCTAssertEqual(Set(hub.rooms.keys), ["friend_me", "me_zeynep"], "not sohbeti arkadaş sayılmaz")
+        XCTAssertEqual(hub.friendIDs, ["friend", "zeynep"])
+        XCTAssertEqual(hub.rooms["me_zeynep"]?.partnerName, "Zeynep")
+        XCTAssertEqual(hub.callRooms, ["friend_me": "Elif", "me_zeynep": "Zeynep"])
+
+        // Sunucudan kalkan oda (hesap silindi) kapanır; önbellekten gelen eksik liste kapatmaz.
+        sync.roomsHandler?([partnerRoom], true)
+        XCTAssertEqual(hub.rooms.count, 2)
+        sync.roomsHandler?([partnerRoom], false)
+        XCTAssertEqual(Set(hub.rooms.keys), ["friend_me"])
     }
 
-    func testPastingOwnCodeOpensPersonalChatWithoutTouchingPartner() async {
-        sync.roomHandlers[.partner]?(nil, false)
+    func testRoomListIsRestoredFromCacheOffline() async {
+        await openBothRooms()
+        hub.reset()
+        let friendService = MockFriendSync()
+        hub = ChatHub(sync: sync, personal: makeViewModel(.personal), friends: FriendsViewModel(service: friendService),
+                      friendService: friendService, defaults: defaults) { [unowned self] in self.makeViewModel(.partner, chatID: $0) }
+        hub.configure(context: container.mainContext, user: me)
+        XCTAssertEqual(hub.rooms["friend_me"]?.phase, .ready, "çevrimdışı açılışta liste önbellekten")
+        XCTAssertFalse(hub.hasLoadedRooms)
+    }
+
+    func testPersonalRoomIsCreatedWithOneTap() async {
         sync.roomHandlers[.personal]?(nil, false)
-        XCTAssertEqual(partner.phase, .unpaired)
-        XCTAssertFalse(hub.showsRoomList, "not sohbeti yokken eski akış")
-
-        let invite = ChatInvite(code: "K7P2QX", ownerID: "me", ownerName: "Ben", createdAt: now, expiresAt: now.addingTimeInterval(ChatLimits.inviteLifetime))
-        sync.inviteResult = .success(invite)
-        await partner.createInvite()
-        sync.redeemResult = .success(personalRoom)
-        partner.inviteCodeInput = "K7P2QX"
-        let ok = await partner.redeemInvite()
+        XCTAssertEqual(personal.phase, .unpaired)
+        let ok = await hub.createPersonalRoom()
         XCTAssertTrue(ok)
-        XCTAssertEqual(partner.phase, .unpaired, "karşılıklı sohbet bekler")
-        XCTAssertNil(partner.invite, "kullanılan kod gösterilmez")
-
-        // Not modelinin dinleyicisi odayı getirir.
-        sync.roomHandlers[.personal]?(personalRoom, false)
+        XCTAssertEqual(friendService.personalRooms, ["me"])
         XCTAssertEqual(personal.phase, .ready)
-        XCTAssertTrue(hub.showsRoomList)
+        XCTAssertEqual(personal.room?.id, "me_me")
     }
 
     func testPersonalChatWorksLikeAnyChatButWithoutTypingOrUnread() async {
@@ -175,7 +182,7 @@ final class ChatPersonalRoomTests: XCTestCase {
         XCTAssertTrue(sync.reads.isEmpty, "liste ya da not açıkken karşılıklı mesaj okunmaz")
         XCTAssertEqual(hub.unreadCount, 1)
 
-        hub.openConversation = .partner
+        hub.openConversation = .room("friend_me")
         await settle()
         XCTAssertEqual(sync.reads.first, ["r1"])
         XCTAssertEqual(hub.unreadCount, 0)

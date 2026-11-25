@@ -34,7 +34,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 5 | Profil düzenleme, ayarlar, hesap silme, kütüphane senkronu, imzalama/TestFlight | Tamam |
 | 6 | Antrenman şablonları, haftalık/döngü programları, hazır programlar, salonda canlı mod (dinlenme sayacı), elle adım girişi | Tamam |
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
-| 8 | Sohbet: iki kişilik özel sohbet (alt aşamalar 8A–8H aşağıda) | 8A–8H + düzeltmeler tamam |
+| 8 | Sohbet: arkadaşlarla özel sohbetler (alt aşamalar 8A–8H aşağıda) | 8A–8H + düzeltmeler + arkadaş sistemi tamam |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -172,5 +172,13 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Medya ve bağlantılar ızgarası: `ChatSharedMediaCell` kendi kendine kare (`aspectRatio(1, .fit)` + fotoğraf `overlay` + `clipped`), taşma yok.
 - `widget-yanlis-dokunus` dalı birleştirildi (dokunma alanı yalnızca damla/halka/kedi, su widget'ında 5 dk "Geri al").
 - Çalışma kuralı: başka sohbetlerde de geliştiriliyor; yeni işe başlamadan ve `main`'e birleştirmeden önce `main`'de olmayan dalları kontrol et (`git fetch` + `git rev-list --count origin/main..origin/<dal>`), açıkta iş varsa önce birleştir.
+
+**Arkadaş sistemi + küçük düzeltmeler (2026-11-25)** (tamamlandı)
+- Arkadaşlar: davet kodu yerine kullanıcı adı + istek/kabul; her arkadaşla ayrı oda. `usernames/{ad}` (`{uid, displayName, photoURL?}`, ad 3–20 `[a-z0-9._]`, `ChatUsername.normalize` Türkçe harfleri çevirir), `friendRequests/{gönderen}_{alan}`. Kabul eden aynı toplu yazımda `chats/{oda}` (alan `friendRequest`) açar ve isteği siler; kural isteği `get` ile (toplu yazım öncesi hali) doğrular. Karşı taraf zaten istek göndermişse "Ekle" kabul eder. Oda varsa (eski davetle açılmış) yalnızca istek silinir. Servis `FriendSyncing`/`FriendService`, model `FriendsViewModel` (ad seçimi, 300 ms gecikmeli önek araması, gelen/giden istekler, `FriendRelation`). Ekran `AddFriendView` (Sohbetler sağ üst `person.badge.plus`, gelen istek rozeti; sekme rozeti okunmamış + istek).
+- Çok odalı sohbet: `ChatHub.rooms` (oda kimliği → `ChatViewModel(chatID:)`), tek dinleyici `ChatSyncing.observeRooms` tüm odaları getirir ve ilgili modele `handleRoom` ile iletir (sabitlenmiş model kendi oda dinleyicisini açmaz). Liste önbelleği `ChatRoomListCache` (`chatRooms.<uid>`; eski tek oda anahtarı ilk açılışta taşınır), oda önbelleği `ChatRoomCache(chatID:)`. Gezinme `ChatDestination` (`.personal` / `.room(id)`); şerit, bildirim ve `openConversation` buna göre. Çevrimiçi sinyali tüm odalara yazılır. Gelen aramalar `CallManager.watch(rooms:)` ile her odadan dinlenir (`ChatHub.callRooms`).
+- Kendime not: tek dokunuşla `uid_uid` odası (`FriendService.createPersonalRoom`; kural davet kodsuz not odasına izin verir). `ChatPairingView` ve not kurulum sayfası kaldırıldı (eski davet kodu kuralı geriye uyum için duruyor).
+- Arkadaş yokken listede `NoFriendsView`: sağ üstü gösteren kesikli ok, konuşma balonu ("Şu an hiç arkadaşın yok / İstersen buradan ekleyebilirsin!") ve yer tutucu kedi (`cat.fill`; asıl maskot sonra tasarlanacak).
+- Özet: "Egzersiz (dk)" ve "Yakılan kcal" kartları kaldırıldı (halkadaki kalori kaldı); Biyolojik Atık ayrı satır yerine Modüller'de.
+- Vücut ölçüleri: ızgaradaki ölçüler tek liste satırında olduğundan `NavigationLink` yerine `.borderless` düğme + `navigationDestination(item:)` (önceden List satırdaki tüm bağlantıları tetikliyor, rastgele ölçü açıyor ve geri yerine diğer ölçülere gidiyordu). Grafik durumu (aralık, gösterim, karşılaştırmalar) ölçü başına saklanır (`MeasureTrendState`, `measureTrend.<ölçü>`).
 
 Yeni modül eklerken: `AppRoute` (Özet'ten açılan sayfa) veya `AppTab`, SwiftData şeması (`FarvaTrackApp`), `LiveDashboardDataSource`, Firestore kuralları, `Constants.Collection.userSubcollections` (hesap silme), `LocalDataCleaner` ve `DataExporter` güncellenir.

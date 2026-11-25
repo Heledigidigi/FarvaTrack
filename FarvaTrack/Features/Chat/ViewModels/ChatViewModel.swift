@@ -153,6 +153,8 @@ final class ChatViewModel {
 
     /// Karşılıklı sohbet ya da kendine not sohbeti. İkisi aynı akışı kullanır.
     let kind: ChatRoomKind
+    /// Arkadaş odası: model bu odaya sabittir; oda bilgisini `ChatHub` (tüm odaların dinleyicisi) iletir.
+    let pinnedChatID: String?
 
     init(
         kind: ChatRoomKind = .partner,
@@ -165,8 +167,10 @@ final class ChatViewModel {
         autoFetchOriginals: Bool = false,
         notifier: ChatNotifying? = nil,
         clock: @escaping () -> Date = { .now },
-        makeID: @escaping () -> String = { UUID().uuidString }
+        makeID: @escaping () -> String = { UUID().uuidString },
+        chatID: String? = nil
     ) {
+        self.pinnedChatID = chatID
         self.sync = sync
         self.mediaStore = mediaStore
         self.processor = processor
@@ -176,7 +180,7 @@ final class ChatViewModel {
         self.autoFetchOriginals = autoFetchOriginals
         self.notifier = notifier
         self.kind = kind
-        self.roomCache = ChatRoomCache(defaults: defaults, kind: kind)
+        self.roomCache = ChatRoomCache(defaults: defaults, kind: kind, chatID: chatID)
         self.clock = clock
         self.makeID = makeID
         self.now = clock()
@@ -254,6 +258,11 @@ final class ChatViewModel {
             phase = .loading
         }
 
+        // Arkadaş odası kendi dinleyicisini açmaz: oda güncellemeleri `ChatHub`'dan gelir.
+        if pinnedChatID != nil {
+            scheduleFlush()
+            return
+        }
         roomSubscription = sync.observeRoom(
             userID: user.id,
             kind: kind,
@@ -348,6 +357,7 @@ final class ChatViewModel {
             guard newRoom.members.contains(userID) else { return }
             // Diğer türdeki oda (ör. eşleşme ekranında kendi kodunu yapıştırınca açılan not sohbeti) bu modeli ilgilendirmez.
             guard ChatRoomKind.of(newRoom, userID: userID) == kind else { return }
+            if let pinnedChatID, newRoom.id != pinnedChatID { return }
             let changed = room?.id != newRoom.id
             room = newRoom
             roomCache.save(newRoom, userID: userID)

@@ -15,7 +15,7 @@ struct MainTabView: View {
     /// Salonda yarım kalan antrenman sekmeler arası ve uygulama yeniden açılınca korunur.
     @State private var liveWorkout = LiveWorkoutViewModel()
     /// Sohbet dinleyicileri sekmeler arasında açık kalsın (okunmamış rozeti, bekleyen gönderimler).
-    /// İki oda: karşılıklı sohbet ve kendine not sohbeti.
+    /// Her arkadaşla ayrı oda ve kendine not sohbeti.
     @State private var chatHub = ChatHub()
 
     init() {
@@ -46,7 +46,7 @@ struct MainTabView: View {
             ChatView()
                 .tabItem { Label(AppTab.chat.title, systemImage: AppTab.chat.systemImage) }
                 .tag(AppTab.chat)
-                .badge(chatHub.unreadCount)
+                .badge(chatHub.unreadCount + chatHub.incomingRequestCount)
 
             ProfileView()
                 .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.systemImage) }
@@ -57,7 +57,6 @@ struct MainTabView: View {
         .environment(wasteViewModel)
         .environment(liveWorkout)
         .environment(chatHub)
-        .environment(chatHub.partner)
         .environment(CallManager.shared)
         // Sesli arama (8H): uygulama içi arama ekranı.
         .fullScreenCover(isPresented: Binding(get: { CallManager.shared.isPresenting }, set: { _ in })) {
@@ -71,15 +70,15 @@ struct MainTabView: View {
         } message: {
             Text(CallManager.shared.errorMessage ?? "")
         }
-        // Karşılıklı sohbet odası hazır olunca gelen aramalar dinlenir.
-        .onChange(of: chatHub.partner.room?.id, initial: true) { _, chatID in
-            CallManager.shared.watch(chatID: chatID, partnerName: chatHub.partner.partnerName)
+        // Arkadaş odaları hazır olunca her birinden gelen aramalar dinlenir.
+        .onChange(of: chatHub.callRooms, initial: true) { _, rooms in
+            CallManager.shared.watch(rooms: rooms)
         }
         .overlay(alignment: .top) {
             if let banner = chatHub.banner {
                 ChatBannerView(banner: banner) {
                     router.selectedTab = .chat
-                    chatHub.open(banner.kind)
+                    chatHub.open(banner.destination)
                 } onDismiss: {
                     chatHub.banner = nil
                 }
@@ -96,7 +95,8 @@ struct MainTabView: View {
         .onChange(of: PushManager.shared.pendingChatID, initial: true) { _, chatID in
             guard let chatID else { return }
             router.selectedTab = .chat
-            chatHub.open(chatHub.kind(forChatID: chatID) ?? .partner)
+            // Liste henüz yüklenmediyse oda kimliğiyle açılır; sohbet ekranı oda gelince gösterir.
+            chatHub.open(chatHub.destination(forChatID: chatID) ?? .room(chatID))
             PushManager.shared.pendingChatID = nil
         }
         .tint(Color.ftAccentLight)

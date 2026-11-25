@@ -145,6 +145,38 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
+    // Kullanıcı adları: herkes arayabilir (giriş yapmış); yalnızca sahibi alır, günceller, bırakır.
+    match /usernames/{name} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && name.matches('^[a-z0-9._]{3,20}$')
+        && (resource == null || resource.data.uid == request.auth.uid)
+        && request.resource.data.keys().hasOnly(['uid', 'displayName', 'photoURL'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 100
+        && (!('photoURL' in request.resource.data) || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() < 1024));
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Arkadaşlık istekleri: `{gönderen}_{alan}`. Yalnızca iki taraf görür; gönderen oluşturur,
+    // iki taraf da siler (reddet / geri çek / kabul sonrası).
+    match /friendRequests/{requestId} {
+      allow read: if signedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['from', 'to', 'fromName', 'fromUsername', 'fromPhoto', 'toName', 'toUsername', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to is string
+        && request.resource.data.to != request.auth.uid
+        && requestId == request.resource.data.from + '_' + request.resource.data.to
+        && request.resource.data.fromName is string && request.resource.data.fromName.size() <= 100
+        && request.resource.data.toName is string && request.resource.data.toName.size() <= 100
+        && request.resource.data.fromUsername is string && request.resource.data.fromUsername.size() <= 20
+        && request.resource.data.toUsername is string && request.resource.data.toUsername.size() <= 20
+        && request.resource.data.createdAt is timestamp;
+      allow delete: if signedIn() && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+    }
+
     // Davet kodları: kodu bilen okuyabilir (listeleyemez), yalnızca bir kez ve başkası kullanabilir.
     match /chatInvites/{code} {
       allow get: if signedIn();
@@ -174,9 +206,12 @@ service cloud.firestore {
       // Sorgu (members array-contains uid) da bu kuralla sınırlanır: yalnızca üyeler görür.
       allow read: if signedIn() && request.auth.uid in resource.data.members;
 
-      // Oda, davet kodu aynı toplu yazımda kullanılarak açılır; üyeler kodun sahibi ve kullananıdır.
+      // Oda üç yoldan açılır:
+      //  1) Arkadaşlık isteği: isteği alan kişi kabul eder; istek aynı toplu yazımda silinir (`get` önceki hali okur).
+      //  2) Kendime not: iki üye de kendisi.
+      //  3) Eski davet kodu: kod aynı toplu yazımda kullanılır.
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt', 'inviteCode', 'typing', 'lastMessage', 'photos', 'presence'])
+        && request.resource.data.keys().hasOnly(['members', 'names', 'createdAt', 'inviteCode', 'friendRequest', 'typing', 'lastMessage', 'photos', 'presence'])
         && request.resource.data.members is list
         && request.resource.data.members.size() == 2
         // Karşılıklı sohbet (küçük uid önce) ya da kendine not sohbeti (iki üye de kendisi).
@@ -184,8 +219,17 @@ service cloud.firestore {
             || (request.resource.data.members[0] == request.auth.uid && request.resource.data.members[1] == request.auth.uid))
         && chatId == request.resource.data.members[0] + '_' + request.resource.data.members[1]
         && request.auth.uid in request.resource.data.members
-        && getAfter(/databases/$(database)/documents/chatInvites/$(request.resource.data.inviteCode)).data.redeemedBy == request.auth.uid
-        && getAfter(/databases/$(database)/documents/chatInvites/$(request.resource.data.inviteCode)).data.ownerId in request.resource.data.members;
+        && (
+          (request.resource.data.get('friendRequest', null) is string
+            && exists(/databases/$(database)/documents/friendRequests/$(request.resource.data.friendRequest))
+            && get(/databases/$(database)/documents/friendRequests/$(request.resource.data.friendRequest)).data.to == request.auth.uid
+            && get(/databases/$(database)/documents/friendRequests/$(request.resource.data.friendRequest)).data.from in request.resource.data.members)
+          || (request.resource.data.members[0] == request.auth.uid && request.resource.data.members[1] == request.auth.uid
+              && !('inviteCode' in request.resource.data) && !('friendRequest' in request.resource.data))
+          || (request.resource.data.get('inviteCode', null) is string
+              && getAfter(/databases/$(database)/documents/chatInvites/$(request.resource.data.inviteCode)).data.redeemedBy == request.auth.uid
+              && getAfter(/databases/$(database)/documents/chatInvites/$(request.resource.data.inviteCode)).data.ownerId in request.resource.data.members)
+        );
 
       // Üyeler değişmez; yalnızca son mesaj ve kendi "yazıyor", profil fotoğrafı ve çevrimiçi alanları güncellenir.
       allow update: if signedIn()

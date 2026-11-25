@@ -1,33 +1,76 @@
 import SwiftUI
 
-/// Sohbet sekmesinin kökü: her zaman sohbet listesi (karşılıklı sohbet + kendime notlar).
+/// Sohbet sekmesinin kökü: kendime not + arkadaşlarla sohbetler. Sağ üstteki düğmeyle arkadaş eklenir.
 /// Bir konuşma açılınca sekme çubuğu gizlenir; geri dönünce yeniden görünür.
 struct ChatView: View {
     @Environment(ChatHub.self) private var hub
     @Environment(AuthViewModel.self) private var auth
     @Environment(\.modelContext) private var modelContext
-    /// Baloncuk stilleri (8F): hazırlar, kendi tasarımlarım, karşı taraftan indirilenler. İki odada ortak.
+    /// Baloncuk stilleri (8F): hazırlar, kendi tasarımlarım, karşı taraftan indirilenler. Tüm odalarda ortak.
     @State private var bubbleStore = BubbleStyleStore()
     @State private var showBubbles = false
-    @State private var showPersonalSetup = false
-    @State private var path: [ChatRoomKind] = []
+    @State private var showAddFriend = false
+    @State private var path: [ChatDestination] = []
 
     var body: some View {
+        @Bindable var hub = hub
+
         NavigationStack(path: $path) {
-            ChatRoomListView(onOpenPersonalSetup: { showPersonalSetup = true })
-                .navigationTitle("Sohbetler")
-                .navigationBarTitleDisplayMode(.inline)
+            ChatRoomListView(
+                onOpenPersonal: openPersonal,
+                onAddFriend: { showAddFriend = true }
+            )
+            .navigationTitle("Sohbetler")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Haptics.impact(.light)
+                        showAddFriend = true
+                    } label: {
+                        Image(systemName: "person.badge.plus")
+                            .overlay(alignment: .topTrailing) {
+                                if hub.incomingRequestCount > 0 {
+                                    Text("\(hub.incomingRequestCount)")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 4)
+                                        .frame(minWidth: 16, minHeight: 16)
+                                        .background(Color.ftAccent, in: Capsule())
+                                        .offset(x: 10, y: -8)
+                                }
+                            }
+                    }
+                    .accessibilityLabel("Arkadaş ekle")
+                    .accessibilityValue(hub.incomingRequestCount > 0 ? "\(hub.incomingRequestCount) arkadaşlık isteği" : "")
+                }
+            }
             .background(Color.ftBackground.ignoresSafeArea())
-            .navigationDestination(for: ChatRoomKind.self) { kind in
-                ChatRoomContent(showBubbles: $showBubbles)
-                    .environment(hub.viewModel(for: kind))
+            .navigationDestination(for: ChatDestination.self) { destination in
+                if let model = hub.viewModel(for: destination) {
+                    ChatRoomContent(showBubbles: $showBubbles)
+                        .environment(model)
+                } else {
+                    ProgressView("Sohbet yükleniyor…")
+                        .tint(Color.ftAccentLight)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.ftBackground.ignoresSafeArea())
+                }
             }
             .sheet(isPresented: $showBubbles) {
                 BubblePickerView(store: bubbleStore)
             }
-            .sheet(isPresented: $showPersonalSetup) {
-                ChatPersonalSetupSheet()
-                    .environment(hub.personal)
+            .sheet(isPresented: $showAddFriend) {
+                AddFriendView(friends: hub.friends) { chatID in
+                    // Kabul edilen istekten açılan sohbete geçilir.
+                    showAddFriend = false
+                    path = [.room(chatID)]
+                }
+            }
+            .alert("Bir sorun oluştu", isPresented: Binding(get: { hub.errorMessage != nil }, set: { if !$0 { hub.errorMessage = nil } })) {
+                Button("Tamam", role: .cancel) {}
+            } message: {
+                Text(hub.errorMessage ?? "")
             }
         }
         .environment(bubbleStore)
@@ -43,18 +86,12 @@ struct ChatView: View {
         .onDisappear { hub.isTabVisible = false }
         .onChange(of: path) { updateOpenConversation() }
         // Bildirim ya da uygulama içi şeritten gelen "şu sohbeti aç" isteği.
-        .onChange(of: hub.pendingOpen, initial: true) { _, kind in
-            guard let kind else { return }
-            path = [kind]
+        .onChange(of: hub.pendingOpen, initial: true) { _, destination in
+            guard let destination else { return }
+            path = [destination]
             hub.pendingOpen = nil
         }
-        .onChange(of: hub.partner.phase) { updateOpenConversation() }
         .onChange(of: hub.personal.phase) { _, phase in
-            // Not sohbeti açıldı: kurulum kapanır ve doğrudan nota geçilir.
-            if phase == .ready, showPersonalSetup {
-                showPersonalSetup = false
-                path = [.personal]
-            }
             if phase != .ready { path.removeAll { $0 == .personal } }
             updateOpenConversation()
         }
@@ -63,6 +100,20 @@ struct ChatView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 hub.tick()
+            }
+        }
+    }
+
+    /// Not sohbeti yoksa tek dokunuşla açılır ve hemen geçilir.
+    private func openPersonal() {
+        if hub.personal.phase == .ready {
+            path = [.personal]
+            return
+        }
+        Task {
+            if await hub.createPersonalRoom() {
+                Haptics.success()
+                path = [.personal]
             }
         }
     }
@@ -84,7 +135,7 @@ struct ChatBannerView: View {
     var body: some View {
         Button(action: onOpen) {
             HStack(spacing: 12) {
-                Image(systemName: banner.kind == .personal ? "note.text" : "bubble.left.fill")
+                Image(systemName: banner.destination == .personal ? "note.text" : "bubble.left.fill")
                     .font(.title3)
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
@@ -119,7 +170,7 @@ struct ChatBannerView: View {
 
 // MARK: - Oda içeriği
 
-/// Bir odanın ekranı: yükleniyor / eşleşme (ya da not sohbeti kurulumu) / konuşma.
+/// Bir odanın ekranı: yükleniyor / oda yok / konuşma.
 struct ChatRoomContent: View {
     @Environment(ChatViewModel.self) private var viewModel
     @Binding var showBubbles: Bool
@@ -135,7 +186,9 @@ struct ChatRoomContent: View {
                     .tint(Color.ftAccentLight)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .unpaired:
-                ChatPairingView(purpose: viewModel.kind)
+                // Oda kaldırıldı (ör. karşı taraf hesabını sildi).
+                ContentUnavailableView("Sohbet bulunamadı", systemImage: "bubble.left.and.exclamationmark.bubble.right",
+                                       description: Text("Bu sohbet artık mevcut değil."))
             case .ready:
                 ChatConversationView()
             }
@@ -223,36 +276,137 @@ struct ChatRoomContent: View {
     }
 }
 
+
 // MARK: - Sohbet listesi
 
-/// Not sohbeti açıldıktan sonra sekmenin kökü.
 struct ChatRoomListView: View {
     @Environment(ChatHub.self) private var hub
-    var onOpenPersonalSetup: () -> Void = {}
+    var onOpenPersonal: () -> Void = {}
+    var onAddFriend: () -> Void = {}
 
     var body: some View {
+        let rooms = hub.friendRooms
+        let incoming = hub.friends.incoming
+
         List {
-            NavigationLink(value: ChatRoomKind.partner) {
-                ChatRoomRow(viewModel: hub.partner)
+            if !incoming.isEmpty {
+                Section("Arkadaşlık istekleri") {
+                    ForEach(incoming) { request in
+                        FriendRequestRow(request: request, friends: hub.friends)
+                    }
+                }
+                .listRowBackground(Color.ftCard)
+            }
+
+            Section {
+                Button(action: onOpenPersonal) {
+                    ChatRoomRow(viewModel: hub.personal)
+                        .overlay(alignment: .trailing) {
+                            if hub.isCreatingPersonal { ProgressView().controlSize(.small) }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(hub.personal.phase == .ready ? "Kendine not sohbetini açar" : "Kendine not sohbeti oluşturur")
+
+                ForEach(rooms, id: \.pinnedChatID) { model in
+                    if let chatID = model.pinnedChatID {
+                        NavigationLink(value: ChatDestination.room(chatID)) {
+                            ChatRoomRow(viewModel: model)
+                        }
+                    }
+                }
             }
             .listRowBackground(Color.ftCard)
 
-            if hub.personal.phase == .ready {
-                NavigationLink(value: ChatRoomKind.personal) {
-                    ChatRoomRow(viewModel: hub.personal)
+            if rooms.isEmpty, hub.hasLoadedRooms {
+                Section {
+                    NoFriendsView(onAdd: onAddFriend)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                 }
-                .listRowBackground(Color.ftCard)
-            } else {
-                // Not sohbeti henüz yok: kendi kodunu kendine yapıştırarak açılır.
-                Button(action: onOpenPersonalSetup) {
-                    ChatRoomRow(viewModel: hub.personal)
-                }
-                .buttonStyle(.plain)
-                .listRowBackground(Color.ftCard)
-                .accessibilityHint("Kendine not sohbeti açar")
             }
         }
         .scrollContentBackground(.hidden)
+        .animation(.easeOut(duration: 0.25), value: rooms.map(\.pinnedChatID))
+        .animation(.easeOut(duration: 0.25), value: incoming.map(\.id))
+    }
+}
+
+/// Henüz arkadaş yokken: sağ üstteki düğmeyi gösteren küçük figür ve konuşma balonu.
+/// (Maskotun asıl tasarımı sonra yapılacak; şimdilik yer tutucu bir kedi silüeti.)
+struct NoFriendsView: View {
+    var onAdd: () -> Void = {}
+    @State private var bounce = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            // Sağ üste doğru kıvrılan ok.
+            PointingArrow()
+                .stroke(Color.ftAccentLight.opacity(0.8), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round, dash: [6, 6]))
+                .frame(width: 90, height: 70)
+                .offset(y: bounce ? -4 : 2)
+                .padding(.trailing, 18)
+                .accessibilityHidden(true)
+
+            HStack(alignment: .bottom, spacing: 10) {
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Şu an hiç arkadaşın yok")
+                        .font(.headline)
+                    Text("İstersen buradan ekleyebilirsin!")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.ftTextSecondary)
+                }
+                .multilineTextAlignment(.trailing)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.ftCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                // Yer tutucu maskot: parmağıyla (patisiyle) yukarıyı gösteren kedi.
+                Image(systemName: "cat.fill")
+                    .font(.system(size: 54))
+                    .foregroundStyle(Color.ftAccentLight)
+                    .rotationEffect(.degrees(bounce ? -6 : 4), anchor: .bottom)
+                    .accessibilityHidden(true)
+            }
+
+            Button {
+                Haptics.impact(.light)
+                onAdd()
+            } label: {
+                Label("Arkadaş ekle", systemImage: "person.badge.plus")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.ftAccentLight)
+            .padding(.top, 8)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Şu an hiç arkadaşın yok. Sağ üstteki düğmeden arkadaş ekleyebilirsin.")
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { bounce = true }
+        }
+    }
+}
+
+/// Aşağıdan yukarı sağa kıvrılan ok (ucu sağ üstü gösterir).
+private struct PointingArrow: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let start = CGPoint(x: rect.minX + 6, y: rect.maxY)
+        let end = CGPoint(x: rect.maxX - 4, y: rect.minY + 4)
+        path.move(to: start)
+        path.addQuadCurve(to: end, control: CGPoint(x: rect.minX + 10, y: rect.minY + 6))
+        // Ok ucu.
+        path.move(to: CGPoint(x: end.x - 14, y: end.y - 6))
+        path.addLine(to: end)
+        path.addLine(to: CGPoint(x: end.x - 10, y: end.y + 12))
+        return path
     }
 }
 
@@ -278,7 +432,7 @@ struct ChatRoomRow: View {
                     }
                     .accessibilityHidden(true)
             } else {
-                Image(systemName: icon)
+                Image(systemName: viewModel.kind == .personal ? "note.text" : "person.fill")
                     .font(.title3)
                     .foregroundStyle(.white)
                     .frame(width: 46, height: 46)
@@ -313,22 +467,14 @@ struct ChatRoomRow: View {
             }
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityHint(viewModel.unreadCount > 0 ? "\(viewModel.unreadCount) okunmamış mesaj" : "")
     }
 
-    private var icon: String {
-        viewModel.kind == .personal ? "note.text" : (viewModel.phase == .ready ? "person.2.fill" : "person.badge.plus")
-    }
-
     private var title: String {
-        switch (viewModel.kind, viewModel.phase) {
-        case (.personal, .ready): return viewModel.partnerName
-        case (.personal, _): return "Kendime not"
-        case (.partner, .ready): return viewModel.partnerName
-        case (.partner, .unpaired): return "Sohbet arkadaşını ekle"
-        default: return "Sohbet"
-        }
+        if viewModel.kind == .personal, viewModel.phase != .ready { return "Kendime not" }
+        return viewModel.partnerName
     }
 
     private var subtitle: String {
@@ -340,192 +486,7 @@ struct ChatRoomRow: View {
         switch (viewModel.kind, viewModel.phase) {
         case (.personal, .ready): return "Kendine not al"
         case (.personal, _): return "Kendine not sohbeti aç"
-        case (.partner, .unpaired): return "Davet kodu oluştur ya da gir"
         default: return "Henüz mesaj yok"
-        }
-    }
-}
-
-// MARK: - Not sohbeti kurulumu
-
-/// Kendi davet kodunu oluşturup yine kendine yapıştırarak not sohbeti açılır.
-struct ChatPersonalSetupSheet: View {
-    @Environment(ChatViewModel.self) private var viewModel
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        @Bindable var viewModel = viewModel
-
-        NavigationStack {
-            ChatPairingView(purpose: .personal)
-                .background(Color.ftBackground.ignoresSafeArea())
-                .navigationTitle("Kendime not")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Kapat") { dismiss() }
-                    }
-                }
-                .alert("Bir sorun oluştu", isPresented: $viewModel.hasError) {
-                    Button("Tamam", role: .cancel) {}
-                } message: {
-                    Text(viewModel.errorMessage ?? "")
-                }
-        }
-    }
-}
-
-// MARK: - Eşleşme
-
-struct ChatPairingView: View {
-    @Environment(ChatViewModel.self) private var viewModel
-    /// Karşılıklı eşleşme ya da kendine not sohbeti kurulumu (aynı akış: kendi kodunu kendine yapıştırırsın).
-    var purpose: ChatRoomKind = .partner
-    @FocusState private var codeFocused: Bool
-    @State private var copied = false
-
-    var body: some View {
-        @Bindable var viewModel = viewModel
-
-        ScrollView {
-            VStack(spacing: 20) {
-                VStack(spacing: 10) {
-                    Image(systemName: purpose == .personal ? "note.text" : "bubble.left.and.bubble.right.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(Color.ftAccentLight)
-                        .accessibilityHidden(true)
-                    Text(purpose == .personal ? "Kendine not sohbeti" : "Özel sohbetini başlat")
-                        .font(.title2.bold())
-                    Text(purpose == .personal
-                         ? "Kendine yazdığın, karşılıklı sohbetle tıpatıp aynı çalışan bir sohbet: fotoğraf, ses, sticker ve baloncuklar dahil. Bir davet kodu oluştur, kopyala ve aşağıdaki alana kendin yapıştır."
-                         : "Sohbet yalnızca iki kişi arasındadır. Biriniz davet kodu oluşturur, diğeriniz bu kodu girer; sohbeti yalnızca siz ikiniz görebilirsiniz. Kendi kodunu kendin girersen kendine not sohbeti açılır.")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.ftTextSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.top, 12)
-
-                inviteCard
-                redeemCard(code: $viewModel.inviteCodeInput)
-            }
-            .padding(Constants.Layout.screenPadding)
-        }
-        .scrollDismissesKeyboard(.interactively)
-    }
-
-    private var inviteCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label("Davet kodu oluştur", systemImage: "qrcode")
-                .font(.headline)
-
-            if let invite = viewModel.invite {
-                Text(invite.code)
-                    .font(.system(size: 40, weight: .bold, design: .monospaced))
-                    .kerning(6)
-                    .frame(maxWidth: .infinity)
-                    .textSelection(.enabled)
-                    .accessibilityLabel("Davet kodun: \(invite.code.map(String.init).joined(separator: " "))")
-
-                Text(purpose == .personal
-                     ? "Kodu kopyala ve aşağıdaki alana yapıştır."
-                     : "Kod \(invite.expiresAt.formatted(date: .abbreviated, time: .shortened)) tarihine kadar geçerli. Karşı taraf kodu girince sohbet kendiliğinden açılır.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.ftTextSecondary)
-
-                HStack(spacing: 12) {
-                    Button {
-                        UIPasteboard.general.string = invite.code
-                        copied = true
-                        Haptics.success()
-                    } label: {
-                        Label(copied ? "Kopyalandı" : "Kopyala", systemImage: copied ? "checkmark" : "doc.on.doc")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityHint("Davet kodunu panoya kopyalar")
-
-                    ShareLink(item: "FarvaTrack sohbet davet kodum: \(invite.code)") {
-                        Label("Paylaş", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .tint(Color.ftAccentLight)
-
-                if purpose == .partner {
-                    HStack(spacing: 8) {
-                        ProgressView().controlSize(.small)
-                        Text("Eşleşme bekleniyor…")
-                            .font(.footnote)
-                            .foregroundStyle(Color.ftTextSecondary)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            } else {
-                Text(purpose == .personal
-                     ? "Önce kendine bir kod oluştur. Kod yalnızca bir kez kullanılabilir."
-                     : "Kodu sohbet edeceğin kişiye gönder. Kod 24 saat geçerlidir ve yalnızca bir kez kullanılabilir.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.ftTextSecondary)
-                Button("Kod oluştur") {
-                    Haptics.impact(.light)
-                    Task { await viewModel.createInvite() }
-                }
-                .buttonStyle(PrimaryButtonStyle(isLoading: viewModel.isWorking))
-                .disabled(viewModel.isWorking)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle()
-    }
-
-    private func redeemCard(code: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Label(purpose == .personal ? "Kodu buraya yapıştır" : "Kodun var mı?", systemImage: "key.fill")
-                .font(.headline)
-
-            TextField("Örn. K7P2QX", text: code)
-                .font(.system(.title3, design: .monospaced).weight(.semibold))
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-                .focused($codeFocused)
-                .padding(.horizontal, 14)
-                .frame(height: Constants.Layout.fieldHeight)
-                .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .submitLabel(.join)
-                .onSubmit(redeem)
-                .accessibilityLabel("Davet kodu")
-                .accessibilityHint(purpose == .personal
-                                   ? "Oluşturduğun \(ChatInviteCode.length) karakterlik kodu yapıştır"
-                                   : "Karşı tarafın gönderdiği \(ChatInviteCode.length) karakterlik kodu yaz")
-
-            Button {
-                if let pasted = UIPasteboard.general.string {
-                    code.wrappedValue = ChatInviteCode.normalize(pasted)
-                    Haptics.selection()
-                }
-            } label: {
-                Label("Panodan yapıştır", systemImage: "doc.on.clipboard")
-            }
-            .buttonStyle(.bordered)
-            .tint(Color.ftAccentLight)
-
-            Button(purpose == .personal ? "Not sohbetini aç" : "Eşleş", action: redeem)
-                .buttonStyle(PrimaryButtonStyle(isLoading: viewModel.isWorking))
-                .disabled(viewModel.isWorking || code.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle()
-    }
-
-    private func redeem() {
-        codeFocused = false
-        Task {
-            if await viewModel.redeemInvite() {
-                Haptics.success()
-            } else {
-                Haptics.error()
-            }
         }
     }
 }
@@ -552,3 +513,4 @@ struct ChatPresenceSubtitle: View {
         .animation(.easeInOut(duration: 0.25), value: viewModel.partnerSubtitle)
     }
 }
+

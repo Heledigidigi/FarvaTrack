@@ -37,6 +37,11 @@ enum LocalDataCleaner {
         }
         UserDefaultsLiveSessionStore(defaults: defaults).clear(userID: ownerID)
         for kind in ChatRoomKind.allCases { ChatRoomCache(defaults: defaults, kind: kind).clear(userID: ownerID) }
+        // Arkadaş odalarının listesi ve oda başına önbellekler.
+        for room in ChatRoomListCache(defaults: defaults).load(userID: ownerID) {
+            ChatRoomCache(defaults: defaults, chatID: room.id).clear(userID: ownerID)
+        }
+        ChatRoomListCache(defaults: defaults).clear(userID: ownerID)
         StickerRecents(defaults: defaults, userID: ownerID).clear()
         defaults.removeObject(forKey: "chat.bubble.selected.\(ownerID)")
         BubbleFiles.live.removeAll()

@@ -46,6 +46,9 @@ private struct MeasurementsContent: View {
     let onEdit: (MeasurementEditorTarget) -> Void
 
     let ownerID: String
+    /// Dokunulan ölçünün grafiği. Izgaradaki ölçüler tek liste satırında olduğundan NavigationLink kullanılmaz:
+    /// List satırdaki tüm bağlantıları birlikte tetikleyip rastgele ölçü açıyor ve geri yerine diğer ölçülere gidiyordu.
+    @State private var openedMeasure: BodyMeasure?
 
     init(ownerID: String, viewModel: BodyMetricsViewModel, onEdit: @escaping (MeasurementEditorTarget) -> Void) {
         _entries = Query(filter: #Predicate<MeasurementEntry> { $0.ownerID == ownerID }, sort: \.date, order: .reverse)
@@ -76,12 +79,16 @@ private struct MeasurementsContent: View {
                 Section {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(BodyMeasure.allCases) { measure in
-                            NavigationLink {
-                                MeasureTrendView(ownerID: ownerID, primary: measure)
+                            Button {
+                                Haptics.impact(.light)
+                                openedMeasure = measure
                             } label: {
                                 tile(measure, change: changes[measure])
+                                    .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            // Varsayılan stilde List satırdaki tüm düğmeleri birlikte çalıştırır.
+                            .buttonStyle(.borderless)
+                            .tint(.white)
                             .accessibilityHint("Zaman içindeki değişim grafiğini aç")
                         }
                     }
@@ -122,6 +129,9 @@ private struct MeasurementsContent: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
+        .navigationDestination(item: $openedMeasure) { measure in
+            MeasureTrendView(ownerID: ownerID, primary: measure)
+        }
     }
 
     private func tile(_ measure: BodyMeasure, change: MeasureChange?) -> some View {

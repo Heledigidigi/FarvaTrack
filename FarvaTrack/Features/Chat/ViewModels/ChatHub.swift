@@ -6,17 +6,20 @@ import UIKit
 /// Uygulama açıkken gelen mesaj için üstte kısa süre görünen şerit (sistem bildirimi yerine).
 struct ChatBanner: Identifiable, Equatable {
     let id: String
-    let kind: ChatRoomKind
+    let destination: ChatDestination
     let title: String
     let body: String
 }
 
-/// Sohbet sekmesindeki iki oda: karşılıklı sohbet ve kendine not sohbeti.
-/// Her oda kendi `ChatViewModel`'iyle çalışır; burada yalnızca görünürlük ve ortak yaşam döngüsü yönetilir.
+/// Sohbet sekmesindeki odalar: her arkadaşla ayrı oda ve kendine not sohbeti.
+/// Her oda kendi `ChatViewModel`'iyle çalışır; burada odaların listesi, görünürlük ve ortak yaşam döngüsü yönetilir.
+/// Arkadaş odalarının bilgisi tek bir dinleyiciden (`observeRooms`) gelir ve ilgili modele iletilir.
 @MainActor @Observable
 final class ChatHub {
-    let partner: ChatViewModel
     let personal: ChatViewModel
+    let friends: FriendsViewModel
+    /// Oda kimliği → model (arkadaş odaları).
+    private(set) var rooms: [String: ChatViewModel] = [:]
 
     /// Uygulama önde mi.
     var isAppActive = true {
@@ -31,76 +34,227 @@ final class ChatHub {
     /// Sohbet sekmesi ekranda mı.
     var isTabVisible = false { didSet { updateVisibility() } }
     /// Açık konuşma: yalnızca ekrandaki odanın mesajları okundu sayılır.
-    var openConversation: ChatRoomKind? { didSet { updateVisibility() } }
+    var openConversation: ChatDestination? { didSet { updateVisibility() } }
     /// Uygulama içi bildirim şeridi.
     var banner: ChatBanner?
     /// Bildirime ya da şeride dokunulunca açılacak oda (sohbet ekranı tüketir).
-    var pendingOpen: ChatRoomKind?
+    var pendingOpen: ChatDestination?
+    /// Sunucudan oda listesi en az bir kez geldi mi (boş liste "arkadaşın yok" demektir).
+    private(set) var hasLoadedRooms = false
+    private(set) var isCreatingPersonal = false
+    var errorMessage: String?
 
-    init(partner: ChatViewModel, personal: ChatViewModel) {
-        self.partner = partner
+    @ObservationIgnored private let sync: ChatSyncing
+    @ObservationIgnored private let friendService: FriendSyncing
+    @ObservationIgnored private let makeRoom: (String) -> ChatViewModel
+    @ObservationIgnored private let listCache: ChatRoomListCache
+    @ObservationIgnored private let clock: () -> Date
+    @ObservationIgnored private var roomsSubscription: ChatSubscription?
+    @ObservationIgnored private var context: ModelContext?
+    @ObservationIgnored private var user: AppUser?
+
+    init(
+        sync: ChatSyncing,
+        personal: ChatViewModel,
+        friends: FriendsViewModel,
+        friendService: FriendSyncing,
+        defaults: UserDefaults = .standard,
+        clock: @escaping () -> Date = { .now },
+        makeRoom: @escaping (String) -> ChatViewModel
+    ) {
+        self.sync = sync
         self.personal = personal
-        for kind in ChatRoomKind.allCases {
-            viewModel(for: kind).onIncoming = { [weak self] item in self?.incoming(item, kind: kind) }
-        }
+        self.friends = friends
+        self.friendService = friendService
+        self.listCache = ChatRoomListCache(defaults: defaults)
+        self.clock = clock
+        self.makeRoom = makeRoom
+        personal.onIncoming = { [weak self] item in self?.incoming(item, destination: .personal) }
+        friends.friendIDs = { [weak self] in self?.friendIDs ?? [] }
+        friends.onRoomCreated = { [weak self] room in self?.upsert([room], isFromCache: false, removeMissing: false) }
     }
 
     convenience init() {
         let server = MediaServerClient()
-        self.init(partner: ChatViewModel(kind: .partner, autoFetchOriginals: true, notifier: server),
-                  personal: ChatViewModel(kind: .personal, autoFetchOriginals: true, notifier: server))
+        let sync = ChatService()
+        let friendService = FriendService()
+        self.init(sync: sync,
+                  personal: ChatViewModel(kind: .personal, autoFetchOriginals: true, notifier: server),
+                  friends: FriendsViewModel(service: friendService),
+                  friendService: friendService) { chatID in
+            ChatViewModel(kind: .partner, sync: sync, autoFetchOriginals: true, notifier: server, chatID: chatID)
+        }
     }
 
-    /// Oda kimliğinden tür (push bildiriminde gelen `chatId`).
-    func kind(forChatID chatID: String) -> ChatRoomKind? {
-        if partner.room?.id == chatID { return .partner }
+    // MARK: Odalar
+
+    /// Arkadaş odaları, en son mesajlaşılan üstte.
+    var friendRooms: [ChatViewModel] {
+        rooms.values.sorted { lhs, rhs in
+            let left = Self.activity(lhs), right = Self.activity(rhs)
+            return left != right ? left > right : lhs.partnerName < rhs.partnerName
+        }
+    }
+
+    private static func activity(_ model: ChatViewModel) -> Date {
+        model.messages.last?.message.createdAt ?? model.room?.lastMessage?.createdAt ?? model.room?.createdAt ?? .distantPast
+    }
+
+    /// Arkadaş olunan kişiler (odası olanlar).
+    var friendIDs: Set<String> {
+        Set(rooms.values.compactMap(\.otherMemberID))
+    }
+
+    func viewModel(for destination: ChatDestination) -> ChatViewModel? {
+        switch destination {
+        case .personal: return personal
+        case .room(let chatID): return rooms[chatID]
+        }
+    }
+
+    /// Oda kimliğinden hedef (push bildiriminde gelen `chatId`).
+    func destination(forChatID chatID: String) -> ChatDestination? {
         if personal.room?.id == chatID { return .personal }
+        if rooms[chatID] != nil { return .room(chatID) }
         return nil
     }
 
     /// Bildirim / şeritten: sohbet sekmesinde ilgili odayı aç.
-    func open(_ kind: ChatRoomKind) {
+    func open(_ destination: ChatDestination) {
         banner = nil
-        pendingOpen = kind
+        pendingOpen = destination
     }
 
-    private func incoming(_ item: ChatMessageItem, kind: ChatRoomKind) {
+    /// Gelen aramaları dinlemek için: oda kimliği → kişinin adı.
+    var callRooms: [String: String] {
+        rooms.reduce(into: [:]) { result, entry in
+            if entry.value.room != nil { result[entry.key] = entry.value.partnerName }
+        }
+    }
+
+    private func incoming(_ item: ChatMessageItem, destination: ChatDestination) {
         // Arka planda sistem bildirimi gelir; ekrandaki konuşma için şerit gereksiz.
-        guard isAppActive, !(isTabVisible && openConversation == kind) else { return }
-        banner = ChatBanner(id: item.id, kind: kind, title: viewModel(for: kind).partnerName, body: item.displayText)
+        guard isAppActive, !(isTabVisible && openConversation == destination),
+              let model = viewModel(for: destination) else { return }
+        banner = ChatBanner(id: item.id, destination: destination, title: model.partnerName, body: item.displayText)
     }
 
-    func viewModel(for kind: ChatRoomKind) -> ChatViewModel {
-        kind == .partner ? partner : personal
-    }
+    var unreadCount: Int { rooms.values.reduce(personal.unreadCount) { $0 + $1.unreadCount } }
 
-    /// Not sohbeti varsa sekme iki satırlık listeyle açılır; yoksa eskisi gibi doğrudan karşılıklı sohbet.
-    var showsRoomList: Bool { personal.phase == .ready }
+    /// Sağ üstteki "arkadaş ekle" düğmesindeki rozet.
+    var incomingRequestCount: Int { friends.incoming.count }
 
-    var unreadCount: Int { partner.unreadCount + personal.unreadCount }
+    // MARK: Yaşam döngüsü
 
     func configure(context: ModelContext, user: AppUser) {
-        partner.configure(context: context, user: user)
+        let sameUser = self.user?.id == user.id && self.context != nil
+        self.user = user
         personal.configure(context: context, user: user)
+        friends.configure(user: user)
+        if sameUser {
+            for model in rooms.values { model.configure(context: context, user: user) }
+            return
+        }
+        removeAllRooms()
+        self.context = context
+
+        // Çevrimdışı açılış: son bilinen odalar (eski sürümün tek odası da taşınır).
+        var cached = listCache.load(userID: user.id)
+        if cached.isEmpty, let legacy = ChatRoomCache(defaults: listCache.defaults, kind: .partner).load(userID: user.id) {
+            cached = [legacy]
+        }
+        upsert(cached, isFromCache: true, removeMissing: false)
+
+        roomsSubscription = sync.observeRooms(
+            userID: user.id,
+            onChange: { [weak self] rooms, fromCache in
+                guard let self else { return }
+                self.upsert(rooms, isFromCache: fromCache, removeMissing: !fromCache)
+                if !fromCache { self.hasLoadedRooms = true }
+            },
+            onError: { [weak self] error in
+                guard let self else { return }
+                if case .network = error { return }
+                self.hasLoadedRooms = true
+                self.errorMessage = error.errorDescription
+            }
+        )
         if isAppActive, presenceTask == nil { startPresence() }
+    }
+
+    /// Sunucudan gelen odalar: yeni arkadaş odası için model açılır, kalkan oda (silinen hesap) kapanır.
+    private func upsert(_ incoming: [ChatRoomDTO], isFromCache: Bool, removeMissing: Bool) {
+        guard let user, let context else { return }
+        let friendRooms = incoming.filter { $0.members.contains(user.id) && ChatRoomKind.of($0, userID: user.id) == .partner }
+        for room in friendRooms {
+            let model: ChatViewModel
+            if let existing = rooms[room.id] {
+                model = existing
+            } else {
+                model = makeRoom(room.id)
+                let chatID = room.id
+                model.onIncoming = { [weak self] item in self?.incoming(item, destination: .room(chatID)) }
+                model.configure(context: context, user: user)
+                rooms[room.id] = model
+            }
+            model.handleRoom(room, isFromCache: isFromCache)
+        }
+        if removeMissing {
+            let present = Set(friendRooms.map(\.id))
+            for (chatID, model) in rooms where !present.contains(chatID) {
+                model.handleRoom(nil, isFromCache: false)
+                model.reset()
+                rooms[chatID] = nil
+            }
+        }
+        if !isFromCache || removeMissing {
+            listCache.save(rooms.values.compactMap(\.room), userID: user.id)
+        }
+        updateVisibility()
+    }
+
+    private func removeAllRooms() {
+        roomsSubscription?.cancel()
+        roomsSubscription = nil
+        for model in rooms.values { model.reset() }
+        rooms = [:]
+        hasLoadedRooms = false
     }
 
     func reset() {
         presenceTask?.cancel()
         presenceTask = nil
-        partner.reset()
+        removeAllRooms()
         personal.reset()
+        friends.reset()
+        context = nil
+        user = nil
         openConversation = nil
     }
 
     func handleForeground() async {
-        await partner.handleForeground()
         await personal.handleForeground()
+        for model in Array(rooms.values) { await model.handleForeground() }
     }
 
     func tick() {
-        partner.tick()
         personal.tick()
+        for model in rooms.values { model.tick() }
+    }
+
+    /// Tek dokunuşla kendime not sohbeti (davet kodu gerekmez).
+    func createPersonalRoom() async -> Bool {
+        guard let user, !isCreatingPersonal else { return false }
+        isCreatingPersonal = true
+        defer { isCreatingPersonal = false }
+        do {
+            let room = try await friendService.createPersonalRoom(userID: user.id, userName: user.displayName, now: clock())
+            personal.handleRoom(room, isFromCache: false)
+            return true
+        } catch {
+            errorMessage = AppError.map(error).errorDescription
+            return false
+        }
     }
 
     // MARK: Çevrimiçi / son görülme
@@ -110,32 +264,40 @@ final class ChatHub {
         presenceTask = Task { [weak self] in
             while !Task.isCancelled {
                 // Bekleme sırasında merkez tutulmaz (zayıf başvuru).
-                guard let wrote = await self?.partner.updatePresence(online: true) else { return }
-                // Oda henüz yüklenmediyse ya da çevrimdışıysak kısa aralıkla yeniden denenir.
-                try? await Task.sleep(for: .seconds(wrote ? ChatPresence.heartbeat : 5))
+                guard let models = self?.presenceTargets() else { return }
+                var wroteAny = models.isEmpty
+                for model in models {
+                    if await model.updatePresence(online: true) { wroteAny = true }
+                }
+                // Odalar henüz yüklenmediyse ya da çevrimdışıysak kısa aralıkla yeniden denenir.
+                try? await Task.sleep(for: .seconds(wroteAny ? ChatPresence.heartbeat : 5))
             }
         }
     }
+
+    private func presenceTargets() -> [ChatViewModel] { Array(rooms.values) }
 
     /// Arka plana geçerken son görülme zamanı yazılır; sistem uygulamayı askıya almadan bitsin diye kısa ek süre istenir.
     private func stopPresence() {
         presenceTask?.cancel()
         presenceTask = nil
-        let partner = partner
+        let models = Array(rooms.values)
         var backgroundTask = UIBackgroundTaskIdentifier.invalid
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "chat-presence") {
             UIApplication.shared.endBackgroundTask(backgroundTask)
             backgroundTask = .invalid
         }
         Task {
-            await partner.updatePresence(online: false)
+            for model in models { await model.updatePresence(online: false) }
             if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
         }
     }
 
     private func updateVisibility() {
         let visible = isAppActive && isTabVisible
-        partner.setVisible(visible && openConversation == .partner)
         personal.setVisible(visible && openConversation == .personal)
+        for (chatID, model) in rooms {
+            model.setVisible(visible && openConversation == .room(chatID))
+        }
     }
 }

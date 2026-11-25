@@ -118,9 +118,9 @@ final class CallManager {
     @ObservationIgnored private(set) var uuid: UUID?
     @ObservationIgnored private var callSubscription: ChatSubscription?
     @ObservationIgnored private var candidateSubscription: ChatSubscription?
-    @ObservationIgnored private var incomingSubscription: ChatSubscription?
-    @ObservationIgnored private var watchedChatID: String?
-    @ObservationIgnored private var watchedPartnerName = ""
+    /// Arkadaş başına bir dinleyici (oda kimliği → abonelik) ve arayanın adı.
+    @ObservationIgnored private var incomingSubscriptions: [String: ChatSubscription] = [:]
+    @ObservationIgnored private var watchedNames: [String: String] = [:]
     @ObservationIgnored private var remoteDescriptionReady = false
     @ObservationIgnored private var pendingCandidates: [CallCandidate] = []
     @ObservationIgnored private var appliedAnswerVersion = 0
@@ -169,14 +169,21 @@ final class CallManager {
 
     /// Karşılıklı sohbet odası hazır olunca: bu kullanıcıyı arayan çalan aramalar dinlenir (uygulama açıkken).
     func watch(chatID: String?, partnerName: String) {
-        watchedPartnerName = partnerName
-        guard watchedChatID != chatID else { return }
-        incomingSubscription?.cancel()
-        incomingSubscription = nil
-        watchedChatID = chatID
-        guard let chatID, let userID else { return }
-        incomingSubscription = signaling.observeIncoming(chatID: chatID, userID: userID) { [weak self] calls in
-            self?.handleIncoming(calls)
+        watch(rooms: chatID.map { [$0: partnerName] } ?? [:])
+    }
+
+    /// Tüm arkadaş odaları (oda kimliği → kişinin adı): eklenen dinlenir, kaldırılanın dinleyicisi kapanır.
+    func watch(rooms: [String: String]) {
+        watchedNames = rooms
+        for (chatID, subscription) in incomingSubscriptions where rooms[chatID] == nil {
+            subscription.cancel()
+            incomingSubscriptions[chatID] = nil
+        }
+        guard let userID else { return }
+        for chatID in rooms.keys where incomingSubscriptions[chatID] == nil {
+            incomingSubscriptions[chatID] = signaling.observeIncoming(chatID: chatID, userID: userID) { [weak self] calls in
+                self?.handleIncoming(calls)
+            }
         }
     }
 
@@ -191,7 +198,7 @@ final class CallManager {
                 }
                 continue
             }
-            Task { await presentIncoming(call, callerName: watchedPartnerName, alreadyReported: false) }
+            Task { await presentIncoming(call, callerName: watchedNames[call.chatID] ?? "", alreadyReported: false) }
         }
     }
 
@@ -577,9 +584,9 @@ final class CallManager {
     func stop() {
         if phase.isActive, let uuid { system.reportEnded(uuid: uuid, reason: .hungUp) }
         cleanUp()
-        incomingSubscription?.cancel()
-        incomingSubscription = nil
-        watchedChatID = nil
+        for subscription in incomingSubscriptions.values { subscription.cancel() }
+        incomingSubscriptions = [:]
+        watchedNames = [:]
         phase = .idle
         call = nil
     }

@@ -232,10 +232,13 @@ final class ChatPendingOperation {
 struct ChatRoomCache {
     let defaults: UserDefaults
     var kind: ChatRoomKind = .partner
+    /// Arkadaş odası (her arkadaşın ayrı anahtarı). `nil`: eski tek oda anahtarı.
+    var chatID: String?
 
     /// Karşılıklı sohbetin anahtarı eski sürümle aynı kalır.
     private func key(_ userID: String) -> String {
-        kind == .partner ? "chatRoom.\(userID)" : "chatRoom.\(userID).\(kind.rawValue)"
+        if let chatID { return "chatRoom.\(userID).room.\(chatID)" }
+        return kind == .partner ? "chatRoom.\(userID)" : "chatRoom.\(userID).\(kind.rawValue)"
     }
 
     func load(userID: String) -> ChatRoomDTO? {

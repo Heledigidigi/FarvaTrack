@@ -55,6 +55,12 @@ final class MockChatSync: ChatSyncing {
         return ChatSubscription { [weak self] in self?.roomHandler = nil }
     }
 
+    var roomsHandler: (@MainActor ([ChatRoomDTO], Bool) -> Void)?
+    func observeRooms(userID: String, onChange: @escaping @MainActor ([ChatRoomDTO], Bool) -> Void, onError: @escaping @MainActor (AppError) -> Void) -> ChatSubscription {
+        roomsHandler = onChange
+        return ChatSubscription { [weak self] in self?.roomsHandler = nil }
+    }
+
     func observeRecentMessages(chatID: String, limit: Int, onChange: @escaping @MainActor ([ChatMessageDTO]) -> Void, onError: @escaping @MainActor (AppError) -> Void) -> ChatSubscription {
         observedChats.append(chatID)
         messagesHandler = onChange
