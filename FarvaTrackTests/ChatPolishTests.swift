@@ -191,6 +191,22 @@ final class ChatLayoutHelperTests: XCTestCase {
         XCTAssertEqual(ChatPanelLayout.lift(panel: .none, keyboardHeight: 336, keyboardOverlap: 200, homeInset: 34), 200)
     }
 
+    func testPanelUsesCapturedKeyboardHeight() {
+        // Klavye açıkken panele geçilirse panel klavyenin o anki yüksekliğini alır (saklanan değer farklı olsa da).
+        let captured = ChatPanelLayout.capture(keyboardOverlap: 346)
+        XCTAssertEqual(captured, 346)
+        XCTAssertEqual(ChatPanelLayout.panelHeight(captured: captured, stored: 336), 346)
+        // Klavye kapalıyken (ya da donanım klavyesi çubuğu) yakalanmaz, saklanan kullanılır.
+        XCTAssertNil(ChatPanelLayout.capture(keyboardOverlap: 0))
+        XCTAssertNil(ChatPanelLayout.capture(keyboardOverlap: 60))
+        XCTAssertEqual(ChatPanelLayout.panelHeight(captured: nil, stored: 336), 336)
+        // Klavye → panel geçişinde yazma alanı yerinden oynamaz.
+        let height = ChatPanelLayout.panelHeight(captured: captured, stored: 336)
+        for overlap in stride(from: CGFloat(346), through: 0, by: -40) {
+            XCTAssertEqual(ChatPanelLayout.lift(panel: .stickers, keyboardHeight: height, keyboardOverlap: overlap, homeInset: 34), 346)
+        }
+    }
+
     func testSwipeReplyDirectionAndThreshold() {
         XCTAssertEqual(ChatSwipeReply.offset(forTranslation: 40, isMine: true), 0, "kendi mesajı sağa çekilmez")
         XCTAssertEqual(ChatSwipeReply.offset(forTranslation: -40, isMine: true), -40)

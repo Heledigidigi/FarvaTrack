@@ -188,4 +188,10 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Sekme çubuğu klasikte saydam (`MainTabView.applyTabBarAppearance`, tema değişince `.id(theme)` ile yeniden kurulur). Arama ekranı her temada koyu. Widget'lar temadan etkilenmez.
 - Sohbet: varsayılan baloncukta gelen mesaj yazısı ve sesli mesaj ikonları `ftText` (giden vurgu zeminde beyaz).
 
+**Sohbet paneli ve galeri (2026-11-25)**
+- Klavye → panel geçişinde içerik zıplamasın diye panel açılırken klavyenin o anki yüksekliği yakalanır (`ChatPanelLayout.capture` / `panelHeight`; klavye tamamen açılınca bırakılır); yazma alanı ve panel bu yüksekliği kullanır. Panel katmanı `bottomGap` kadar aşağı kaydırılır (gizli sekme çubuğu payında yazma alanını örtmüyordu).
+- Üst çubuk, yazma alanı ve paneller aynı opak zemin `Color.ftChrome` (konuşmada `toolbarBackground(.visible)`).
+- Galerinin ilk hücresi canlı kamera (`GalleryCameraPreview`: izin önceden verilmişse panel açılınca başlar, `.medium`, panel kapanınca ya da kameraya geçerken durur); dokununca kamera ekranı.
+- Galeride öğeye basılı tutunca `GalleryAssetPreview` (Instagram gibi): bulanık zemin üstünde büyük görüntü; dışarı dokunmak ya da herhangi bir yöne 70 pt kaydırmak kapatır.
+
 Yeni modül eklerken: `AppRoute` (Özet'ten açılan sayfa) veya `AppTab`, SwiftData şeması (`FarvaTrackApp`), `LiveDashboardDataSource`, Firestore kuralları, `Constants.Collection.userSubcollections` (hesap silme), `LocalDataCleaner` ve `DataExporter` güncellenir.

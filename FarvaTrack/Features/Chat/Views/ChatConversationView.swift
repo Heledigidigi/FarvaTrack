@@ -15,6 +15,9 @@ struct ChatConversationView: View {
     @State private var panel: ChatInputPanel = .none
     @State private var galleryExpanded = false
     @State private var keyboard = ChatKeyboardObserver()
+    /// Panel açılırken klavye görünüyorsa onun o anki yüksekliği: panel ve yazma alanı klavyeyle birebir aynı
+    /// yerde kalır (klavye → panel geçişinde içerik zıplamaz). Yoksa saklanan klavye yüksekliği kullanılır.
+    @State private var capturedPanelHeight: CGFloat?
     /// Ev çubuğu payı (pencerenin alt güvenli alanı).
     @State private var homeInset: CGFloat = 0
     /// Yazma alanının altındaki boşluğun alt kenarı ile pencerenin alt kenarı arasındaki pay (sıfır olmalı;
@@ -57,10 +60,15 @@ struct ChatConversationView: View {
 
     /// Yazma alanının görünümün altından yüksekliği: klavye, açık panel ve ev çubuğundan en yükseği,
     /// görünümün pencere altına uzanmayan payı düşülerek.
+    /// Panelin (ve panel açıkken yazma alanının) yüksekliği.
+    private var panelHeight: CGFloat {
+        ChatPanelLayout.panelHeight(captured: capturedPanelHeight, stored: keyboard.height)
+    }
+
     private var lift: CGFloat {
         ChatPanelLayout.visibleLift(
             ChatPanelLayout.lift(panel: placementDraft == nil && !viewModel.isFinding ? panel : .none,
-                                 keyboardHeight: keyboard.height, keyboardOverlap: keyboardOverlap, homeInset: homeInset),
+                                 keyboardHeight: panelHeight, keyboardOverlap: keyboardOverlap, homeInset: homeInset),
             bottomGap: bottomGap)
     }
 
@@ -282,7 +290,7 @@ struct ChatConversationView: View {
                     // Klavyenin / panelin / ev çubuğunun yeri. Panel bunun üstüne (ekranın altından) çizilir.
                     // Alt kenarı pencerenin altına oturmuyorsa (devralınan güvenli alan payı) aradaki pay ölçülüp
                     // düşülür; yoksa klavye ile yazma alanı arasında boşluk kalır.
-                    Color.ftCard.frame(height: lift)
+                    Color.ftChrome.frame(height: lift)
                         .background(GeometryReader { spacer in
                             Color.clear
                                 .onAppear { updateBottomGap(rootMaxY: spacer.frame(in: .global).maxY) }
@@ -315,6 +323,9 @@ struct ChatConversationView: View {
         .overlay(alignment: .bottom) {
             if panel != .none, placementDraft == nil, !viewModel.isFinding {
                 panelView(bottomInset: homeInset, fullHeight: fullHeight, topInset: topInset)
+                    // Görünüm pencerenin altına kadar uzanmıyorsa (gizli sekme çubuğu payı) panel o kadar aşağı
+                    // kaydırılır; böylece panelin üstü tam yazma alanının altına oturur, yazma alanını örtmez.
+                    .offset(y: bottomGap)
                     .transition(.move(edge: .bottom))
             }
         }
@@ -340,6 +351,7 @@ struct ChatConversationView: View {
             keyboard.onDidShow = {
                 // Klavye panelin üstüne tamamen geldi: panel sessizce kaldırılır (yerleşim değişmez).
                 if panel != .none { setPanel(.none) }
+                capturedPanelHeight = nil
                 galleryExpanded = false
             }
         }
@@ -646,7 +658,7 @@ struct ChatConversationView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(Color.ftCard.ignoresSafeArea(edges: .bottom))
+        .background(Color.ftChrome.ignoresSafeArea(edges: .bottom))
     }
 
     private func commitPlacement() {
@@ -728,12 +740,12 @@ struct ChatConversationView: View {
                 onCreate: { showStickers = true }
             )
             .padding(.bottom, bottomInset)
-            .frame(height: keyboard.height)
-            .background(Color.ftCard)
+            .frame(height: panelHeight)
+            .background(Color.ftChrome)
         case .gallery:
             ChatGalleryPanel(
-                collapsedHeight: keyboard.height,
-                expandedHeight: max(keyboard.height, fullHeight - topInset - 8),
+                collapsedHeight: panelHeight,
+                expandedHeight: max(panelHeight, fullHeight - topInset - 8),
                 bottomInset: bottomInset,
                 isExpanded: $galleryExpanded,
                 onSend: { items in
@@ -772,6 +784,10 @@ struct ChatConversationView: View {
             // Panelden klavyeye: panel klavye tamamen çıkınca kaldırılır.
             composerFocused = true
             return
+        }
+        // Klavye açıkken panele geçiş: panel klavyenin o anki yüksekliğini alır.
+        if panel == .none {
+            capturedPanelHeight = ChatPanelLayout.capture(keyboardOverlap: keyboardOverlap)
         }
         setPanel(target)
         galleryExpanded = false

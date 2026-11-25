@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import Photos
+import AVFoundation
 
 // MARK: - Yazma alanının altındaki paneller
 
@@ -23,6 +24,17 @@ enum ChatPanelLayout {
     /// Klavye inerken panel açıksa değer değişmez (yazma alanı kıpırdamaz); klavye panelin üstüne çıkarken de öyle.
     static func lift(panel: ChatInputPanel, keyboardHeight: CGFloat, keyboardOverlap: CGFloat, homeInset: CGFloat) -> CGFloat {
         max(keyboardOverlap, panel == .none ? 0 : keyboardHeight, homeInset)
+    }
+
+    /// Panel yüksekliği: panel açılırken yakalanan klavye yüksekliği, yoksa saklanan klavye yüksekliği.
+    static func panelHeight(captured: CGFloat?, stored: CGFloat) -> CGFloat {
+        if let captured, captured > 150 { return captured }
+        return stored
+    }
+
+    /// Panel açılırken klavye tam açıksa yüksekliği yakalanır (inerken/kapalıyken yakalanmaz).
+    static func capture(keyboardOverlap: CGFloat) -> CGFloat? {
+        keyboardOverlap > 150 ? keyboardOverlap : nil
     }
 
     /// Görünüm pencerenin altına kadar uzanmıyorsa (ör. gizli sekme çubuğunun payı) ölçüler bu kadar azaltılır.
@@ -246,6 +258,10 @@ struct ChatGalleryPanel: View {
     let onClose: () -> Void
 
     @State private var library = ChatGalleryLibrary()
+    /// İlk hücredeki canlı kamera önizlemesi (Telegram gibi).
+    @State private var cameraPreview = GalleryCameraPreview()
+    /// Basılı tutulan öğenin büyük önizlemesi (Instagram gibi).
+    @State private var previewItem: GalleryPreviewItem?
     @State private var selection: [String] = []
     @State private var dragHeight: CGFloat?
     @State private var isExporting = false
@@ -262,7 +278,7 @@ struct ChatGalleryPanel: View {
         }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
-        .background(Color.ftCard)
+        .background(Color.ftChrome)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: isExpanded || dragHeight != nil ? 16 : 0,
                                           topTrailingRadius: isExpanded || dragHeight != nil ? 16 : 0,
                                           style: .continuous))
@@ -270,7 +286,19 @@ struct ChatGalleryPanel: View {
             if !selection.isEmpty { sendBar }
         }
         .task { await library.load() }
-        .onDisappear { library.stopCaching() }
+        .task { await cameraPreview.start() }
+        .onDisappear {
+            library.stopCaching()
+            cameraPreview.stop()
+        }
+        .fullScreenCover(item: $previewItem) { item in
+            GalleryAssetPreview(asset: item.asset, library: library) {
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) { previewItem = nil }
+            }
+            .presentationBackground(.clear)
+        }
     }
 
     // MARK: Tutamaç ve başlık (yukarı çekince büyür)
@@ -278,7 +306,7 @@ struct ChatGalleryPanel: View {
     private var header: some View {
         VStack(spacing: 6) {
             Capsule()
-                .fill(Color.white.opacity(0.35))
+                .fill(Color.ftSubtle(0.35))
                 .frame(width: 38, height: 5)
                 .padding(.top, 6)
             HStack {
@@ -307,7 +335,7 @@ struct ChatGalleryPanel: View {
                         .frame(width: 30, height: 30)
                         .background(Color.ftCardElevated, in: Circle())
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.ftText)
                 .accessibilityLabel(isExpanded ? "Galeriyi küçült" : "Galeriyi kapat")
             }
             .padding(.horizontal, 14)
@@ -391,6 +419,8 @@ struct ChatGalleryPanel: View {
                             selectionIndex: selection.firstIndex(of: asset.localIdentifier).map { $0 + 1 }
                         )
                         .onTapGesture { toggle(asset) }
+                        // Basılı tut: büyük önizleme (bırakınca açık kalır; dışarı dokun ya da kaydır → kapanır).
+                        .onLongPressGesture(minimumDuration: 0.3) { openPreview(asset) }
                     }
                 }
                 .padding(.bottom, selection.isEmpty ? bottomInset : bottomInset + 64)
@@ -409,18 +439,36 @@ struct ChatGalleryPanel: View {
     private var cameraCell: some View {
         Button {
             Haptics.impact(.light)
+            // Kamera ekranı kendi oturumunu açar; önizleme oturumu önce kapatılır.
+            cameraPreview.stop()
             onCamera()
         } label: {
-            ZStack {
-                Color.ftCardElevated
-                Image(systemName: "camera.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.ftAccentLight)
-            }
-            .aspectRatio(1, contentMode: .fill)
+            Color.ftCardElevated
+                .aspectRatio(1, contentMode: .fill)
+                .overlay {
+                    if cameraPreview.isRunning {
+                        CameraPreviewLayer(session: cameraPreview.session)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .clipped()
+                .overlay {
+                    Image(systemName: "camera.fill")
+                        .font(.title2)
+                        .foregroundStyle(cameraPreview.isRunning ? Color.white : Color.ftAccentLight)
+                        .shadow(color: .black.opacity(cameraPreview.isRunning ? 0.4 : 0), radius: 3)
+                }
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Kamera")
+        .accessibilityHint("Kamerayı açar")
+    }
+
+    private func openPreview(_ asset: PHAsset) {
+        Haptics.impact(.medium)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { previewItem = GalleryPreviewItem(asset: asset) }
     }
 
     private var sendBar: some View {
@@ -456,7 +504,7 @@ struct ChatGalleryPanel: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, max(10, bottomInset))
-        .background(Color.ftCard.opacity(0.97))
+        .background(Color.ftChrome.opacity(0.97))
     }
 
     private func toggle(_ asset: PHAsset) {
@@ -593,6 +641,19 @@ final class ChatGalleryLibrary {
         }
     }
 
+    /// Önizleme için büyük görüntü (önce hızlı küçük, sonra yüksek kalite gelir).
+    func requestLargeImage(for asset: PHAsset, handler: @escaping (UIImage?) -> Void) -> PHImageRequestID {
+        let options = PHImageRequestOptions()
+        options.deliveryMode = .opportunistic
+        options.resizeMode = .fast
+        options.isNetworkAccessAllowed = true
+        let side = max(UIScreen.main.bounds.width, UIScreen.main.bounds.height) * UIScreen.main.scale
+        return manager.requestImage(for: asset, targetSize: CGSize(width: side, height: side),
+                                    contentMode: .aspectFit, options: options) { image, _ in
+            DispatchQueue.main.async { handler(image) }
+        }
+    }
+
     func cancel(_ id: PHImageRequestID) {
         manager.cancelImageRequest(id)
     }
@@ -631,6 +692,163 @@ final class ChatGalleryLibrary {
             return PickedMedia(fileURL: url, kind: kind)
         } catch {
             return nil
+        }
+    }
+}
+
+// MARK: - Galeri: canlı kamera hücresi
+
+/// Galerinin ilk hücresindeki canlı kamera görüntüsü. İzin önceden verilmişse panel açılınca başlar;
+/// izin hiç sorulmadıysa sormaz (hücreye dokununca kamera ekranı sorar). Panel kapanınca durur.
+@MainActor @Observable
+final class GalleryCameraPreview {
+    private(set) var isRunning = false
+    let session = AVCaptureSession()
+    private let queue = DispatchQueue(label: "farvatrack.chat.gallery.camera")
+    @ObservationIgnored private var configured = false
+    @ObservationIgnored private var wantsRunning = false
+
+    func start() async {
+        guard AVCaptureDevice.authorizationStatus(for: .video) == .authorized else { return }
+        wantsRunning = true
+        if !configured {
+            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+                  let input = try? AVCaptureDeviceInput(device: device) else { return }
+            session.beginConfiguration()
+            // Küçük hücre için düşük çözünürlük yeterli (pil ve ısınma).
+            if session.canSetSessionPreset(.medium) { session.sessionPreset = .medium }
+            if session.canAddInput(input) { session.addInput(input) }
+            session.commitConfiguration()
+            configured = true
+        }
+        let session = session
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async {
+                if !session.isRunning { session.startRunning() }
+                continuation.resume()
+            }
+        }
+        // Bu arada panel kapandıysa hemen durdur.
+        if wantsRunning {
+            isRunning = true
+        } else {
+            queue.async { if session.isRunning { session.stopRunning() } }
+        }
+    }
+
+    func stop() {
+        wantsRunning = false
+        isRunning = false
+        let session = session
+        queue.async { if session.isRunning { session.stopRunning() } }
+    }
+}
+
+// MARK: - Galeri: basılı tutunca büyük önizleme
+
+struct GalleryPreviewItem: Identifiable {
+    let asset: PHAsset
+    var id: String { asset.localIdentifier }
+}
+
+/// Instagram'daki gibi: fotoğraf ekranın ortasında büyür, arka plan bulanıklaşır.
+/// Görselin dışına dokunmak ya da herhangi bir yöne kaydırmak kapatır.
+struct GalleryAssetPreview: View {
+    let asset: PHAsset
+    let library: ChatGalleryLibrary
+    let onClose: () -> Void
+
+    @State private var image: UIImage?
+    @State private var requestID: PHImageRequestID?
+    @State private var appeared = false
+    @State private var drag: CGSize = .zero
+    @State private var closing = false
+
+    /// Bu kadar kaydırınca kapanır.
+    static let dismissDistance: CGFloat = 70
+
+    private var aspect: CGFloat {
+        guard asset.pixelWidth > 0, asset.pixelHeight > 0 else { return 1 }
+        return CGFloat(asset.pixelWidth) / CGFloat(asset.pixelHeight)
+    }
+
+    private var dragProgress: CGFloat {
+        min(1, hypot(drag.width, drag.height) / 240)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                // Dışarı dokununca kapanır.
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(Color.black.opacity(0.25))
+                    .opacity(appeared && !closing ? 1 - dragProgress * 0.6 : 0)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { close() }
+                    .accessibilityLabel("Önizlemeyi kapat")
+                    .accessibilityAddTraits(.isButton)
+
+                let maxWidth = proxy.size.width * 0.92
+                let maxHeight = proxy.size.height * 0.78
+                let width = min(maxWidth, maxHeight * aspect)
+                Group {
+                    if let image {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    } else {
+                        Color.ftCardElevated.overlay { ProgressView() }
+                    }
+                }
+                .frame(width: width, height: width / aspect)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(alignment: .bottomLeading) {
+                    if asset.mediaType == .video {
+                        Label(Duration.seconds(asset.duration).formatted(.time(pattern: .minuteSecond)), systemImage: "video.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .shadow(radius: 2)
+                            .padding(10)
+                    }
+                }
+                .shadow(color: .black.opacity(0.3), radius: 18, y: 8)
+                .scaleEffect((appeared && !closing ? 1 : 0.82) * (1 - dragProgress * 0.15))
+                .opacity(appeared && !closing ? 1 : 0)
+                .offset(drag)
+                .accessibilityLabel(asset.mediaType == .video ? "Video önizlemesi" : "Fotoğraf önizlemesi")
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .gesture(
+                DragGesture(minimumDistance: 6)
+                    .onChanged { drag = $0.translation }
+                    .onEnded { value in
+                        let distance = hypot(value.translation.width, value.translation.height)
+                        let predicted = hypot(value.predictedEndTranslation.width, value.predictedEndTranslation.height)
+                        if distance > Self.dismissDistance || predicted > Self.dismissDistance * 2.5 {
+                            close()
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { drag = .zero }
+                        }
+                    }
+            )
+        }
+        .accessibilityAction(.escape) { close() }
+        .onAppear {
+            requestID = library.requestLargeImage(for: asset) { image = $0 ?? image }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { appeared = true }
+        }
+        .onDisappear {
+            if let requestID { library.cancel(requestID) }
+        }
+    }
+
+    private func close() {
+        guard !closing else { return }
+        Haptics.selection()
+        withAnimation(.easeOut(duration: 0.18)) { closing = true }
+        Task {
+            try? await Task.sleep(for: .milliseconds(180))
+            onClose()
         }
     }
 }

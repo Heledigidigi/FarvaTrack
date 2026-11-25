@@ -46,6 +46,8 @@ extension Color {
     /// Kart: klasikte yarı saydam krem (vintage zemin altından görünür).
     static let ftCard = ftDynamic(light: ftUI("#FBF0D4", 0.74), dark: ftUI("#1A1A21"))
     static let ftCardElevated = ftDynamic(light: ftUI("#F3E3C0", 0.92), dark: ftUI("#25252F"))
+    /// Üst çubuk, yazma alanı ve klavye panelleri: aynı opak zemin (klasikte kreme yakın).
+    static let ftChrome = ftDynamic(light: ftUI("#F3E5C5"), dark: ftUI("#1A1A21"))
     /// Kart kenar çizgisi (yalnızca klasik temada görünür).
     static let ftCardBorder = ftDynamic(light: ftUI("#7A5832", 0.26), dark: .clear)
 

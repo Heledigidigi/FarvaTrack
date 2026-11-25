@@ -582,7 +582,7 @@ struct ChatComposer: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.ftCard.ignoresSafeArea(edges: .bottom))
+        .background(Color.ftChrome.ignoresSafeArea(edges: .bottom))
     }
 
     private func contextBar(icon: String, title: String, text: String, thumbnail: URL? = nil, isVideo: Bool = false) -> some View {

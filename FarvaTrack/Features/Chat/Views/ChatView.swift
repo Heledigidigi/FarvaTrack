@@ -198,6 +198,9 @@ struct ChatRoomContent: View {
         .navigationBarTitleDisplayMode(.inline)
         // Geri düğmesinde yalnızca ok: "Sohbetler" yazısı gösterilmez (kaydırarak geri dönme korunur).
         .toolbarRole(.editor)
+        // Üst çubuk (kişi adı ve geri oku) yazma alanıyla aynı zeminde.
+        .toolbarBackground(Color.ftChrome, for: .navigationBar)
+        .toolbarBackground(viewModel.phase == .ready ? .visible : .automatic, for: .navigationBar)
         // Açık konuşmada (ve sticker panelinde) alttaki sekmeler gizlenir; geri dönünce görünür.
         .toolbar(viewModel.phase == .ready ? .hidden : .visible, for: .tabBar)
         .toolbar {
