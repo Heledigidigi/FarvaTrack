@@ -222,14 +222,23 @@ enum DietUnitTable {
         return grams(per: unit, for: food).map { $0 * amount }
     }
 
-    /// Kalorisi aynı kalacak miktar (yeni yiyeceğin önerilen biriminde, yarım birime yuvarlı).
+    /// Kalorisi aynı kalacak miktar. Önce yiyeceğin ev ölçüleri (adet, yk, dilim…) denenir; yarım birime
+    /// yuvarlanınca sapma %10'u geçerse gram/ml'ye düşülür.
     static func equalCalorieAmount(for calories: Double, food: DietFood) -> (amount: Double, unit: DietUnit) {
-        let unit = food.suggestedUnits.first ?? .serving
-        let perUnit = food.perServing.calories * servings(amount: 1, unit: unit, food: food)
-        guard perUnit > 0 else { return (1, unit) }
-        let raw = calories / perUnit
-        let step: Double = unit.isMass ? 5 : 0.5
-        return (max(step, (raw / step).rounded() * step), unit)
+        let units = food.suggestedUnits
+        var fallback: (amount: Double, unit: DietUnit)?
+        for unit in units {
+            let perUnit = food.perServing.calories * servings(amount: 1, unit: unit, food: food)
+            guard perUnit > 0 else { continue }
+            let step: Double = unit.isMass ? 5 : 0.5
+            let amount = max(step, (calories / perUnit / step).rounded() * step)
+            if unit.isMass {
+                if fallback == nil { fallback = (amount, unit) }
+                continue
+            }
+            if abs(amount * perUnit - calories) <= max(10, calories * 0.1) { return (amount, unit) }
+        }
+        return fallback ?? (1, units.first ?? .serving)
     }
 }
 
