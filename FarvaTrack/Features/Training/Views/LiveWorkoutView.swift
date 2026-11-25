@@ -19,7 +19,7 @@ struct LiveWorkoutView: View {
                     ContentUnavailableView("Antrenman yok", systemImage: "dumbbell")
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle(live.session?.title ?? "Antrenman")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

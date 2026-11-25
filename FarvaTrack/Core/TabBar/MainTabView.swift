@@ -18,17 +18,33 @@ struct MainTabView: View {
     /// Her arkadaşla ayrı oda ve kendine not sohbeti.
     @State private var chatHub = ChatHub()
 
-    init() {
-        // Koyu, opak sekme çubuğu
+    /// Görünüm teması; değişince sekme çubuğu yeni görünümle yeniden kurulur.
+    @AppStorage(AppTheme.storageKey) private var themeRaw = AppTheme.default.rawValue
+
+    /// Sekme çubuğu görünümü: klasikte saydam (vintage zemin görünür), koyuda opak koyu.
+    static func applyTabBarAppearance(_ theme: AppTheme) {
         let appearance = UITabBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor(Color.ftCard)
+        switch theme {
+        case .klasik:
+            appearance.configureWithTransparentBackground()
+            let normal = UIColor(red: 0x8E / 255, green: 0x76 / 255, blue: 0x60 / 255, alpha: 1)
+            for item in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
+                item.normal.iconColor = normal
+                item.normal.titleTextAttributes = [.foregroundColor: normal]
+            }
+        case .koyu:
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor(red: 0x1A / 255, green: 0x1A / 255, blue: 0x21 / 255, alpha: 1)
+        }
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 
     var body: some View {
         @Bindable var router = router
+        let theme = AppTheme.resolve(themeRaw)
+        // Görünüm, yeni sekme çubuğu oluşturulmadan önce ayarlanmalı (aşağıdaki `.id`).
+        let _ = Self.applyTabBarAppearance(theme)
 
         TabView(selection: $router.selectedTab) {
             DashboardView()
@@ -52,6 +68,7 @@ struct MainTabView: View {
                 .tabItem { Label(AppTab.profile.title, systemImage: AppTab.profile.systemImage) }
                 .tag(AppTab.profile)
         }
+        .id(theme)
         .environment(router)
         .environment(waterViewModel)
         .environment(wasteViewModel)

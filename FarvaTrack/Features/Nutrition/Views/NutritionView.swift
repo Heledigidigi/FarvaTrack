@@ -40,7 +40,7 @@ struct NutritionView: View {
                     ProgressView().frame(maxHeight: .infinity)
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Beslenme")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -302,7 +302,7 @@ private struct SummaryCard: View {
                     .foregroundStyle(Color.ftTextSecondary)
             }
             Capsule()
-                .fill(Color.white.opacity(0.08))
+                .fill(Color.ftSubtle(0.08))
                 .frame(height: 6)
                 .overlay(alignment: .leading) {
                     GeometryReader { geometry in
@@ -378,7 +378,7 @@ private struct MacroPieCard: View {
             } else {
                 HStack(spacing: 16) {
                     Circle()
-                        .stroke(Color.white.opacity(0.08), lineWidth: 16)
+                        .stroke(Color.ftSubtle(0.08), lineWidth: 16)
                         .frame(width: 80, height: 80)
                     Text("Henüz kayıt yok. Yiyecek ekledikçe protein, karbonhidrat ve yağ dağılımın burada görünür.")
                         .font(.footnote)

@@ -28,7 +28,7 @@ struct WaterTrackingView: View {
                     ProgressView()
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Su")
             .onAppear { viewModel.reloadReminderSettings() }
             .toolbar {
@@ -285,7 +285,7 @@ private struct CustomAmountSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Özel Miktar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -370,7 +370,7 @@ private struct WaterSettingsSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Su Ayarları")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

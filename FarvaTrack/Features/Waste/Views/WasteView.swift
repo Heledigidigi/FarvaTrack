@@ -33,7 +33,7 @@ struct WasteView: View {
                 ProgressView()
             }
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Biyolojik Atık")
         .toolbar {
             if auth.currentUser?.isAdmin == true {
@@ -268,7 +268,7 @@ struct WasteAdminView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Tüm Kullanıcılar")
         .overlay {
             if viewModel.isLoadingAdmin && viewModel.adminUsers.isEmpty { ProgressView() }
@@ -318,7 +318,7 @@ struct WasteUserDetailView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle(user.displayName.isEmpty ? user.email : user.displayName)
     }
 }

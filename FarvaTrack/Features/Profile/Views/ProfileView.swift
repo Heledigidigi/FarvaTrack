@@ -65,7 +65,7 @@ struct ProfileView: View {
                 .listRowBackground(Color.ftCard)
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Profil")
             .sheet(isPresented: $showEditor) {
                 EditProfileView()

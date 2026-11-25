@@ -15,7 +15,7 @@ struct CustomTextField: View {
 
     private var borderColor: Color {
         if errorMessage != nil { return Color.ftDanger }
-        return isFocused ? Color.ftAccentLight : Color.white.opacity(0.08)
+        return isFocused ? Color.ftAccentLight : Color.ftSubtle(0.08)
     }
 
     var body: some View {

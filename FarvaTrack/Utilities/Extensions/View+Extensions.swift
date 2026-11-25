@@ -10,6 +10,12 @@ extension View {
                 Color.ftCard,
                 in: RoundedRectangle(cornerRadius: Constants.Layout.cornerRadius, style: .continuous)
             )
+            // Klasik temada ince sepya kenar (koyu temada görünmez).
+            .overlay(
+                RoundedRectangle(cornerRadius: Constants.Layout.cornerRadius, style: .continuous)
+                    .strokeBorder(Color.ftCardBorder, lineWidth: 1)
+                    .allowsHitTesting(false)
+            )
     }
 
     func hideKeyboard() {

@@ -53,7 +53,7 @@ struct ChatStorageView: View {
             .listRowBackground(Color.ftCard)
         }
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground)
+        .ftScreenBackground()
         .navigationTitle("Bulut depolaması")
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.load() }

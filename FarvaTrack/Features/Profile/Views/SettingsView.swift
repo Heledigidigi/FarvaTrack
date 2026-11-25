@@ -7,6 +7,7 @@ struct SettingsView: View {
 
     @AppStorage(ChatMediaPreferences.autoSaveKey) private var autoSaveChatMedia = true
     @AppStorage(ChatMediaPreferences.dataSaverKey) private var chatDataSaver = false
+    @AppStorage(AppTheme.storageKey) private var themeRaw = AppTheme.default.rawValue
     @State private var exportURL: URL?
     @State private var exportError: String?
 
@@ -19,6 +20,22 @@ struct SettingsView: View {
 
     var body: some View {
         List {
+            Section {
+                Picker("Tema", selection: $themeRaw) {
+                    ForEach(AppTheme.allCases) { theme in
+                        Text(theme.title).tag(theme.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: themeRaw) { _, _ in Haptics.selection() }
+                .accessibilityLabel("Tema")
+            } header: {
+                Text("Görünüm")
+            } footer: {
+                Text("Klasik: vintage kâğıt zemin ve krem kartlar. Koyu: koyu zemin ve bordo vurgu.")
+            }
+            .listRowBackground(Color.ftCard)
+
             if let user = auth.currentUser {
                 Section("Hesap") {
                     HStack {
@@ -118,7 +135,7 @@ struct SettingsView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Ayarlar")
     }
 
@@ -189,7 +206,7 @@ struct DeleteAccountView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Hesabı Sil")
         .confirmationDialog("Hesabın ve tüm verilerin silinecek.", isPresented: $showConfirmation, titleVisibility: .visible) {
             Button("Sil", role: .destructive) {

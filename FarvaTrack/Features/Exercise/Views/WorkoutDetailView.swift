@@ -67,7 +67,7 @@ struct WorkoutDetailView: View {
             }
             .padding(Constants.Layout.screenPadding)
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

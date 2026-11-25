@@ -71,7 +71,7 @@ struct OnboardingView: View {
 
             footer
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .authAlerts()
         .onChange(of: isMinor) { _, minor in
             if minor, goal == .loseWeight { goal = .maintain }

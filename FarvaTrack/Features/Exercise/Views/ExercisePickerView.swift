@@ -30,7 +30,7 @@ struct ExercisePickerView: View {
                     ProgressView().frame(maxHeight: .infinity)
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Egzersiz Seç")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Egzersiz ara")
@@ -209,7 +209,7 @@ struct CreateExerciseView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Yeni Egzersiz")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

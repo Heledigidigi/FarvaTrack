@@ -97,7 +97,7 @@ struct RegisterView: View {
             .padding(.vertical, 24)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .authAlerts()
     }

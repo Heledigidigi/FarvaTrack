@@ -45,7 +45,7 @@ struct RemindersView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Hatırlatıcılar")
         .alert("Bildirim izni gerekli", isPresented: $showDenied) {
             Button("Ayarları Aç") { openSettings() }

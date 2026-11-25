@@ -67,13 +67,13 @@ struct ChatContactProfileView: View {
                             .foregroundStyle(Color.ftTextSecondary)
                     }
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.ftText)
                 .accessibilityHint("Mesaj baloncuğunun görünümünü değiştir ya da kendi baloncuğunu tasarla")
             }
             .listRowBackground(Color.ftCard)
         }
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle(isPartner ? "Kişi bilgisi" : "Notlarım")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -140,7 +140,7 @@ struct ChatContactProfileView: View {
                     .foregroundStyle(Color.ftAccentLight)
                 Text(title)
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.ftText)
             }
             .frame(width: 96, height: 68)
             .background(Color.ftCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -189,7 +189,7 @@ struct ChatSharedContentView: View {
             case .links: linkList
             }
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Medya ve bağlantılar")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -240,7 +240,7 @@ struct ChatSharedContentView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(link.url.host() ?? link.url.absoluteString)
                                 .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Color.ftText)
                                 .lineLimit(1)
                             Text(link.url.absoluteString)
                                 .font(.caption)

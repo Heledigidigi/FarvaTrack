@@ -108,7 +108,7 @@ struct ChatBubbleView: View {
                     VStack(alignment: .trailing, spacing: 4) {
                         Text(caption)
                             .font(.body)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(defaultInk)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -185,12 +185,12 @@ struct ChatBubbleView: View {
         let missed = call.outcome != .answered
         return HStack(spacing: 10) {
             Image(systemName: item.isMine ? "phone.arrow.up.right.fill" : (missed ? "phone.arrow.down.left.fill" : "phone.arrow.down.left.fill"))
-                .foregroundStyle(missed && !item.isMine ? Color.ftDanger : .white)
+                .foregroundStyle(missed && !item.isMine ? Color.ftDanger : defaultInk)
                 .font(.body)
                 .accessibilityHidden(true)
             Text(item.displayText)
                 .font(.body)
-                .foregroundStyle(.white)
+                .foregroundStyle(defaultInk)
             if let onCallBack {
                 Button {
                     Haptics.impact(.light)
@@ -199,7 +199,7 @@ struct ChatBubbleView: View {
                     Image(systemName: "phone.fill")
                         .font(.footnote.bold())
                         .padding(7)
-                        .background(Color.white.opacity(0.18), in: Circle())
+                        .background(defaultInk.opacity(0.18), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Geri ara")
@@ -211,7 +211,7 @@ struct ChatBubbleView: View {
             Text(item.displayText)
                 .font(.body)
                 .italic(message.deleted || message.type != .text)
-                .foregroundStyle(message.deleted ? Color.white.opacity(0.6) : (appliedStyle.map { Color(hex: $0.textColorHex) } ?? .white))
+                .foregroundStyle(message.deleted ? defaultInk.opacity(0.6) : (appliedStyle.map { Color(hex: $0.textColorHex) } ?? defaultInk))
                 .multilineTextAlignment(.leading)
                 .frame(alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -219,7 +219,12 @@ struct ChatBubbleView: View {
 
     /// Baloncuk içindeki yazı rengi (açık renkli çizimli baloncukta koyu).
     private var contentColor: Color {
-        appliedStyle.map { Color(hex: $0.textColorHex) } ?? .white
+        appliedStyle.map { Color(hex: $0.textColorHex) } ?? defaultInk
+    }
+
+    /// Varsayılan baloncukta yazı rengi: giden (vurgu zemin) beyaz, gelen ve silinen tema yazı rengi.
+    private var defaultInk: Color {
+        item.isMine && !message.deleted ? .white : Color.ftText
     }
 
     /// Açık zeminli çizimli baloncuk: alıntı ve okundu işareti koyu/bordo çizilir.

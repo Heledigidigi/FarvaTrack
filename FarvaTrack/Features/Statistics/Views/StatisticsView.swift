@@ -58,7 +58,7 @@ struct StatisticsView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("İstatistikler")
         .overlay {
             if viewModel.isLoading && viewModel.cards.isEmpty { ProgressView() }
@@ -171,7 +171,7 @@ private struct AdherenceCard: View {
             .chartYScale(domain: 0...100)
             .chartYAxis {
                 AxisMarks(values: [0, 50, 100]) { value in
-                    AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                    AxisGridLine().foregroundStyle(Color.ftSubtle(0.06))
                     AxisValueLabel { Text("%\(value.as(Int.self) ?? 0)") }.foregroundStyle(Color.ftTextSecondary)
                 }
             }
@@ -218,7 +218,7 @@ struct BadgesView: View {
             }
             .padding(Constants.Layout.screenPadding)
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Rozetler")
     }
 }
@@ -230,7 +230,7 @@ private struct BadgeTile: View {
         VStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(status.isEarned ? Color.ftStats.opacity(0.22) : Color.white.opacity(0.06))
+                    .fill(status.isEarned ? Color.ftStats.opacity(0.22) : Color.ftSubtle(0.06))
                 Image(systemName: status.badge.systemImage)
                     .font(.title2)
                     .foregroundStyle(status.isEarned ? Color.ftStats : Color.ftTextSecondary.opacity(0.5))

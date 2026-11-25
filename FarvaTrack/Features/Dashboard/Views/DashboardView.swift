@@ -42,7 +42,7 @@ struct DashboardView: View {
             }
             .scrollIndicators(.hidden)
             .refreshable { await viewModel.load() }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AppRoute.self) { route in
                 route.destination

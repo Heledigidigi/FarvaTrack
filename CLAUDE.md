@@ -20,7 +20,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Saklama: alıcı cihaz gelen foto/video orijallerini kendiliğinden indirir (`ChatViewModel.fetchPendingOriginals`, uygulamada `autoFetchOriginals: true`), kalıcı klasörde tutar (`ChatMediaFiles.originalURL`, eski önbellektekiler taşınır), ayar açıksa Fotoğraflar'a kaydeder (`ChatMediaPreferences`, `PhotoLibrarySaving`) ve `/v1/ack` ile bildirir. Worker cron'u her gün: alınmış orijallerden 60 günü geçenleri, toplam 9 GB'ı geçerse en eskiden başlayarak 8,5 GB'a inene kadar siler; önizleme/ses/sticker kalır. 404 → `AppError.mediaRemoved`. Ayarlar → Sohbet → Bulut depolaması (`ChatStorageView`).
 - Firebase yalnızca `GoogleService-Info.plist` varsa başlar (`FirebaseBootstrap`); yoksa uygulama kurulum ekranıyla açılır. Plist CI'da `GOOGLE_SERVICE_INFO_PLIST` secret'ından yazılır, repoya eklenmez.
 - `SharedStore.swift` hem uygulama hem widget hedefinde derlenir; uygulamaya özel tiplere bağımlı olmamalı. App Group: `group.com.farvatrack.shared`.
-- Renkler `Color.ft*` (koyu tema, bordo vurgu). Önemli aksiyonlarda `Haptics`, VoiceOver etiketleri zorunlu.
+- Renkler `Color.ft*`: her biri açık (klasik tema) ve koyu (koyu tema) değerle tanımlı (`Color.ftDynamic`); tema kökte `preferredColorScheme(AppTheme.colorScheme)` ile seçilir. Ekran zemini `.ftScreenBackground()` (klasikte vintage görsel, koyuda düz renk); kart dışı yazıda `Color.ftText`, silik dolgularda `Color.ftSubtle(_:)` kullan, `.white`/`Color.white.opacity` kullanma (klasik zeminde kaybolur). Önemli aksiyonlarda `Haptics`, VoiceOver etiketleri zorunlu.
 - Sağlık içeriğinde güvenlik: 18 yaş altına kilo verme hedefi yok, BMI 18,5 altı hedef engellenir, tıbbi tavsiye dili kullanılmaz.
 
 ## Yol haritası
@@ -180,5 +180,12 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Arkadaş yokken listede `NoFriendsView`: sağ üstü gösteren kesikli ok, konuşma balonu ("Şu an hiç arkadaşın yok / İstersen buradan ekleyebilirsin!") ve yer tutucu kedi (`cat.fill`; asıl maskot sonra tasarlanacak).
 - Özet: "Egzersiz (dk)" ve "Yakılan kcal" kartları kaldırıldı (halkadaki kalori kaldı); Biyolojik Atık ayrı satır yerine Modüller'de.
 - Vücut ölçüleri: ızgaradaki ölçüler tek liste satırında olduğundan `NavigationLink` yerine `.borderless` düğme + `navigationDestination(item:)` (önceden List satırdaki tüm bağlantıları tetikliyor, rastgele ölçü açıyor ve geri yerine diğer ölçülere gidiyordu). Grafik durumu (aralık, gösterim, karşılaştırmalar) ölçü başına saklanır (`MeasureTrendState`, `measureTrend.<ölçü>`).
+
+## Klasik tema (2026-11-25)
+
+- `AppTheme` (`Utilities/Theme/AppTheme.swift`): `.klasik` (varsayılan) / `.koyu`; `@AppStorage("app.theme")`, Ayarlar → Görünüm (bölümlü seçici). Koyu tema önceki görünümün aynısı.
+- Klasik: zemin `Assets/VintageZemin` (parşömen, barok kıvrım, gül, orkide, kelebekler, kurdeleli tavşan pulu; Claude'un ürettiği görsel, telif sorunu yok) `ThemeBackground` ile; kartlar yarı saydam krem (`ftCard` #FBF0D4 %74) + ince sepya kenar (`ftCardBorder`, `cardStyle`); yazı koyu kahve, vurgu kiremit (#A23A2E), düğme dolgusu #8E2A22; modül renkleri soluk tonlar (adım #B0574A, kalori #B9772F, su #5F8796, uyku #7D6A93, kilo #6E8A6A).
+- Sekme çubuğu klasikte saydam (`MainTabView.applyTabBarAppearance`, tema değişince `.id(theme)` ile yeniden kurulur). Arama ekranı her temada koyu. Widget'lar temadan etkilenmez.
+- Sohbet: varsayılan baloncukta gelen mesaj yazısı ve sesli mesaj ikonları `ftText` (giden vurgu zeminde beyaz).
 
 Yeni modül eklerken: `AppRoute` (Özet'ten açılan sayfa) veya `AppTab`, SwiftData şeması (`FarvaTrackApp`), `LiveDashboardDataSource`, Firestore kuralları, `Constants.Collection.userSubcollections` (hesap silme), `LocalDataCleaner` ve `DataExporter` güncellenir.

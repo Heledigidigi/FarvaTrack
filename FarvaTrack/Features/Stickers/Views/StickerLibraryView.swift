@@ -43,7 +43,7 @@ struct StickerLibraryView: View {
                     }
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Sticker'larım")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

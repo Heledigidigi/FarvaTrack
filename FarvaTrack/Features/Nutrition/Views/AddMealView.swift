@@ -35,7 +35,7 @@ struct AddMealView: View {
                     ProgressView().frame(maxHeight: .infinity)
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Yiyecek Ekle")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Yiyecek ara")
@@ -262,7 +262,7 @@ struct FoodDetailView: View {
             }
             .padding(Constants.Layout.screenPadding)
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -412,7 +412,7 @@ struct CreateFoodView: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Yeni Yiyecek")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -1035,7 +1035,7 @@ struct ChatPhotoEditorView: View {
                 }
                 .padding(16)
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Sticker ekle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

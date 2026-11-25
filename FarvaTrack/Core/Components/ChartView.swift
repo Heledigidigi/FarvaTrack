@@ -63,7 +63,7 @@ struct ChartView: View {
 
             if let selectedItem {
                 RuleMark(x: .value("Seçili", selectedItem.date, unit: barUnit))
-                    .foregroundStyle(Color.white.opacity(0.15))
+                    .foregroundStyle(Color.ftSubtle(0.15))
                     .annotation(
                         position: .top,
                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
@@ -81,7 +81,7 @@ struct ChartView: View {
         }
         .chartYAxis {
             AxisMarks(position: .leading) { _ in
-                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                AxisGridLine().foregroundStyle(Color.ftSubtle(0.06))
                 AxisValueLabel().foregroundStyle(Color.ftTextSecondary)
             }
         }

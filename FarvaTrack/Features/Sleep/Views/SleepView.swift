@@ -21,7 +21,7 @@ struct SleepView: View {
                 ProgressView()
             }
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Uyku")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -253,7 +253,7 @@ private struct SleepContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "tr_TR"))))
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.ftText)
                 Text("\(entry.bedtime.formatted(date: .omitted, time: .shortened)) – \(entry.wakeTime.formatted(date: .omitted, time: .shortened))")
                     .font(.caption)
                     .foregroundStyle(Color.ftTextSecondary)
@@ -262,7 +262,7 @@ private struct SleepContent: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(SleepAnalyzer.durationText(hours: entry.durationHours))
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.ftText)
                 StarRatingView(value: entry.quality, size: 10)
             }
         }
@@ -353,7 +353,7 @@ private struct SleepEditorSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground)
+            .ftScreenBackground()
             .navigationTitle(entry == nil ? "Uyku Ekle" : "Uykuyu Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -438,7 +438,7 @@ private struct SleepSettingsSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground)
+            .ftScreenBackground()
             .navigationTitle("Uyku Ayarları")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

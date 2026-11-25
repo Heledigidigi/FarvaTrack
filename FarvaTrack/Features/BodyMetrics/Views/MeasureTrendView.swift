@@ -136,7 +136,7 @@ struct MeasureTrendView: View {
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle(primary.title)
         .onChange(of: compared) { _, _ in
             if !TrendComparison.allowedModes(for: activeSeries).contains(self.mode) { self.mode = .percent }
@@ -178,7 +178,7 @@ struct MeasureTrendView: View {
 
             if let selected {
                 RuleMark(x: .value("Seçili", selected.date))
-                    .foregroundStyle(Color.white.opacity(0.15))
+                    .foregroundStyle(Color.ftSubtle(0.15))
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                         tooltip(for: selected.date, in: points)
                     }
@@ -195,7 +195,7 @@ struct MeasureTrendView: View {
         }
         .chartYAxis {
             AxisMarks(position: .leading) { value in
-                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                AxisGridLine().foregroundStyle(Color.ftSubtle(0.06))
                 AxisValueLabel {
                     if let number = value.as(Double.self) {
                         Text(mode == .percent ? "%\(number.formatted(.number.precision(.fractionLength(0...1))))" : number.formatted(.number.precision(.fractionLength(0...1))))

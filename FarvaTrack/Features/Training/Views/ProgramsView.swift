@@ -15,7 +15,7 @@ struct ProgramsView: View {
                 ProgressView()
             }
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Programlar")
         .alert("Bir sorun oluştu", isPresented: Binding(get: { training.hasError }, set: { training.hasError = $0 })) {
             Button("Tamam", role: .cancel) {}
@@ -95,7 +95,7 @@ private struct ProgramsContent: View {
                         templateEditor = TemplateEditorTarget(template: template)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(template.name).font(.subheadline.weight(.medium)).foregroundStyle(.white)
+                            Text(template.name).font(.subheadline.weight(.medium)).foregroundStyle(Color.ftText)
                             Text(template.summaryText).font(.caption).foregroundStyle(Color.ftTextSecondary)
                         }
                     }
@@ -122,7 +122,7 @@ private struct ProgramsContent: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
-                                Text(preset.name).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                                Text(preset.name).font(.subheadline.weight(.semibold)).foregroundStyle(Color.ftText)
                                 Spacer()
                                 Text(preset.level)
                                     .font(.caption2.weight(.bold))
@@ -204,7 +204,7 @@ private struct ProgramRow: View {
                         .font(.caption.weight(.bold))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(program.isActive ? Color.ftSuccess.opacity(0.2) : Color.white.opacity(0.08), in: Capsule())
+                        .background(program.isActive ? Color.ftSuccess.opacity(0.2) : Color.ftSubtle(0.08), in: Capsule())
                         .foregroundStyle(program.isActive ? Color.ftSuccess : Color.ftTextSecondary)
                 }
                 .buttonStyle(.plain)
@@ -219,7 +219,7 @@ private struct ProgramRow: View {
                         VStack(spacing: 2) {
                             Text(ProgramPlanner.weekdayShortNames[index]).font(.caption2.weight(.semibold))
                             Circle()
-                                .fill(id.isEmpty ? Color.white.opacity(0.1) : Color.ftExercise)
+                                .fill(id.isEmpty ? Color.ftSubtle(0.1) : Color.ftExercise)
                                 .frame(width: 8, height: 8)
                         }
                         .frame(maxWidth: .infinity)
@@ -284,7 +284,7 @@ struct TemplateEditorView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle(template == nil ? "Yeni Şablon" : "Şablonu Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -457,7 +457,7 @@ struct ProgramEditorView: View {
                                         .font(.caption.weight(.semibold))
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 8)
-                                        .background(selected ? Color.ftExercise : Color.white.opacity(0.08), in: Capsule())
+                                        .background(selected ? Color.ftExercise : Color.ftSubtle(0.08), in: Capsule())
                                         .foregroundStyle(selected ? Color.black : Color.ftTextSecondary)
                                 }
                                 .buttonStyle(.plain)
@@ -477,7 +477,7 @@ struct ProgramEditorView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle(program == nil ? "Yeni Program" : "Programı Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

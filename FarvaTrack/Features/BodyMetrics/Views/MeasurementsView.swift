@@ -16,7 +16,7 @@ struct MeasurementsView: View {
                 ProgressView()
             }
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Vücut Ölçüleri")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -108,7 +108,7 @@ private struct MeasurementsContent: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(entry.date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "tr_TR"))))
                                     .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(Color.ftText)
                                 Text(summary(entry))
                                     .font(.caption)
                                     .foregroundStyle(Color.ftTextSecondary)
@@ -212,7 +212,7 @@ private struct MeasurementEditorSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground)
+            .ftScreenBackground()
             .navigationTitle(entry == nil ? "Ölçü Ekle" : "Ölçüyü Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

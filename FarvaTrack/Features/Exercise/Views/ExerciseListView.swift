@@ -62,7 +62,7 @@ struct ExerciseListView: View {
                     ProgressView()
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Egzersiz")
             .searchable(text: $searchText, prompt: "Antrenman veya egzersiz ara")
             .toolbar {

@@ -76,7 +76,7 @@ struct CreateWorkoutView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle(workout == nil ? "Yeni Antrenman" : "Antrenmanı Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

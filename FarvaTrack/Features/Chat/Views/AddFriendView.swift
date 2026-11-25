@@ -29,7 +29,7 @@ struct AddFriendView: View {
                     searchList
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Arkadaş ekle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -72,7 +72,7 @@ struct ExerciseGuideView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle(name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

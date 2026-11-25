@@ -30,7 +30,9 @@ struct StickerEditorView: View {
                 canvasArea
                 controls
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
+            // Düzenleyici her temada koyu (beyaz araçlar).
+            .environment(\.colorScheme, .dark)
             .navigationTitle("Sticker oluştur")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

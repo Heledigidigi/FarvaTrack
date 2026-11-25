@@ -222,7 +222,7 @@ struct ChatMessageInfoSheet: View {
                 .listRowBackground(Color.ftCard)
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Mesaj bilgisi")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

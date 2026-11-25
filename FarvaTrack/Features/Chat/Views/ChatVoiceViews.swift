@@ -199,6 +199,8 @@ struct ChatVoiceBubbleContent: View {
     private var isCurrent: Bool { player.isCurrent(item.id) }
     private var isPlaying: Bool { isCurrent && player.isPlaying }
     private var levels: [Float] { audio.waveform.map { Float($0) / 255 } }
+    /// Baloncuk içindeki yazı/ikon rengi: giden (vurgu zemin) beyaz, gelen tema yazı rengi.
+    private var ink: Color { item.isMine ? .white : Color.ftText }
     private var progress: Double { isCurrent ? player.progress : 0 }
 
     var body: some View {
@@ -211,7 +213,7 @@ struct ChatVoiceBubbleContent: View {
                         levels: levels,
                         progress: progress,
                         activeColor: item.isMine ? .white : Color.ftAccentLight,
-                        inactiveColor: .white.opacity(0.35)
+                        inactiveColor: ink.opacity(0.35)
                     )
                     .contentShape(Rectangle())
                     .gesture(
@@ -226,7 +228,7 @@ struct ChatVoiceBubbleContent: View {
                 HStack(spacing: 6) {
                     Text(VoiceFormat.time(isCurrent && player.currentTime > 0 ? player.currentTime : audio.duration))
                         .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.75))
+                        .foregroundStyle(ink.opacity(0.75))
                     if !item.isMine, !item.isListened {
                         // Dinlenmemiş sesli mesaj.
                         Circle().fill(Color.ftWater).frame(width: 6, height: 6)
@@ -241,17 +243,17 @@ struct ChatVoiceBubbleContent: View {
                                 .font(.caption2.weight(.bold))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 2)
-                                .background(.white.opacity(0.2), in: Capsule())
+                                .background(ink.opacity(0.2), in: Capsule())
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ink)
                     }
                 }
             }
 
             Image(systemName: "mic.fill")
                 .font(.system(size: 14))
-                .foregroundStyle(item.isListened ? Color.ftWater : .white.opacity(0.55))
+                .foregroundStyle(item.isListened ? Color.ftWater : ink.opacity(0.55))
                 .accessibilityHidden(true)
         }
         .frame(width: 236)
@@ -262,23 +264,23 @@ struct ChatVoiceBubbleContent: View {
     @ViewBuilder
     private var playButton: some View {
         ZStack {
-            Circle().fill(.white.opacity(0.18)).frame(width: 40, height: 40)
+            Circle().fill(ink.opacity(0.18)).frame(width: 40, height: 40)
             if item.isUploading {
                 if let value = item.uploadProgress {
                     Circle()
                         .trim(from: 0, to: max(0.03, value))
-                        .stroke(.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                        .stroke(ink, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 34, height: 34)
                 } else {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(ink)
                 }
             } else if isLoading {
-                ProgressView().tint(.white)
+                ProgressView().tint(ink)
             } else {
                 Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(ink)
                     .offset(x: isPlaying ? 0 : 1.5)
             }
         }

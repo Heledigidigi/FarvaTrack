@@ -22,7 +22,7 @@ struct EditProfileView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Profili Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

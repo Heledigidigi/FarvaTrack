@@ -50,7 +50,7 @@ struct StatCard: View {
 
             if progress != nil {
                 Capsule()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(Color.ftSubtle(0.08))
                     .frame(height: 6)
                     .overlay(alignment: .leading) {
                         GeometryReader { geometry in

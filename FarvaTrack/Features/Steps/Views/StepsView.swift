@@ -34,7 +34,7 @@ struct StepsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Adımlar")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -351,7 +351,7 @@ private struct StepGoalSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Adım Hedefi")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -408,7 +408,7 @@ private struct ManualStepSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Adımı Elle Gir")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -79,7 +79,7 @@ struct BubblePickerView: View {
                 }
                 .padding(Constants.Layout.screenPadding)
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Baloncuklar")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -710,7 +710,7 @@ struct BubbleDrawingSheet: View {
                 Spacer()
             }
             .padding()
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationTitle("Baloncuğa çiz").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Bitti") { dismiss() } } }
         }

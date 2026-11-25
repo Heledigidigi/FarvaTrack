@@ -41,7 +41,7 @@ struct WeightView: View {
                 ProgressView()
             }
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle("Kilo")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -256,7 +256,7 @@ private struct WeightContent: View {
             Button(action: onGoal) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("Hedef: \(WeightAnalyzer.kgText(target))").font(.headline).foregroundStyle(.white)
+                        Text("Hedef: \(WeightAnalyzer.kgText(target))").font(.headline).foregroundStyle(Color.ftText)
                         Spacer()
                         Text("%\(Int(progress * 100))").font(.headline.monospacedDigit()).foregroundStyle(Color.ftWeight)
                     }
@@ -291,7 +291,7 @@ private struct WeightContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "tr_TR"))))
                     .font(.subheadline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Color.ftText)
                 if let note = entry.note {
                     Text(note).font(.caption).foregroundStyle(Color.ftTextSecondary).lineLimit(1)
                 }
@@ -305,7 +305,7 @@ private struct WeightContent: View {
             }
             Text(WeightAnalyzer.kgText(entry.weightKg))
                 .font(.body.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.ftText)
         }
         .accessibilityElement(children: .combine)
     }
@@ -371,7 +371,7 @@ private struct WeightEditorSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground)
+            .ftScreenBackground()
             .navigationTitle(entry == nil ? "Tartı Ekle" : "Tartıyı Düzenle")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -460,7 +460,7 @@ private struct WeightGoalSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground)
+            .ftScreenBackground()
             .navigationTitle("Kilo Hedefi")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -522,7 +522,7 @@ private struct WeighInReminderSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color.ftBackground)
+            .ftScreenBackground()
             .navigationTitle("Hatırlatıcı")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

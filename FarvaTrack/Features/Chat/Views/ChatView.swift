@@ -45,7 +45,7 @@ struct ChatView: View {
                     .accessibilityValue(hub.incomingRequestCount > 0 ? "\(hub.incomingRequestCount) arkadaşlık isteği" : "")
                 }
             }
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
             .navigationDestination(for: ChatDestination.self) { destination in
                 if let model = hub.viewModel(for: destination) {
                     ChatRoomContent(showBubbles: $showBubbles)
@@ -54,7 +54,7 @@ struct ChatView: View {
                     ProgressView("Sohbet yükleniyor…")
                         .tint(Color.ftAccentLight)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.ftBackground.ignoresSafeArea())
+                        .ftScreenBackground()
                 }
             }
             .sheet(isPresented: $showBubbles) {
@@ -193,7 +193,7 @@ struct ChatRoomContent: View {
                 ChatConversationView()
             }
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         // Geri düğmesinde yalnızca ok: "Sohbetler" yazısı gösterilmez (kaydırarak geri dönme korunur).
@@ -230,7 +230,7 @@ struct ChatRoomContent: View {
                                 ChatPresenceSubtitle(viewModel: viewModel)
                             }
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.ftText)
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .ignore)

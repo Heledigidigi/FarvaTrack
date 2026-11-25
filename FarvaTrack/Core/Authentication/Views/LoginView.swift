@@ -75,7 +75,7 @@ struct LoginView: View {
                 .padding(.vertical, 40)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Color.ftBackground.ignoresSafeArea())
+            .ftScreenBackground()
         }
         .authAlerts()
     }
@@ -95,11 +95,11 @@ struct LoginView: View {
 
     private var orDivider: some View {
         HStack(spacing: 12) {
-            Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+            Rectangle().fill(Color.ftSubtle(0.12)).frame(height: 1)
             Text("veya")
                 .font(.footnote)
                 .foregroundStyle(Color.ftTextSecondary)
-            Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+            Rectangle().fill(Color.ftSubtle(0.12)).frame(height: 1)
         }
         .accessibilityHidden(true)
     }

@@ -5,7 +5,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            Color.ftBackground.ignoresSafeArea()
+            ThemeBackground().ignoresSafeArea()
 
             switch auth.authState {
             case .loading:
@@ -65,7 +65,7 @@ struct FirebaseSetupView: View {
             }
             .padding(Constants.Layout.screenPadding)
         }
-        .background(Color.ftBackground.ignoresSafeArea())
+        .ftScreenBackground()
     }
 
     private func step(_ number: Int, _ text: String) -> some View {

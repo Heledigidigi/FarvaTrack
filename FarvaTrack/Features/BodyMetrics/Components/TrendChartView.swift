@@ -50,7 +50,7 @@ struct TrendChartView: View {
 
             if let selected {
                 RuleMark(x: .value("Seçili", selected.date))
-                    .foregroundStyle(Color.white.opacity(0.15))
+                    .foregroundStyle(Color.ftSubtle(0.15))
                     .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                         VStack(spacing: 2) {
                             Text(selected.date.shortDateString).font(.caption2).foregroundStyle(Color.ftTextSecondary)
@@ -72,7 +72,7 @@ struct TrendChartView: View {
         }
         .chartYAxis {
             AxisMarks(position: .leading) { _ in
-                AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
+                AxisGridLine().foregroundStyle(Color.ftSubtle(0.06))
                 AxisValueLabel().foregroundStyle(Color.ftTextSecondary)
             }
         }

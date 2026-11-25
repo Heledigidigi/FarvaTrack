@@ -50,6 +50,9 @@ struct FarvaTrackApp: App {
         )
     }
 
+    /// Görünüm teması (Ayarlar → Görünüm); varsayılan klasik.
+    @AppStorage(AppTheme.storageKey) private var themeRaw = AppTheme.default.rawValue
+
     var body: some Scene {
         WindowGroup {
             Group {
@@ -60,7 +63,7 @@ struct FarvaTrackApp: App {
                     FirebaseSetupView()
                 }
             }
-            .preferredColorScheme(.dark)
+            .preferredColorScheme(AppTheme.resolve(themeRaw).colorScheme)
             .tint(Color.ftAccentLight)
             // Uygulama güncellenince ana ekrandaki widget'lar yeni tasarımla yeniden çizilsin.
             .task { WidgetCenter.shared.reloadAllTimelines() }
