@@ -28,6 +28,8 @@ final class DietStore {
     @ObservationIgnored private let files: DietPhotoFiles
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var toastTask: Task<Void, Never>?
+    /// Yüklemeler sırayla gider: aynı kaydın eski hali yenisinin üzerine yazılmasın.
+    @ObservationIgnored private var uploadChain: Task<Void, Never>?
 
     init(sync: DietSyncing = DietSyncService(), media: ChatMediaStoring = MediaServerClient(),
          chat: ChatSyncing = ChatService(), notifier: ChatNotifying? = MediaServerClient(),
@@ -344,7 +346,7 @@ final class DietStore {
         try upsert(kind: .note, programID: programID, docID: key, dayKey: key, value: note, context: context, ownerID: ownerID)
         reload()
         let sync = self.sync
-        Task { [weak self] in
+        enqueue { [weak self] in
             do {
                 try await sync.uploadNote(note)
                 self?.markSynced(kind: .note, programID: programID, docID: key, updatedAt: note.updatedAt)
@@ -357,7 +359,7 @@ final class DietStore {
         try upsert(kind: .log, programID: log.programID, docID: log.id, dayKey: log.dayKey, value: log, context: context, ownerID: ownerID)
         reload()
         let sync = self.sync
-        Task { [weak self] in
+        enqueue { [weak self] in
             do {
                 try await sync.uploadLog(log)
                 self?.markSynced(kind: .log, programID: log.programID, docID: log.id, updatedAt: log.updatedAt)
@@ -731,11 +733,19 @@ final class DietStore {
               let program = record.program else { return }
         let updatedAt = record.updatedAt
         let sync = self.sync
-        Task { [weak self] in
+        enqueue { [weak self] in
             do {
                 try await sync.uploadProgram(program)
                 self?.markSynced(kind: .program, programID: programID, docID: programID, updatedAt: updatedAt)
             } catch {}
+        }
+    }
+
+    private func enqueue(_ work: @escaping @MainActor () async -> Void) {
+        let previous = uploadChain
+        uploadChain = Task { @MainActor in
+            await previous?.value
+            await work()
         }
     }
 }
