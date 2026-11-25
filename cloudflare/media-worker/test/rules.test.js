@@ -82,3 +82,21 @@ test('temizlik: 60 günden eski alınmış orijaller, sonra sınır', () => {
   // Sınırın altında ve yeni: dokunulmaz.
   assert.deepEqual(selectForCleanup([o('chats/a_b/media/8/original.jpg', 5, 1)], new Set(['chats/a_b/media/8/original.jpg']), now).keys, []);
 });
+
+test('diyet fotoğrafı yolu ve izinleri', async () => {
+  assert.deepEqual(parsePath('diet/P1/1b2c3d4e-aa.jpg'), { kind: 'diet', programId: 'P1', file: '1b2c3d4e-aa.jpg' });
+  assert.equal(parsePath('diet/P1/x.png'), null);
+  assert.equal(parsePath('diet/P1/kisa.jpg'), null);
+  assert.deepEqual(parsePrefix('diet/P1/'), { kind: 'diet', programId: 'P1' });
+  assert.equal(uploadLimit({ kind: 'diet' }).maxBytes, 5 * MB);
+  const parsed = parsePath('diet/P1/1b2c3d4e-aa.jpg');
+  const owner = async () => ({ read: true, owner: true });
+  const viewer = async () => ({ read: true, owner: false });
+  const stranger = async () => ({ read: false, owner: false });
+  assert.equal(await authorize({ op: 'write', parsed, uid: 'a', dietAccess: owner }), true);
+  assert.equal(await authorize({ op: 'read', parsed, uid: 'b', dietAccess: viewer }), true);
+  assert.equal(await authorize({ op: 'write', parsed, uid: 'b', dietAccess: viewer }), false);
+  assert.equal(await authorize({ op: 'delete', parsed, uid: 'b', dietAccess: viewer }), false);
+  assert.equal(await authorize({ op: 'read', parsed, uid: 'c', dietAccess: stranger }), false);
+  assert.equal(await authorize({ op: 'read', parsed, uid: 'c' }), false);
+});

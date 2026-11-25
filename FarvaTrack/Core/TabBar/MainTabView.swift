@@ -17,6 +17,8 @@ struct MainTabView: View {
     /// Sohbet dinleyicileri sekmeler arasında açık kalsın (okunmamış rozeti, bekleyen gönderimler).
     /// Her arkadaşla ayrı oda ve kendine not sohbeti.
     @State private var chatHub = ChatHub()
+    /// Diyet programları (Beslenme sekmesi) ve sohbetteki program kartları aynı depoyu kullanır.
+    @State private var dietStore = DietStore()
 
     /// Görünüm teması; değişince sekme çubuğu yeni görünümle yeniden kurulur.
     @AppStorage(AppTheme.storageKey) private var themeRaw = AppTheme.default.rawValue
@@ -74,6 +76,7 @@ struct MainTabView: View {
         .environment(wasteViewModel)
         .environment(liveWorkout)
         .environment(chatHub)
+        .environment(dietStore)
         .environment(CallManager.shared)
         // Sesli arama (8H): uygulama içi arama ekranı.
         .fullScreenCover(isPresented: Binding(get: { CallManager.shared.isPresenting }, set: { _ in })) {
@@ -132,6 +135,7 @@ struct MainTabView: View {
                 wasteViewModel.configure(context: modelContext, user: user)
                 liveWorkout.configure(userID: user.id)
                 chatHub.configure(context: modelContext, user: user)
+                dietStore.configure(context: modelContext, user: user)
                 Task { await PushManager.shared.start(userID: user.id) }
             } else {
                 chatHub.reset()

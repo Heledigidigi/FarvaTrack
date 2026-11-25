@@ -10,39 +10,50 @@ struct AddMealTarget: Identifiable {
 struct NutritionView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(\.modelContext) private var modelContext
+    @Environment(DietStore.self) private var dietStore
 
     @State private var viewModel = NutritionViewModel()
     @State private var addTarget: AddMealTarget?
     @State private var editingEntry: MealEntry?
+    @State private var showNewProgram = false
+    @State private var showPrograms = false
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
     }
 
+    private var dietErrorBinding: Binding<Bool> {
+        Binding(get: { dietStore.hasError }, set: { dietStore.hasError = $0 })
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                DayNavigator(
-                    date: viewModel.selectedDate,
-                    canGoForward: viewModel.canGoForward,
-                    onShift: { viewModel.shiftDay(by: $0) }
-                )
-
-                if let user = auth.currentUser {
-                    NutritionDayContent(
-                        ownerID: user.id,
-                        day: viewModel.selectedDate,
-                        viewModel: viewModel,
-                        onAdd: { addTarget = AddMealTarget(mealType: $0) },
-                        onEdit: { editingEntry = $0 }
-                    )
+            Group {
+                if let program = dietStore.activeProgram() {
+                    // Aşama 9: takip edilen program varsa beslenme programa göre şekillenir; serbest kayıt "Ekstra" olur.
+                    DietHomeView(program: program, nutrition: viewModel,
+                                 onAddExtra: { addTarget = AddMealTarget(mealType: .suggested()) })
                 } else {
-                    ProgressView().frame(maxHeight: .infinity)
+                    freeLogging
                 }
             }
             .ftScreenBackground()
             .navigationTitle("Beslenme")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Menu {
+                        Button { showPrograms = true } label: { Label("Diyet programlarım", systemImage: "list.bullet.rectangle") }
+                        Button { showNewProgram = true } label: { Label("Yeni program / Excel'den aktar", systemImage: "plus.rectangle.on.rectangle") }
+                        NavigationLink {
+                            DietReviewListView()
+                        } label: {
+                            Label("Takip ettiklerim", systemImage: "eye")
+                        }
+                    } label: {
+                        Image(systemName: "list.clipboard")
+                    }
+                    .accessibilityLabel("Diyet programı menüsü")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Haptics.impact(.light)
@@ -50,7 +61,7 @@ struct NutritionView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
-                    .accessibilityLabel("Yiyecek ekle")
+                    .accessibilityLabel(dietStore.activeProgram() == nil ? "Yiyecek ekle" : "Program dışı yiyecek ekle")
                 }
             }
             .sheet(item: $addTarget) { target in
@@ -59,18 +70,83 @@ struct NutritionView: View {
             .sheet(item: $editingEntry) { entry in
                 EditMealSheet(entry: entry, viewModel: viewModel)
             }
+            .sheet(isPresented: $showNewProgram) {
+                DietNewProgramView { _ in }
+            }
+            .sheet(isPresented: $showPrograms) {
+                DietProgramListView()
+            }
             .alert("Bir sorun oluştu", isPresented: errorBinding) {
                 Button("Tamam", role: .cancel) {}
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
+            .alert("Bir sorun oluştu", isPresented: dietErrorBinding) {
+                Button("Tamam", role: .cancel) {}
+            } message: {
+                Text(dietStore.errorMessage ?? "")
+            }
+            .overlay(alignment: .bottom) {
+                if let toast = dietStore.toast {
+                    DietToastView(text: toast).padding(.bottom, 16)
+                }
+            }
+            .animation(.snappy, value: dietStore.toast)
         }
         .onChange(of: auth.currentUser, initial: true) { _, user in
-            if let user { viewModel.configure(context: modelContext, user: user) }
+            if let user {
+                viewModel.configure(context: modelContext, user: user)
+                dietStore.configure(context: modelContext, user: user)
+            }
         }
         .task(id: auth.currentUser?.id) {
-            if let user = auth.currentUser { viewModel.configure(context: modelContext, user: user) }
+            if let user = auth.currentUser {
+                viewModel.configure(context: modelContext, user: user)
+                dietStore.configure(context: modelContext, user: user)
+            }
             await viewModel.syncAll()
+            await dietStore.syncAll()
+        }
+        .onAppear { dietStore.reload() }
+    }
+
+    @ViewBuilder
+    private var freeLogging: some View {
+        VStack(spacing: 0) {
+            DayNavigator(
+                date: viewModel.selectedDate,
+                canGoForward: viewModel.canGoForward,
+                onShift: { viewModel.shiftDay(by: $0) }
+            )
+
+            Button { showNewProgram = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "list.clipboard.fill").font(.title2).foregroundStyle(Color.ftAccentLight)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Diyet programın var mı?").font(.subheadline.bold()).foregroundStyle(Color.ftText)
+                        Text("Excel'den aktar ya da elle oluştur; öğünlerini programa göre takip et.")
+                            .font(.caption).foregroundStyle(Color.ftTextSecondary).multilineTextAlignment(.leading)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(Color.ftTextSecondary)
+                }
+                .cardStyle(padding: 12)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
+
+            if let user = auth.currentUser {
+                NutritionDayContent(
+                    ownerID: user.id,
+                    day: viewModel.selectedDate,
+                    viewModel: viewModel,
+                    onAdd: { addTarget = AddMealTarget(mealType: $0) },
+                    onEdit: { editingEntry = $0 }
+                )
+            } else {
+                ProgressView().frame(maxHeight: .infinity)
+            }
         }
     }
 }

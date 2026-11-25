@@ -216,6 +216,8 @@ final class FirebaseManager: FirebaseServicing {
         try await perform {
             try await ChatService().purgeUserData(userID: uid)
         }
+        // Diyet programları (iki kişiye açık olabilir: kullanıcı altında değil), teklifler ve yorumlar.
+        try? await DietSyncService().purge(userID: uid)
         // Kullanıcı adı ve arkadaşlık istekleri.
         try? await FriendService().purge(userID: uid)
 

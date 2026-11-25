@@ -113,6 +113,14 @@ service cloud.firestore {
         ? (data.sticker is map && data.sticker.path == folder + 'sticker.png')
         : !('sticker' in data);
       // Arama satırı (8H): sonuç ve süre.
+      // Diyet programı kartı (Aşama 9): teklif belgesine başvurur.
+      let dietOk = data.type == 'diet'
+        ? (data.diet is map
+            && data.diet.offerId is string
+            && data.diet.offerId.size() <= 64
+            && data.diet.name is string
+            && data.diet.name.size() <= 80)
+        : !('diet' in data);
       let callOk = data.type == 'call'
         ? (data.call is map
             && data.call.keys().hasOnly(['callId', 'outcome', 'duration'])
@@ -121,7 +129,7 @@ service cloud.firestore {
             && data.call.duration is number
             && data.call.duration >= 0)
         : !('call' in data);
-      return mediaOk && audioOk && stickerOk && callOk;
+      return mediaOk && audioOk && stickerOk && callOk && dietOk;
     }
 
     // Sohbet üstüne bırakılan sticker (8E): konum en yakın mesaja bağlı; dosya bu yerleştirmenin klasöründe.
@@ -256,9 +264,9 @@ service cloud.firestore {
         allow read: if isChatMember(chatId);
 
         allow create: if isChatMember(chatId)
-          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio', 'sticker', 'bubble', 'call'])
+          && request.resource.data.keys().hasOnly(['senderId', 'type', 'text', 'createdAt', 'replyTo', 'deleted', 'media', 'audio', 'sticker', 'bubble', 'call', 'diet'])
           && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.type in ['text', 'image', 'video', 'audio', 'sticker', 'call']
+          && request.resource.data.type in ['text', 'image', 'video', 'audio', 'sticker', 'call', 'diet']
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 4000
           && request.resource.data.createdAt is timestamp
@@ -355,6 +363,88 @@ service cloud.firestore {
           allow delete: if isChatMember(chatId);
         }
       }
+    }
+  
+    // MARK: Diyet programları (Aşama 9)
+    // Program sahibinin; sahibi izin verdiği kişileri (`viewerIDs`, en çok 5) okuyucu yapar.
+    // Okuyucular kayıtları, notları görür; yorum ve değişiklik önerisi bırakabilir. Yalnızca sahibi yazar.
+    function dietProgram(programId) {
+      return get(/databases/$(database)/documents/dietPrograms/$(programId)).data;
+    }
+
+    function ownsDiet(programId) {
+      return signedIn() && dietProgram(programId).ownerID == request.auth.uid;
+    }
+
+    function canViewDiet(programId) {
+      let program = dietProgram(programId);
+      return signedIn() && (program.ownerID == request.auth.uid || request.auth.uid in program.get('viewerIDs', []));
+    }
+
+    match /dietPrograms/{programId} {
+      allow read: if signedIn()
+        && (resource.data.ownerID == request.auth.uid || request.auth.uid in resource.data.get('viewerIDs', []));
+      allow create: if signedIn()
+        && request.resource.data.ownerID == request.auth.uid
+        && request.resource.data.id == programId
+        && request.resource.data.viewerIDs is list
+        && request.resource.data.viewerIDs.size() <= 5
+        && !(request.auth.uid in request.resource.data.viewerIDs);
+      allow update: if signedIn()
+        && resource.data.ownerID == request.auth.uid
+        && request.resource.data.ownerID == request.auth.uid
+        && request.resource.data.id == programId
+        && request.resource.data.viewerIDs is list
+        && request.resource.data.viewerIDs.size() <= 5;
+      allow delete: if signedIn() && resource.data.ownerID == request.auth.uid;
+
+      match /logs/{logId} {
+        allow read: if canViewDiet(programId);
+        allow write: if ownsDiet(programId);
+      }
+
+      match /notes/{dayKey} {
+        allow read: if canViewDiet(programId);
+        allow write: if ownsDiet(programId);
+      }
+
+      match /comments/{commentId} {
+        allow read: if canViewDiet(programId);
+        allow create: if canViewDiet(programId)
+          && request.resource.data.authorID == request.auth.uid
+          && request.resource.data.programID == programId
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000;
+        allow delete: if signedIn() && (resource.data.authorID == request.auth.uid || ownsDiet(programId));
+      }
+
+      match /suggestions/{suggestionId} {
+        allow read: if canViewDiet(programId);
+        allow create: if canViewDiet(programId)
+          && request.resource.data.authorID == request.auth.uid
+          && request.resource.data.programID == programId
+          && request.resource.data.status == 'pending';
+        allow update: if ownsDiet(programId)
+          && onlyChanges(['status', 'decidedAt'])
+          && request.resource.data.status in ['accepted', 'rejected'];
+        allow delete: if signedIn() && (resource.data.authorID == request.auth.uid || ownsDiet(programId));
+      }
+    }
+
+    // Sohbetten gönderilen program: gönderen ve alıcı okur; yalnızca alıcı kabul/ret yazar.
+    match /dietOffers/{offerId} {
+      allow read: if signedIn() && (resource.data.fromID == request.auth.uid || resource.data.toID == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.fromID == request.auth.uid
+        && request.resource.data.id == offerId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.toID is string
+        && sharesChatWith(request.resource.data.toID);
+      allow update: if signedIn()
+        && resource.data.toID == request.auth.uid
+        && onlyChanges(['status', 'acceptedProgramID', 'decidedAt'])
+        && request.resource.data.status in ['accepted', 'declined'];
+      allow delete: if signedIn() && (resource.data.fromID == request.auth.uid || resource.data.toID == request.auth.uid);
     }
   }
 }

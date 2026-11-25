@@ -8,7 +8,7 @@
 //   PUT    /v1/mpu?p=&uploadId=&part=<n>     parça yükle → {partNumber, etag}
 //   POST   /v1/mpu/complete?p=&uploadId=     bitir (gövde: {parts})
 //   DELETE /v1/mpu?p=&uploadId=              iptal
-//   DELETE /v1/prefix?p=<klasör/>            klasörü sil (hesap silme, stil silme)
+//   DELETE /v1/prefix?p=<klasör/>            klasörü sil (hesap silme, stil silme, diyet programı silme)
 //   POST   /v1/ack?p=<orijal yolu>           alıcı orijali cihazına aldı (temizlik buna bakar)
 //   GET    /v1/usage                         depolama özeti
 //   POST   /v1/cleanup                       temizliği hemen çalıştır
@@ -54,10 +54,30 @@ async function chatMember(env, deps, token, uid, chatId) {
   return value;
 }
 
+/** Diyet programına erişim: Firestore kuralları okumayı sahibine ve `viewerIDs`'e açar. */
+async function dietProgramAccess(env, deps, token, uid, programId) {
+  if (!/^[A-Za-z0-9_.-]{1,128}$/.test(programId)) return { read: false, owner: false };
+  const key = `diet|${uid}|${programId}`;
+  const cached = membershipCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  const url = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/dietPrograms/${encodeURIComponent(programId)}?mask.fieldPaths=ownerID&mask.fieldPaths=viewerIDs`;
+  const response = await deps.fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  let value = { read: false, owner: false };
+  if (response.ok) {
+    const body = await response.json();
+    const owner = body?.fields?.ownerID?.stringValue;
+    const viewers = body?.fields?.viewerIDs?.arrayValue?.values?.map((v) => v.stringValue) || [];
+    value = { read: owner === uid || viewers.includes(uid), owner: owner === uid };
+  }
+  if (value.read) membershipCache.set(key, { value, expires: Date.now() + MEMBERSHIP_TTL });
+  return value;
+}
+
 function contextFor(env, deps, token, uid) {
   return {
     isMember: (chatId) => chatMember(env, deps, token, uid, chatId),
     sharesChat: (other) => chatMember(env, deps, token, uid, chatIdFor(uid, other)),
+    dietAccess: (programId) => dietProgramAccess(env, deps, token, uid, programId),
   };
 }
 
@@ -306,7 +326,21 @@ export async function handle(request, env, deps = defaultDeps) {
   if (path === '/v1/prefix' && method === 'DELETE') {
     const prefix = parsePrefix(key);
     if (!prefix) return fail(400, 'Geçersiz klasör');
-    const allowed = prefix.kind === 'owner' ? prefix.owner === uid : await ctx.isMember(prefix.chatId);
+    let allowed;
+    if (prefix.kind === 'owner') allowed = prefix.owner === uid;
+    else if (prefix.kind === 'diet') {
+      // Program silindikten sonra da sahibi fotoğrafları temizleyebilsin: belge yoksa dosya sahibine bakılır.
+      const access = await ctx.dietAccess(prefix.programId);
+      if (access.owner) allowed = true;
+      else {
+        const objects = await listAll(env, key);
+        allowed = objects.length > 0;
+        for (const o of objects.slice(0, 50)) {
+          const head = await env.BUCKET.head(o.key);
+          if (head?.customMetadata?.senderId !== uid) { allowed = false; break; }
+        }
+      }
+    } else allowed = await ctx.isMember(prefix.chatId);
     if (!allowed) return fail(403, 'İzin yok');
     const objects = await listAll(env, key);
     const keys = objects.map((o) => o.key);

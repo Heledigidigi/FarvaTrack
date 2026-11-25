@@ -92,6 +92,8 @@ struct ChatBubbleView: View {
 
             if let call = message.call, !message.deleted {
                 callRow(call)
+            } else if let diet = message.diet, !message.deleted {
+                DietChatCard(info: diet, isMine: item.isMine)
             } else if isBorderlessMedia, let media = message.media {
                 ChatMediaBubbleContent(
                     item: item, media: media,

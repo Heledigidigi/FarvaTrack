@@ -55,6 +55,8 @@ final class ChatMessageRecord {
     var bubbleData: Data?
     /// `ChatCallInfo` JSON'u (8H, arama satırı).
     var callData: Data?
+    /// `ChatDietInfo` JSON'u (Aşama 9, diyet programı kartı).
+    var dietData: Data?
     /// Alıcı cihaz: orijal indirildi ve sunucuya "aldım" denildi (bulut temizliği buna bakar).
     var originalAcked: Bool = false
     /// Alıcı cihaz: otomatik Fotoğraflar'a kaydetme denendi (bir kez).
@@ -91,6 +93,7 @@ final class ChatMessageRecord {
         self.stickerData = dto.sticker.flatMap { try? JSONEncoder().encode($0) }
         self.bubbleData = dto.bubble.flatMap { try? JSONEncoder().encode($0) }
         self.callData = dto.call.flatMap { try? JSONEncoder().encode($0) }
+        self.dietData = dto.diet.flatMap { try? JSONEncoder().encode($0) }
     }
 
     static func key(ownerID: String, messageID: String) -> String { "\(ownerID)|\(messageID)" }
@@ -127,6 +130,11 @@ final class ChatMessageRecord {
         set { callData = newValue.flatMap { try? JSONEncoder().encode($0) } }
     }
 
+    var diet: ChatDietInfo? {
+        get { dietData.flatMap { try? JSONDecoder().decode(ChatDietInfo.self, from: $0) } }
+        set { dietData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+
     var bubble: ChatBubbleRef? {
         get { bubbleData.flatMap { try? JSONDecoder().decode(ChatBubbleRef.self, from: $0) } }
         set { bubbleData = newValue.flatMap { try? JSONEncoder().encode($0) } }
@@ -151,7 +159,7 @@ final class ChatMessageRecord {
         ChatMessageDTO(
             id: messageID, senderID: senderID, type: type, text: text, createdAt: createdAt,
             readAt: readAt, replyTo: replyTo, reactions: reactions, editedAt: editedAt,
-            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker, bubble: bubble, call: call,
+            deleted: deletedForEveryone, media: media, audio: audio, listenedAt: listenedAt, sticker: sticker, bubble: bubble, call: call, diet: diet,
             deliveredAt: deliveredAt
         )
     }
@@ -174,6 +182,7 @@ final class ChatMessageRecord {
         sticker = dto.sticker
         bubble = dto.bubble
         call = dto.call
+        diet = dto.diet
         applyReply(dto.replyTo)
     }
 

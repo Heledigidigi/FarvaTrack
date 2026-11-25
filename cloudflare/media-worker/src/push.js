@@ -19,6 +19,7 @@ export function notificationBody(message) {
     return text.length > MAX_BODY ? `${text.slice(0, MAX_BODY - 1)}…` : text;
   }
   if (message.type === 'call') return callSummary(message.call);
+  if (message.type === 'diet') return `📋 Diyet programı: ${String(message.diet?.name || '').slice(0, 60)}`;
   const placeholder = PLACEHOLDERS[message.type] || 'Yeni mesaj';
   const caption = String(message.text || '').trim();
   return caption ? `${placeholder}: ${caption.slice(0, 80)}` : placeholder;

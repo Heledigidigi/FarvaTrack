@@ -27,6 +27,8 @@ enum ChatLimits {
 /// tanınmayan bir tür gelirse uygulama çökmez, `.unknown` olarak gösterilir.
 enum ChatMessageType: String, Codable, CaseIterable {
     case text, image, video, audio, sticker, call
+    /// Sohbette gönderilen diyet programı kartı (Aşama 9).
+    case diet
     case unknown
 
     init(rawOrUnknown raw: String) {
@@ -47,6 +49,7 @@ enum ChatMessageType: String, Codable, CaseIterable {
         case .audio: return "🎤 Sesli mesaj"
         case .sticker: return "Sticker"
         case .call: return "📞 Arama"
+        case .diet: return "📋 Diyet programı"
         case .unknown: return "Bu mesaj türü bu sürümde gösterilemiyor"
         }
     }
@@ -100,6 +103,8 @@ struct ChatMessageDTO: Equatable, Identifiable {
     var bubble: ChatBubbleRef?
     /// Arama satırı (8H): süre ve sonuç.
     var call: ChatCallInfo?
+    /// Diyet programı kartı (Aşama 9).
+    var diet: ChatDietInfo?
     /// Firestore'un yerel (henüz sunucuya ulaşmamış) yazımı mı; sunucuya yazılmaz.
     var hasPendingWrites: Bool = false
 
@@ -120,6 +125,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         sticker: ChatSticker? = nil,
         bubble: ChatBubbleRef? = nil,
         call: ChatCallInfo? = nil,
+        diet: ChatDietInfo? = nil,
         deliveredAt: Date? = nil,
         hasPendingWrites: Bool = false
     ) {
@@ -139,6 +145,7 @@ struct ChatMessageDTO: Equatable, Identifiable {
         self.sticker = sticker
         self.bubble = bubble
         self.call = call
+        self.diet = diet
         self.deliveredAt = deliveredAt
         self.hasPendingWrites = hasPendingWrites
     }

@@ -221,3 +221,27 @@ test('bildirim: geçersiz belirteç silinir; servis hesabı yoksa sessizce atlan
   const none = await (await notifyCall('a', { chatId: 'a_b', messageId: 'm1' }, { ...d, googleToken: async () => null })).json();
   assert.equal(none.reason, 'not_configured');
 });
+
+test('diyet fotoğrafı: sahibi yükler, izinli kişi indirir, yabancı erişemez', async () => {
+  const programs = new Map([['P1', { owner: 'a', viewers: ['b'] }]]);
+  deps.fetch = async (url, init) => {
+    const uid = init.headers.Authorization.replace('Bearer ', '');
+    const id = decodeURIComponent(url.match(/dietPrograms\/([^?]+)/)[1]);
+    const program = programs.get(id);
+    if (!program || (program.owner !== uid && !program.viewers.includes(uid))) return new Response('{}', { status: 403 });
+    return new Response(JSON.stringify({ fields: {
+      ownerID: { stringValue: program.owner },
+      viewerIDs: { arrayValue: { values: program.viewers.map((v) => ({ stringValue: v })) } },
+    } }));
+  };
+  const path = '/v1/o?p=diet/P1/0a1b2c3d-photo.jpg';
+  assert.equal((await call('PUT', path, { uid: 'b', body: bytes(10), headers: { 'content-type': 'image/jpeg' } })).status, 403);
+  assert.equal((await call('PUT', path, { uid: 'a', body: bytes(10), headers: { 'content-type': 'image/png' } })).status, 415);
+  assert.equal((await call('PUT', path, { uid: 'a', body: bytes(10), headers: { 'content-type': 'image/jpeg' } })).status, 200);
+  assert.equal((await call('GET', path, { uid: 'b' })).status, 200);
+  assert.equal((await call('GET', path, { uid: 'c' })).status, 403);
+  assert.equal((await call('DELETE', '/v1/prefix?p=diet/P1/', { uid: 'b' })).status, 403);
+  const removed = await call('DELETE', '/v1/prefix?p=diet/P1/', { uid: 'a' });
+  assert.equal(removed.status, 200);
+  assert.equal((await removed.json()).deleted, 1);
+});

@@ -26,6 +26,10 @@ export function parsePath(path) {
   if (parts.length === 5 && parts[0] === 'users' && parts[2] === 'bubbles' && PNG_NAME.test(parts[4])) {
     return { kind: 'bubble', owner: parts[1], styleId: parts[3], file: parts[4] };
   }
+  // diet/{programId}/{ad}.jpg: öğün fotoğrafı (Aşama 9)
+  if (parts.length === 3 && parts[0] === 'diet' && /^[a-z0-9-]{8,64}\.jpg$/.test(parts[2])) {
+    return { kind: 'diet', programId: parts[1], file: parts[2] };
+  }
   // chats/{chatId}/media/{mesajId}/{dosya}
   if (parts.length === 5 && parts[0] === 'chats' && parts[2] === 'media') {
     const file = parts[4];
@@ -51,6 +55,7 @@ export function parsePrefix(prefix) {
   }
   if (parts.length === 4 && parts[0] === 'users' && parts[2] === 'bubbles') return { kind: 'owner', owner: parts[1] };
   if (parts.length === 2 && parts[0] === 'chats') return { kind: 'chat', chatId: parts[1] };
+  if (parts.length === 2 && parts[0] === 'diet') return { kind: 'diet', programId: parts[1] };
   return null;
 }
 
@@ -72,6 +77,7 @@ export function uploadLimit(parsed) {
     case 'profile': return { maxBytes: 5 * MB, type: /^image\/.+$/ };
     case 'sticker': return { maxBytes: 2 * MB, type: /^image\/png$/ };
     case 'bubble': return { maxBytes: 1 * MB, type: /^image\/png$/ };
+    case 'diet': return { maxBytes: 5 * MB, type: /^image\/jpeg$/ };
     case 'chat':
       switch (parsed.media) {
         case 'thumb': return { maxBytes: 2 * MB, type: /^image\/jpeg$/ };
@@ -85,9 +91,10 @@ export function uploadLimit(parsed) {
 
 /**
  * İzin kararı. `isMember(chatId)` ve `sharesChat(otherUid)` Firestore'a soran (önbellekli) async yardımcılar.
+ * `dietAccess(programId)` → { read, owner }: programı sahibi ve izin verdiği kişiler (viewerIDs) okur, yalnızca sahibi yazar.
  * op: 'read' | 'write' | 'delete'. `existingSender`: üzerine yazılan dosyanın göndereni (yoksa null).
  */
-export async function authorize({ op, parsed, uid, isMember, sharesChat, existingSender = null }) {
+export async function authorize({ op, parsed, uid, isMember, sharesChat, dietAccess, existingSender = null }) {
   if (!uid || !parsed) return false;
   switch (parsed.kind) {
     case 'profile':
@@ -98,6 +105,13 @@ export async function authorize({ op, parsed, uid, isMember, sharesChat, existin
     case 'bubble':
       if (op === 'read') return parsed.owner === uid || (await sharesChat(parsed.owner));
       return parsed.owner === uid;
+    case 'diet': {
+      if (!dietAccess) return false;
+      const access = await dietAccess(parsed.programId);
+      if (op === 'read') return access.read;
+      if (op === 'write' && existingSender && existingSender !== uid) return false;
+      return access.owner;
+    }
     case 'chat': {
       if (!chatIdContains(parsed.chatId, uid)) return false;
       if (!(await isMember(parsed.chatId))) return false;

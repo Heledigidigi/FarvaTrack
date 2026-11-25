@@ -35,6 +35,10 @@ struct DataExport: Codable {
     var chatPlacements: [ChatPlacementExport]
     /// Kendi tasarladığım baloncuk stilleri (JSON).
     var bubbleStyles: [BubbleStyleExport]
+    /// Diyet programları, öğün kayıtları ve gün notları (fotoğraf dosyaları medya sunucusunda).
+    var dietPrograms: [DietProgram]?
+    var dietLogs: [DietMealLog]?
+    var dietNotes: [DietDayNote]?
 }
 
 @MainActor
@@ -42,6 +46,7 @@ enum DataExporter {
     static func makeExport(user: AppUser, context: ModelContext, now: Date = .now) throws -> DataExport {
         let owner = user.id
         func fetch<T: PersistentModel>(_ descriptor: FetchDescriptor<T>) throws -> [T] { try context.fetch(descriptor) }
+        let diet = try fetch(FetchDescriptor<DietRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.updatedAt)]))
 
         return DataExport(
             exportedAt: now,
@@ -64,7 +69,10 @@ enum DataExporter {
             chatMessages: try fetch(FetchDescriptor<ChatMessageRecord>(predicate: #Predicate { $0.ownerID == owner && !$0.hiddenForMe }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatMessageExport.init(record:)),
             stickers: try fetch(FetchDescriptor<StickerRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(\.dto),
             chatPlacements: try fetch(FetchDescriptor<ChatPlacementRecord>(predicate: #Predicate { $0.ownerID == owner }, sortBy: [SortDescriptor(\.createdAt)])).map(ChatPlacementExport.init(record:)),
-            bubbleStyles: try fetch(FetchDescriptor<BubbleStyleRecord>(predicate: #Predicate { $0.cacheOwnerID == owner && $0.styleOwnerID == owner }, sortBy: [SortDescriptor(\.updatedAt)])).map(BubbleStyleExport.init(record:))
+            bubbleStyles: try fetch(FetchDescriptor<BubbleStyleRecord>(predicate: #Predicate { $0.cacheOwnerID == owner && $0.styleOwnerID == owner }, sortBy: [SortDescriptor(\.updatedAt)])).map(BubbleStyleExport.init(record:)),
+            dietPrograms: diet.compactMap(\.program),
+            dietLogs: diet.compactMap(\.log),
+            dietNotes: diet.compactMap(\.note)
         )
     }
 

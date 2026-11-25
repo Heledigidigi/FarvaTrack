@@ -111,6 +111,7 @@ enum ChatField {
     static let sticker = "sticker"
     static let bubble = "bubble"
     static let call = "call"
+    static let diet = "diet"
     static let updatedAt = "updatedAt"
 
     static let messageId = "messageId"
@@ -566,6 +567,7 @@ enum ChatFirestoreMapper {
             sticker: ChatStickerFields.decode(data[ChatField.sticker]),
             bubble: ChatBubbleRefFields.decode(data[ChatField.bubble]),
             call: ChatCallFields.decode(data[ChatField.call]),
+            diet: ChatDietFields.decode(data[ChatField.diet]),
             deliveredAt: date(data[ChatField.deliveredAt]),
             hasPendingWrites: hasPendingWrites
         )
@@ -603,6 +605,9 @@ enum ChatFirestoreMapper {
         if let call = message.call {
             fields[ChatField.call] = ChatCallFields.encode(call)
         }
+        if let diet = message.diet {
+            fields[ChatField.diet] = ChatDietFields.encode(diet)
+        }
         return fields
     }
 
@@ -611,7 +616,7 @@ enum ChatFirestoreMapper {
             ChatField.messageId: message.id,
             ChatField.senderId: message.senderID,
             ChatField.type: message.type.rawValue,
-            ChatField.preview: ChatText.preview(message.call.map { CallFormat.summary($0, isMine: false) } ?? ChatText.summary(of: message), limit: ChatLimits.replyPreviewLength),
+            ChatField.preview: ChatText.preview(message.call.map { CallFormat.summary($0, isMine: false) } ?? message.diet.map { "📋 \($0.name)" } ?? ChatText.summary(of: message), limit: ChatLimits.replyPreviewLength),
             ChatField.createdAt: Timestamp(date: message.createdAt)
         ]
     }

@@ -5,7 +5,7 @@ import SwiftData
 @MainActor
 enum LocalDataCleaner {
     /// Bekleyen silme / gün kuyruklarının kapsamları (`pending<Scope>Deletes.<uid>`).
-    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library", "Template", "Program", "ManualStep", StickerLibraryViewModel.deletionScope, BubbleStyleStore.deletionScope]
+    static let pendingScopes = ["Workout", "Meal", "Water", "Sleep", "Weight", "Measurement", "Waste", "WasteDaily", "Library", "Template", "Program", "ManualStep", StickerLibraryViewModel.deletionScope, BubbleStyleStore.deletionScope, "DietProgram", "DietLog"]
 
     static func purge(ownerID: String, context: ModelContext, defaults: UserDefaults = .standard) throws {
         try delete(Workout.self, context: context) { $0.ownerID == ownerID }
@@ -25,6 +25,7 @@ enum LocalDataCleaner {
         try delete(ChatPendingOperation.self, context: context) { $0.ownerID == ownerID }
         try delete(ChatPlacementRecord.self, context: context) { $0.ownerID == ownerID }
         try delete(BubbleStyleRecord.self, context: context) { $0.cacheOwnerID == ownerID }
+        try delete(DietRecord.self, context: context) { $0.ownerID == ownerID }
         for sticker in try context.fetch(FetchDescriptor<StickerRecord>()) where sticker.ownerID == ownerID {
             StickerFiles.live.remove(sticker.id)
             context.delete(sticker)
@@ -47,6 +48,12 @@ enum LocalDataCleaner {
         BubbleFiles.live.removeAll()
         // Sohbet fotoğraf/videoları (gönderilmeyi bekleyenler ve indirilenler).
         ChatMediaFiles.live.removeAll()
+        // Diyet: öğün fotoğrafları ve alışveriş listesi işaretleri.
+        DietPhotoFiles.live.removeAll()
+        defaults.removeObject(forKey: "diet.pendingPhotos.\(ownerID)")
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("diet.shopping.") {
+            defaults.removeObject(forKey: key)
+        }
     }
 
     /// Nesneleri tek tek siler; böylece ilişkilerdeki `cascade` kuralı (antrenman → egzersizler) uygulanır.
