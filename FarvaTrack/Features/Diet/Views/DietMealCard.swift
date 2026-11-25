@@ -17,6 +17,11 @@ struct DietMealCard: View {
     @State private var showPhoto = false
 
     private var meal: DietMeal { snapshot.meal }
+
+    private var photoTitle: String {
+        guard let taken = log?.photoTakenAt else { return "\(meal.name) · \(meal.timeText)" }
+        return "\(meal.name) · \(taken.formatted(date: .omitted, time: .shortened))"
+    }
     private var log: DietMealLog? { snapshot.log }
     private var isOpen: Bool { expanded || (snapshot.status == nil && (isCurrent || !snapshot.isMissed)) }
 
@@ -55,7 +60,7 @@ struct DietMealCard: View {
         }
         .fullScreenCover(isPresented: $showPhoto) {
             if let path = log?.photoPath {
-                DietPhotoFullScreen(path: path, title: "\(meal.name) · \(log?.photoTakenAt.map { DietFormat.time(minutes: Calendar.current.component(.hour, from: $0) * 60 + Calendar.current.component(.minute, from: $0)) } ?? meal.timeText)")
+                DietPhotoFullScreen(path: path, title: photoTitle)
             }
         }
     }

@@ -213,16 +213,18 @@ struct DietBulkEditView: View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
             ForEach(basePlan.days.indices, id: \.self) { index in
                 let on = selectedDays.contains(index)
+                let isSource = operation == .copy && index == sourceDay
+                let ink: Color = on ? Color.white : (isSource ? Color.ftTextSecondary : Color.ftText)
                 Button("\(index + 1)") {
                     Haptics.selection()
                     if on { selectedDays.remove(index) } else { selectedDays.insert(index) }
                 }
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, minHeight: 34)
-                .foregroundStyle(on ? Color.white : (operation == .copy && index == sourceDay ? Color.ftTextSecondary : Color.ftText))
+                .foregroundStyle(ink)
                 .background(on ? Color.ftAccent : Color.ftSubtle(0.1), in: RoundedRectangle(cornerRadius: 8))
                 .buttonStyle(.plain)
-                .disabled(operation == .copy && index == sourceDay)
+                .disabled(isSource)
                 .accessibilityLabel("Gün \(index + 1)")
                 .accessibilityAddTraits(on ? .isSelected : [])
             }

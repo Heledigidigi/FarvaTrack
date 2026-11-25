@@ -333,10 +333,19 @@ struct DietReviewView: View {
                 .font(.caption).foregroundStyle(Color.ftTextSecondary)
             HStack(spacing: 8) {
                 tile(week.adherencePercent.map { "%\($0)" } ?? "—", "hafta uyumu", Color.ftSuccess)
-                tile(today.map { DietFormat.kcal($0.eaten.calories) } ?? "—", "/ \(today.map { DietFormat.kcal($0.planned.calories) } ?? "—") kcal", Color.ftText)
-                tile(weight.map { (($0.last - $0.first) >= 0 ? "+" : "") + DietFormat.number($0.last - $0.first) + " kg" } ?? "—", "programda", Color.ftText)
+                tile(todayEaten(today), "/ \(todayPlanned(today)) kcal", Color.ftText)
+                tile(weightText(weight), "programda", Color.ftText)
             }
         }
+    }
+
+    private func todayEaten(_ day: DietDaySummary?) -> String { day.map { DietFormat.kcal($0.eaten.calories) } ?? "—" }
+    private func todayPlanned(_ day: DietDaySummary?) -> String { day.map { DietFormat.kcal($0.planned.calories) } ?? "—" }
+
+    private func weightText(_ weight: (first: Double, last: Double)?) -> String {
+        guard let weight else { return "—" }
+        let change = weight.last - weight.first
+        return (change >= 0 ? "+" : "") + DietFormat.number(change) + " kg"
     }
 
     private func tile(_ value: String, _ label: String, _ color: Color) -> some View {

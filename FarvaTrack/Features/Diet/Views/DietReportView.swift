@@ -127,11 +127,22 @@ struct DietReportHeader: View {
             HStack(spacing: 8) {
                 kpi(summary.adherencePercent.map { "%\($0)" } ?? "—", "öğün uyumu (\(summary.followed)/\(summary.judged))", Color.ftSuccess)
                 kpi(DietFormat.kcal(summary.averageEaten.calories), "ort. kcal · plan \(DietFormat.kcal(planned.calories))", Color.ftText)
-                kpi(weight.map { (($0.last - $0.first) >= 0 ? "+" : "−") + DietFormat.number(abs($0.last - $0.first)) + " kg" } ?? "—",
-                    weight.map { "\(DietFormat.number($0.first)) → \(DietFormat.number($0.last)) kg" } ?? "kilo girilmedi", Color.ftText)
+                kpi(weightValue(weight), weightLabel(weight), Color.ftText)
                 kpi("\(summary.skipped) · \(summary.extraCount)", "atlanan · ekstra", Color.ftText)
             }
         }
+    }
+
+    private func weightValue(_ weight: (first: Double, last: Double)?) -> String {
+        guard let weight else { return "—" }
+        let change = weight.last - weight.first
+        let sign = change >= 0 ? "+" : "−"
+        return sign + DietFormat.number(abs(change)) + " kg"
+    }
+
+    private func weightLabel(_ weight: (first: Double, last: Double)?) -> String {
+        guard let weight else { return "kilo girilmedi" }
+        return "\(DietFormat.number(weight.first)) → \(DietFormat.number(weight.last)) kg"
     }
 
     private var dayRangeText: String {
@@ -212,12 +223,12 @@ struct DietReportCalendar: View {
             }
             if let day, inRange {
                 Text(DietFormat.kcal(day.eaten.calories)).font(.system(size: 10, weight: .bold).monospacedDigit())
-                    .foregroundStyle(day.eaten.calories > day.planned.calories * 1.1 ? Color.ftDanger : (day.eaten.calories < day.planned.calories * 0.85 && !day.isToday ? Color.ftWarning : Color.ftText))
+                    .foregroundStyle(kcalColor(day))
                 HStack(spacing: 2) {
                     ForEach(day.meals) { snapshot in
                         Circle()
                             .fill(snapshot.status == nil ? Color.clear : DietStatusChip.color(snapshot.status))
-                            .overlay(Circle().strokeBorder(snapshot.status == nil ? (snapshot.isMissed ? Color.ftDanger : Color.ftTextSecondary.opacity(0.5)) : .clear, lineWidth: 1))
+                            .overlay(Circle().strokeBorder(dotStroke(snapshot), lineWidth: 1))
                             .frame(width: 6, height: 6)
                     }
                 }
@@ -236,8 +247,8 @@ struct DietReportCalendar: View {
         .padding(4)
         .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
         .background(background(day: day, inRange: inRange), in: RoundedRectangle(cornerRadius: 7))
-        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(isSelected ? Color.ftText : (future && number != nil ? Color.ftCardBorder : .clear),
-                                                                 style: StrokeStyle(lineWidth: isSelected ? 2 : 1, dash: future && !isSelected ? [3] : [])))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(borderColor(isSelected: isSelected, future: future, planned: number != nil),
+                                                                 style: borderStyle(isSelected: isSelected, future: future)))
         if interactive && inRange {
             Button { onSelect(date) } label: { content }
                 .buttonStyle(.plain)
@@ -246,6 +257,29 @@ struct DietReportCalendar: View {
         } else {
             content
         }
+    }
+
+    private func borderColor(isSelected: Bool, future: Bool, planned: Bool) -> Color {
+        if isSelected { return Color.ftText }
+        return future && planned ? Color.ftCardBorder : .clear
+    }
+
+    private func borderStyle(isSelected: Bool, future: Bool) -> StrokeStyle {
+        let dash: [CGFloat] = future && !isSelected ? [3] : []
+        return StrokeStyle(lineWidth: isSelected ? 2 : 1, dash: dash)
+    }
+
+    private func dotStroke(_ snapshot: DietMealSnapshot) -> Color {
+        guard snapshot.status == nil else { return .clear }
+        return snapshot.isMissed ? Color.ftDanger : Color.ftTextSecondary.opacity(0.5)
+    }
+
+    private func kcalColor(_ day: DietDaySummary) -> Color {
+        let eaten = day.eaten.calories
+        let planned = day.planned.calories
+        if eaten > planned * 1.1 { return Color.ftDanger }
+        if !day.isToday, eaten < planned * 0.85 { return Color.ftWarning }
+        return Color.ftText
     }
 
     private func background(day: DietDaySummary?, inRange: Bool) -> Color {

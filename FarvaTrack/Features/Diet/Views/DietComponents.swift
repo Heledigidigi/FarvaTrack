@@ -394,7 +394,7 @@ struct DietCommentList: View {
                 HStack(alignment: .top, spacing: 6) {
                     Text(comment.authorID == store.userID ? "Sen:" : "\(comment.authorName):")
                         .font(.caption.weight(.bold)).foregroundStyle(Color.ftAccentLight)
-                    Text([comment.reaction, comment.text.isEmpty ? nil : comment.text].compactMap { $0 }.joined(separator: " "))
+                    Text(Self.body(of: comment))
                         .font(.caption).foregroundStyle(Color.ftText)
                     Spacer(minLength: 0)
                 }
@@ -427,6 +427,13 @@ struct DietCommentList: View {
                 }
             }
         }
+    }
+
+    static func body(of comment: DietComment) -> String {
+        var parts: [String] = []
+        if let reaction = comment.reaction { parts.append(reaction) }
+        if !comment.text.isEmpty { parts.append(comment.text) }
+        return parts.joined(separator: " ")
     }
 
     private func send() {

@@ -185,12 +185,21 @@ enum DietImport {
             ["1", "Akşam", "19:30", "Mercimek çorbası", "1", "kase", ""],
             ["2", "Kahvaltı", "08:00", "Omlet (2 yumurta)", "1", "porsiyon", ""]
         ]
-        let units = DietUnit.allCases.map { [$0.title, $0.shortTitle, $0.defaultGrams.map { DietFormat.number($0) + " g" } ?? "yiyeceğe göre"] }
-        let foodRows = foods.map { [$0.name, $0.servingLabel, DietFormat.kcal($0.calories)] }
-        let reference = [["Yiyecek", "1 porsiyon", "kcal", "", "Birim", "Kısa", "Yaklaşık"]]
-            + (0..<max(foodRows.count, units.count)).map { i in
-                (i < foodRows.count ? foodRows[i] : ["", "", ""]) + [""] + (i < units.count ? units[i] : ["", "", ""])
-            }
+        var units: [[String]] = []
+        for unit in DietUnit.allCases {
+            let grams: String = unit.defaultGrams.map { DietFormat.number($0) + " g" } ?? "yiyeceğe göre"
+            units.append([unit.title, unit.shortTitle, grams])
+        }
+        var foodRows: [[String]] = []
+        for food in foods { foodRows.append([food.name, food.servingLabel, DietFormat.kcal(food.calories)]) }
+        var reference: [[String]] = [["Yiyecek", "1 porsiyon", "kcal", "", "Birim", "Kısa", "Yaklaşık"]]
+        let empty = ["", "", ""]
+        for i in 0..<max(foodRows.count, units.count) {
+            var row: [String] = i < foodRows.count ? foodRows[i] : empty
+            row.append("")
+            row.append(contentsOf: i < units.count ? units[i] : empty)
+            reference.append(row)
+        }
         return XLSX.write(sheets: [
             XLSX.Sheet(name: "Program", rows: [header] + sample),
             XLSX.Sheet(name: "Yiyecekler ve birimler", rows: reference)

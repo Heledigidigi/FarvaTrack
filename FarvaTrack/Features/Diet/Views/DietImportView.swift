@@ -215,6 +215,10 @@ struct DietImportView: View {
         let isCycle = offset >= count
         let selected = !selectingStart && programDay == previewDay && !isCycle
         let issue = programDay.map { draft.hasOpenIssue(day: $0) } ?? false
+        let textColor: Color = isStart ? Color.white : (inRange ? Color.ftText : Color.ftTextSecondary)
+        let rangeFill: Color = Color.ftAccent.opacity(isCycle ? 0.08 : 0.2)
+        let background: Color = isStart ? Color.ftAccent : (inRange ? rangeFill : Color.clear)
+        let dotColor: Color = issue ? (isStart ? Color.white : Color.ftWarning) : Color.clear
         return Button {
             Haptics.selection()
             if selectingStart {
@@ -227,12 +231,11 @@ struct DietImportView: View {
         } label: {
             VStack(spacing: 2) {
                 Text("\(calendar.component(.day, from: date))").font(.subheadline.weight(isStart || selected ? .bold : .regular))
-                Circle().fill(issue ? (isStart ? Color.white : Color.ftWarning) : Color.clear).frame(width: 5, height: 5)
+                Circle().fill(dotColor).frame(width: 5, height: 5)
             }
             .frame(maxWidth: .infinity, minHeight: 40)
-            .foregroundStyle(isStart ? Color.white : (inRange ? Color.ftText : Color.ftTextSecondary))
-            .background(isStart ? Color.ftAccent : (inRange ? Color.ftAccent.opacity(isCycle ? 0.08 : 0.2) : Color.clear),
-                        in: RoundedRectangle(cornerRadius: 9))
+            .foregroundStyle(textColor)
+            .background(background, in: RoundedRectangle(cornerRadius: 9))
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(selected ? Color.ftText : .clear, lineWidth: 2))
             .overlay(alignment: .bottom) {
                 if calendar.isDateInToday(date) { Rectangle().fill(Color.ftText).frame(width: 12, height: 1).offset(y: -4) }
