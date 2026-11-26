@@ -350,7 +350,8 @@ private struct UykuKayitSayfasi: View {
 
     private func hazirla() {
         guard taslaklar.isEmpty else { return }
-        let gunKayitlari = (try? context.fetch(FetchDescriptor<SleepEntry>(predicate: #Predicate { $0.ownerID == ownerID }))) ?? []
+        let sahip = ownerID
+        let gunKayitlari = (try? context.fetch(FetchDescriptor<SleepEntry>(predicate: #Predicate { $0.ownerID == sahip }))) ?? []
         let g = GunUykusu.grupla(gunKayitlari, gun: gun)
         let dk: (Date) -> Int = { SleepAnalyzer.minutesOfDay($0) }
         if let gece = g.gece {

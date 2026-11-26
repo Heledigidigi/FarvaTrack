@@ -101,7 +101,8 @@ private struct SuIcerigi: View {
     var body: some View {
         let toplam = bugunkuler.reduce(0) { $0 + $1.amountMl }
         let hedef = viewModel.goalMl
-        let (tema, secenek) = SuMaskotu.tema(maskot, widgetTemasi: widgetTemasi)
+        let secim = SuMaskotu.tema(maskot, widgetTemasi: widgetTemasi)
+        let tema = secim.0, secenek = secim.1
 
         ScrollView {
             VStack(spacing: 0) {
