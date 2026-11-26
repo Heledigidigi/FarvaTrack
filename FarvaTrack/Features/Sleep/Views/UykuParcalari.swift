@@ -230,17 +230,24 @@ struct UykuKadrani: View {
     var boy: CGFloat = 290
 
     private func nokta(_ c: CGFloat, _ r: CGFloat, _ m: Int) -> CGPoint {
-        let a = (Double(m) / 1_440 * 360 - 90) * .pi / 180
-        return CGPoint(x: c + CGFloat(cos(a)) * r, y: c + CGFloat(sin(a)) * r)
+        let derece: Double = Double(m) / 1_440 * 360 - 90
+        let a: Double = derece * Double.pi / 180
+        let x: CGFloat = c + CGFloat(cos(a)) * r
+        let y: CGFloat = c + CGFloat(sin(a)) * r
+        return CGPoint(x: x, y: y)
     }
 
     private func yay(_ c: CGFloat, _ r: CGFloat, _ m1: Int, _ m2: Int, w: Double, tohum: Int) -> Path {
         let a1 = Double(m1) / 1_440 * 360
         let sp = Double(((m2 - m1) % 1_440 + 1_440) % 1_440) / 1_440 * 360
         let n = max(20, Int(sp))
-        let pts = (0...n).map { i -> CGPoint in
-            let a = (a1 + sp * Double(i) / Double(n) - 90) * .pi / 180
-            return CGPoint(x: c + CGFloat(cos(a)) * r, y: c + CGFloat(sin(a)) * r)
+        var pts: [CGPoint] = []
+        for i in 0...n {
+            let derece: Double = a1 + sp * Double(i) / Double(n) - 90
+            let a: Double = derece * Double.pi / 180
+            let x: CGFloat = c + CGFloat(cos(a)) * r
+            let y: CGFloat = c + CGFloat(sin(a)) * r
+            pts.append(CGPoint(x: x, y: y))
         }
         return Firca.cizgi(pts, Firca.Ayar(w: w, tohum: tohum, giris: 0.06, cikis: 0.12, basinc: 0.22))
     }
