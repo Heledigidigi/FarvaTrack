@@ -603,7 +603,8 @@ final class HillSkyRenderer: NSObject, MTKViewDelegate {
     }
 }
 
-/// Gökyüzü düşük çözünürlükte (görsel noktası başına 0,75 piksel), saniyede 30 kare çizilir; bulutlar yumuşak, pil dostu.
+/// Gökyüzü düşük çözünürlükte (görsel noktası başına 0,4 piksel), saniyede 20 kare çizilir; bulutlar yumuşak olduğundan
+/// fark edilmez, telefon kasmaz.
 private struct HillSkyView: UIViewRepresentable {
     let preset: HillSkyPreset
     let paused: Bool
@@ -618,8 +619,8 @@ private struct HillSkyView: UIViewRepresentable {
         view.colorPixelFormat = .bgra8Unorm
         view.framebufferOnly = true
         view.isOpaque = true
-        view.contentScaleFactor = 0.75
-        view.preferredFramesPerSecond = 30
+        view.contentScaleFactor = 0.4
+        view.preferredFramesPerSecond = 20
         view.isUserInteractionEnabled = false
         if let device = view.device {
             context.coordinator.renderer = HillSkyRenderer(device: device, preset: preset, format: view.colorPixelFormat)

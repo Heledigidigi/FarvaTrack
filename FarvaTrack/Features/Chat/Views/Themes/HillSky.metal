@@ -1,5 +1,5 @@
 // Tepedeki Kedi teması: gerçekçi, sıcak geçişli gökyüzü ve akan bulutlar (Aşama 10).
-// MTKView tam ekran üçgenle çizer; düşük çözünürlükte ve 30 fps (bulutlar yumuşak, pil dostu).
+// MTKView tam ekran üçgenle çizer; düşük çözünürlükte ve 20 fps (bulutlar yumuşak, telefonu yormaz).
 
 #include <metal_stdlib>
 using namespace metal;
@@ -45,7 +45,7 @@ static float hsFbm(float2 p, int octaves) {
 
 static float hsBillow(float2 p) {
     float v = 0, a = 0.5;
-    for (int i = 0; i < 4; i++) { v += a * abs(hsNoise(p) * 2.0 - 1.0); p = hsM * p; a *= 0.5; }
+    for (int i = 0; i < 3; i++) { v += a * abs(hsNoise(p) * 2.0 - 1.0); p = hsM * p; a *= 0.5; }
     return v;
 }
 
@@ -63,22 +63,21 @@ static float hsLayer(constant HillSkyUniforms &u, float2 q, float y, float k) {
     float persp = 1.0 / (0.9 - y);
     float sc = mix(3.2, 1.9, k);
     float2 cp = float2(q.x * sc * persp * 0.6 * u.stretch + u.time * mix(0.012, 0.026, k), persp * mix(2.8, 1.7, k));
-    float2 w = float2(hsFbm(cp * 0.6 + float2(0, u.time * 0.005), 4), hsFbm(cp * 0.6 + float2(5.2, 1.3) - u.time * 0.004, 4));
-    float d = hsFbm(cp + 1.7 * w + k * 7.3, 5);
+    float2 w = float2(hsFbm(cp * 0.6 + float2(0, u.time * 0.005), 3), hsFbm(cp * 0.6 + float2(5.2, 1.3) - u.time * 0.004, 3));
+    float d = hsFbm(cp + 1.7 * w + k * 7.3, 4);
     d += (0.5 - hsBillow(cp * 2.6 + w)) * 0.22 * u.puff;      // kabarık kenarlar
     return smoothstep(u.cover + (1.0 - k) * 0.04, u.cover + 0.26, d) * band;
 }
 
 static float3 hsShade(constant HillSkyUniforms &u, float2 q, float y, float k, float d, float ds, float2 toSun) {
+    // Güneşe doğru iki örnek: bulutun içinden geçen ışık azalır (hacim hissi).
     float acc = 0;
-    for (int i = 1; i <= 3; i++) { float2 o = toSun * 0.016 * float(i); acc += hsLayer(u, q + o, y + o.y, k); }
-    float sunL = exp(-acc * 0.75);
-    float up = hsLayer(u, q - float2(0, 0.014), y - 0.014, k);
-    float dn = hsLayer(u, q + float2(0, 0.014), y + 0.014, k);
-    float3 amb = mix(u.shade.rgb, hsGrad(u, y), 0.42) * (0.95 + 0.3 * (1.0 - up));
-    float det = hsFbm(float2(q.x * 12.0, y * 9.0) + float2(u.time * 0.015, 0), 3);
+    for (int i = 1; i <= 2; i++) { float2 o = toSun * 0.022 * float(i); acc += hsLayer(u, q + o, y + o.y, k); }
+    float sunL = exp(-acc * 1.1);
+    float3 amb = mix(u.shade.rgb, hsGrad(u, y), 0.42) * (0.95 + 0.3 * (1.0 - d));
+    float det = hsFbm(float2(q.x * 12.0, y * 9.0) + float2(u.time * 0.015, 0), 2);
     float3 c = amb * (0.86 + 0.28 * det) + u.lit.rgb * sunL * 1.15;
-    c += u.hor.rgb * (1.0 - dn) * 0.32;                         // alt kenarlara ufuktan sıcak ışık
+    c += u.hor.rgb * (1.0 - d) * 0.32;                          // ince kenarlara ufuktan sıcak ışık
     c += u.sunColor.rgb * exp(-ds * 5.0) * (1.0 - d) * 1.5 * u.glow;  // güneşe yakın gümüş kenar
     c += u.lit.rgb * pow(sunL, 6.0) * 0.25;
     return c;
@@ -103,10 +102,14 @@ fragment float4 hillSkyFragment(HillSkyVertexOut in [[stage_in]], constant HillS
         col += s * u.stars * smoothstep(0.38, 0.7, ds) * (1.0 - smoothstep(0.55, 0.7, y)) * (0.6 + 0.4 * sin(u.time * 2.0 + hsHash(g + 3.0) * 30.0));
     }
 
-    float ang = atan2(sd.y, sd.x);
-    float ray = hsFbm(float2(ang * 7.0, u.time * 0.04), 4) * hsFbm(float2(ang * 13.0 + 3.0, u.time * 0.03 + 2.0), 4);
+    // Işık huzmeleri yalnızca güneşin çevresinde hesaplanır.
+    float ray = 0;
+    if (ds < 0.75) {
+        float ang = atan2(sd.y, sd.x);
+        ray = hsFbm(float2(ang * 7.0, u.time * 0.04), 3) * hsFbm(float2(ang * 13.0 + 3.0, u.time * 0.03 + 2.0), 3);
+    }
 
-    float ci = hsFbm(float2(q.x * 3.0 + u.time * 0.004, y * 26.0) + hsFbm(q * 6.0, 4) * 1.4, 5);
+    float ci = hsFbm(float2(q.x * 3.0 + u.time * 0.004, y * 26.0) + hsFbm(q * 6.0, 3) * 1.4, 4);
     float cirr = smoothstep(0.55, 0.85, ci) * (1.0 - smoothstep(0.25, 0.6, y)) * u.cirrus;
     col = mix(col, mix(u.lit.rgb, float3(1.0), 0.25), cirr * 0.5);
 

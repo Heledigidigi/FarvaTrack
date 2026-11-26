@@ -43,9 +43,8 @@ struct VoiceMicButton: View {
                         onVoice(voice)
                     }
                 } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 34))
-                        .foregroundStyle(Color.ftAccentLight)
+                    ChatActionCircle { ChatSendGlyph().frame(width: 17, height: 17).offset(x: 1) }
+                        .padding(.bottom, 2)
                 }
                 .accessibilityLabel("Sesli mesajı gönder")
             } else {
@@ -64,13 +63,11 @@ struct VoiceMicButton: View {
 
     private var micBody: some View {
         let recording = recorder.phase == .recording
-        return Image(systemName: "mic.fill")
-            .font(.system(size: recording ? 26 : 22))
-            .foregroundStyle(recording ? .white : Color.ftAccentLight)
-            .frame(width: recording ? 56 : 36, height: recording ? 56 : 40)
-            .background {
-                if recording { Circle().fill(Color.ftAccent) }
-            }
+        // Boştayken gönder düğmesiyle aynı dolu yuvarlak; kayıtta büyür.
+        return ChatActionCircle(size: recording ? 56 : 34) {
+            Image(systemName: "mic.fill").font(.system(size: recording ? 24 : 16, weight: .semibold))
+        }
+            .padding(.bottom, recording ? 0 : 2)
             .offset(x: recording ? -CGFloat(recorder.cancelProgress) * 40 : 0)
             .contentShape(Rectangle())
             .gesture(

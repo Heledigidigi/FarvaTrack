@@ -879,7 +879,6 @@ struct ChatDayHeader: View {
                 if let look {
                     RoundedRectangle(cornerRadius: look.cornerRadius < 6 ? 2 : 12, style: .continuous)
                         .fill(look.dayBackground.color)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: look.cornerRadius < 6 ? 2 : 12, style: .continuous))
                 } else {
                     Capsule().fill(Color.ftCard)
                 }

@@ -44,22 +44,15 @@ struct ChatThemeBubbleBackground: View {
             }
         }
         .clipShape(shape)
-        .shadow(color: isMine && look.sunPalette != nil ? Color.black.opacity(0.12) : .clear, radius: 6, y: 2)
     }
 }
 
 // MARK: - Çubuklar
 
 extension ChatThemeLook {
-    /// Yazma alanı ve altındaki boşluk: buzlu cam + tema rengi.
-    @ViewBuilder
-    var chromeBackground: some View {
-        ZStack {
-            if chrome.a < 0.95 { Rectangle().fill(.ultraThinMaterial) }
-            chrome.color
-        }
-        .environment(\.colorScheme, colorScheme)
-    }
+    /// Yazma alanı ve altındaki boşluk: yarı saydam tema rengi. Buzlu cam kullanılmaz: animasyonlu duvar kâğıdının
+    /// üstünde her karede yeniden bulanıklaştırılır ve telefonu yorar.
+    var chromeBackground: some View { chrome.color }
 
     /// Sohbeti duvar kâğıdından ayıran ince çizgi.
     var separatorLine: some View {
@@ -73,5 +66,47 @@ struct ChatChromeBackground: View {
 
     var body: some View {
         if let look { look.chromeBackground } else { Color.ftChrome }
+    }
+}
+
+// MARK: - Yazma alanı düğmeleri (önizlemede tasarlanan simgeler; her temada ve varsayılanda)
+
+/// Gönder simgesi: sağa bakan kâğıt uçak (24 × 24 birimlik çizimden).
+struct ChatSendGlyph: Shape {
+    func path(in rect: CGRect) -> Path {
+        let s = min(rect.width, rect.height) / 24
+        let o = CGPoint(x: rect.midX - 12 * s, y: rect.midY - 12 * s)
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: o.x + x * s, y: o.y + y * s) }
+        var path = Path()
+        path.move(to: p(3.4, 20.4))
+        path.addLine(to: p(20.8, 12.9))
+        path.addQuadCurve(to: p(20.8, 11.1), control: p(21.7, 12))
+        path.addLine(to: p(3.4, 3.6))
+        path.addQuadCurve(to: p(2.1, 4.6), control: p(2.0, 3.6))
+        path.addLine(to: p(3.9, 11.0))
+        path.addLine(to: p(12.0, 12.0))
+        path.addLine(to: p(3.9, 13.0))
+        path.addLine(to: p(2.1, 19.4))
+        path.addQuadCurve(to: p(3.4, 20.4), control: p(2.0, 20.4))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// Yazma alanının sağındaki dolu yuvarlak düğme (mikrofon / gönder). Tema varsa temanın rengi ve köşesi.
+struct ChatActionCircle<Glyph: View>: View {
+    var size: CGFloat = 34
+    var enabled = true
+    @ViewBuilder var glyph: () -> Glyph
+    @Environment(\.chatThemeLook) private var look
+
+    var body: some View {
+        let corner: CGFloat = (look?.cornerRadius ?? 18) < 6 ? 3 : size / 2
+        glyph()
+            .foregroundStyle(look?.sendText.color ?? .white)
+            .frame(width: size, height: size)
+            .background(look?.send.style ?? AnyShapeStyle(Color.ftAccent),
+                        in: RoundedRectangle(cornerRadius: corner, style: .continuous))
+            .opacity(enabled ? 1 : 0.45)
     }
 }

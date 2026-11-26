@@ -168,7 +168,8 @@ struct ChatThemeLook: Equatable {
     var tailRadius: CGFloat = 6
     /// Piksel temasında baloncuğun altındaki blok gölgesi (0 = yok).
     var blockShade: Double = 0
-    var incomingBlur: Bool = true
+    /// Gelen baloncuğun arkasında buzlu cam. Animasyonlu zeminde her karede yeniden bulanıklaştırıldığı için kapalı.
+    var incomingBlur: Bool = false
     /// Tepedeki Kedi: baloncuk rengi güneşe uzaklığa göre (bkz. `ChatThemeSun`).
     var sunPalette: ChatThemeSunPalette?
 
@@ -190,14 +191,14 @@ struct ChatThemeLook: Equatable {
     // Önizlemede onaylanan değerler.
     static let rainbow = ChatThemeLook(
         colorScheme: .light,
-        chrome: .rgb(255, 240, 248, 0.66), chromeText: ThemeRGBA(hex: "#5B2C55"), secondaryText: ThemeRGBA(hex: "#A0569A"),
+        chrome: .rgb(255, 240, 248, 0.84), chromeText: ThemeRGBA(hex: "#5B2C55"), secondaryText: ThemeRGBA(hex: "#A0569A"),
         icon: ThemeRGBA(hex: "#C2569A"),
         separator: .gradient(["#FFADC9", "#FFD2A6", "#FFF3A8", "#BFF0C0", "#A6E6FF", "#C4B5FF", "#FFBDF2"].map { ThemeRGBA(hex: $0) }, width: 1.5),
-        dayBackground: .rgb(255, 255, 255, 0.55), dayText: ThemeRGBA(hex: "#8A3F7C"),
+        dayBackground: .rgb(255, 255, 255, 0.72), dayText: ThemeRGBA(hex: "#8A3F7C"),
         field: .rgb(255, 255, 255, 0.8), fieldText: ThemeRGBA(hex: "#B0809F"),
         send: .gradient([ThemeRGBA(hex: "#FF8FC6"), ThemeRGBA(hex: "#A98CFF")]), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#FF8FC6"), ThemeRGBA(hex: "#C58CFF"), ThemeRGBA(hex: "#8FB6FF")]), outgoingText: .rgb(255, 255, 255),
-        incoming: .solid(.rgb(255, 255, 255, 0.8)), incomingText: ThemeRGBA(hex: "#4D2448")
+        incoming: .solid(.rgb(255, 255, 255, 0.88)), incomingText: ThemeRGBA(hex: "#4D2448")
     )
 
     static let pixelDay = ChatThemeLook(
@@ -210,7 +211,7 @@ struct ChatThemeLook: Equatable {
         send: .solid(ThemeRGBA(hex: "#5F9B37")), sendText: .rgb(255, 255, 255),
         outgoing: .solid(ThemeRGBA(hex: "#5F9B37")), outgoingText: .rgb(255, 255, 255),
         incoming: .solid(ThemeRGBA(hex: "#EFE8D4")), incomingText: ThemeRGBA(hex: "#2F2A1E"),
-        cornerRadius: 3, tailRadius: 3, blockShade: 0.14, incomingBlur: false
+        cornerRadius: 3, tailRadius: 3, blockShade: 0.14
     )
 
     static let pixelNight = ChatThemeLook(
@@ -223,15 +224,15 @@ struct ChatThemeLook: Equatable {
         send: .solid(ThemeRGBA(hex: "#3E5FAE")), sendText: .rgb(255, 255, 255),
         outgoing: .solid(ThemeRGBA(hex: "#3E5FAE")), outgoingText: .rgb(255, 255, 255),
         incoming: .solid(ThemeRGBA(hex: "#2A3150")), incomingText: ThemeRGBA(hex: "#E6EAFF"),
-        cornerRadius: 3, tailRadius: 3, blockShade: 0.25, incomingBlur: false
+        cornerRadius: 3, tailRadius: 3, blockShade: 0.25
     )
 
     static let hillGolden = ChatThemeLook(
         colorScheme: .light,
-        chrome: .rgb(255, 240, 222, 0.66), chromeText: ThemeRGBA(hex: "#3E2A24"), secondaryText: ThemeRGBA(hex: "#9A6A52"),
+        chrome: .rgb(255, 240, 222, 0.86), chromeText: ThemeRGBA(hex: "#3E2A24"), secondaryText: ThemeRGBA(hex: "#9A6A52"),
         icon: ThemeRGBA(hex: "#B8642E"),
         separator: .color(.rgb(255, 255, 255, 0.45), width: 1),
-        dayBackground: .rgb(255, 236, 214, 0.6), dayText: ThemeRGBA(hex: "#7A4A33"),
+        dayBackground: .rgb(255, 236, 214, 0.78), dayText: ThemeRGBA(hex: "#7A4A33"),
         field: .rgb(255, 250, 244, 0.85), fieldText: ThemeRGBA(hex: "#B0907E"),
         send: .solid(ThemeRGBA(hex: "#C9683F")), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#E5935A"), ThemeRGBA(hex: "#C9683F")]), outgoingText: .rgb(255, 255, 255),
@@ -241,10 +242,10 @@ struct ChatThemeLook: Equatable {
 
     static let hillRose = ChatThemeLook(
         colorScheme: .dark,
-        chrome: .rgb(52, 40, 86, 0.6), chromeText: ThemeRGBA(hex: "#FBEAF3"), secondaryText: ThemeRGBA(hex: "#E8B6D6"),
+        chrome: .rgb(52, 40, 86, 0.86), chromeText: ThemeRGBA(hex: "#FBEAF3"), secondaryText: ThemeRGBA(hex: "#E8B6D6"),
         icon: ThemeRGBA(hex: "#FFB8D0"),
         separator: .color(.rgb(255, 255, 255, 0.14), width: 1),
-        dayBackground: .rgb(60, 46, 96, 0.55), dayText: ThemeRGBA(hex: "#F6D9EA"),
+        dayBackground: .rgb(60, 46, 96, 0.78), dayText: ThemeRGBA(hex: "#F6D9EA"),
         field: .rgb(40, 30, 70, 0.6), fieldText: ThemeRGBA(hex: "#BBA6CF"),
         send: .gradient([ThemeRGBA(hex: "#F29AB9"), ThemeRGBA(hex: "#B178E0")]), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#E889AD"), ThemeRGBA(hex: "#A56AD0")]), outgoingText: .rgb(255, 255, 255),
@@ -254,10 +255,10 @@ struct ChatThemeLook: Equatable {
 
     static let hillFire = ChatThemeLook(
         colorScheme: .dark,
-        chrome: .rgb(66, 30, 40, 0.58), chromeText: ThemeRGBA(hex: "#FFF0E2"), secondaryText: ThemeRGBA(hex: "#F6C3A0"),
+        chrome: .rgb(66, 30, 40, 0.86), chromeText: ThemeRGBA(hex: "#FFF0E2"), secondaryText: ThemeRGBA(hex: "#F6C3A0"),
         icon: ThemeRGBA(hex: "#FFB47A"),
         separator: .color(.rgb(255, 200, 160, 0.18), width: 1),
-        dayBackground: .rgb(80, 34, 44, 0.55), dayText: ThemeRGBA(hex: "#FFE1C8"),
+        dayBackground: .rgb(80, 34, 44, 0.78), dayText: ThemeRGBA(hex: "#FFE1C8"),
         field: .rgb(56, 24, 34, 0.6), fieldText: ThemeRGBA(hex: "#D6A68C"),
         send: .gradient([ThemeRGBA(hex: "#FFA75A"), ThemeRGBA(hex: "#E0503A")]), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#FF9A4D"), ThemeRGBA(hex: "#D9443A")]), outgoingText: .rgb(255, 255, 255),
@@ -282,11 +283,11 @@ struct ChatThemeSunPalette: Equatable {
     static let rose = ChatThemeSunPalette(
         outgoingNear: [ThemeRGBA(hex: "#F8ACC6"), ThemeRGBA(hex: "#DC90D2")],
         outgoingFar: [ThemeRGBA(hex: "#C46A9C"), ThemeRGBA(hex: "#875ABD")],
-        incomingNear: .rgb(98, 78, 138, 0.72), incomingFar: .rgb(42, 32, 78, 0.8))
+        incomingNear: .rgb(98, 78, 138, 0.86), incomingFar: .rgb(42, 32, 78, 0.9))
     static let fire = ChatThemeSunPalette(
         outgoingNear: [ThemeRGBA(hex: "#FFBE6A"), ThemeRGBA(hex: "#F4814A")],
         outgoingFar: [ThemeRGBA(hex: "#DC5C3C"), ThemeRGBA(hex: "#A12F39")],
-        incomingNear: .rgb(118, 56, 60, 0.72), incomingFar: .rgb(56, 22, 34, 0.82))
+        incomingNear: .rgb(118, 56, 60, 0.86), incomingFar: .rgb(56, 22, 34, 0.9))
 
     func outgoing(_ t: Double) -> [ThemeRGBA] {
         zip(outgoingNear, outgoingFar).map { $0.mixed(with: $1, t) }

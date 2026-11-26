@@ -518,6 +518,8 @@ struct ChatComposer: View {
     /// Düğme rengi: tema varsa temanın simge rengi.
     private var iconColor: Color { look?.icon.color ?? Color.ftAccentLight }
 
+    private var isDraftEmpty: Bool { viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
     var body: some View {
         VStack(spacing: 6) {
             if let reply = viewModel.replyingTo {
@@ -534,81 +536,80 @@ struct ChatComposer: View {
                 contextBar(icon: "pencil", title: "Mesajı düzenle", text: editing.message.text)
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
+            // Önizlemede tasarlanan düzen: [+ galeri] [yazı] [sticker] [kamera] [mikrofon ↔ gönder].
+            HStack(alignment: .bottom, spacing: 6) {
                 if let recorder, recorder.isActive {
                     // Kayıt sürerken yazı alanının yerinde süre ve canlı dalga formu.
                     VoiceRecordingBar(recorder: recorder)
                 } else {
-                if viewModel.editing == nil {
-                    Button(action: onGallery) {
-                        Image(systemName: activePanel == .gallery ? "keyboard" : "photo.on.rectangle.angled")
-                            .font(.system(size: 22))
-                            .frame(width: 36, height: 40)
+                    if viewModel.editing == nil {
+                        Button(action: onGallery) {
+                            Image(systemName: activePanel == .gallery ? "keyboard" : "plus")
+                                .font(.system(size: activePanel == .gallery ? 20 : 22, weight: .semibold))
+                                .frame(width: 32, height: 38)
+                        }
+                        .foregroundStyle(iconColor)
+                        .accessibilityLabel(activePanel == .gallery ? "Klavyeye dön" : "Galeri")
+                        .accessibilityHint(activePanel == .gallery ? "" : "Son fotoğraf ve videoları klavyenin yerinde gösterir")
                     }
-                    .foregroundStyle(iconColor)
-                    .accessibilityLabel(activePanel == .gallery ? "Klavyeye dön" : "Galeri")
-                    .accessibilityHint(activePanel == .gallery ? "" : "Son fotoğraf ve videoları klavyenin yerinde gösterir")
 
-                    Button(action: onStickers) {
-                        Image(systemName: activePanel == .stickers ? "keyboard" : "face.smiling")
-                            .font(.system(size: 22))
-                            .frame(width: 32, height: 40)
+                    TextField("Mesaj", text: $viewModel.draft, axis: .vertical)
+                        .lineLimit(1...6)
+                        .focused(focused)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .foregroundStyle(look?.chromeText.color ?? Color.ftText)
+                        .background(look?.field.color ?? Color.ftCardElevated,
+                                    in: RoundedRectangle(cornerRadius: look.map { $0.cornerRadius < 6 ? 3 : 19 } ?? 19, style: .continuous))
+                        .onChange(of: viewModel.draft) { _, _ in viewModel.draftChanged() }
+                        .accessibilityLabel("Mesaj yaz")
+
+                    if viewModel.editing == nil {
+                        Button(action: onStickers) {
+                            Image(systemName: activePanel == .stickers ? "keyboard" : "face.smiling")
+                                .font(.system(size: 22))
+                                .frame(width: 30, height: 38)
+                        }
+                        .foregroundStyle(iconColor)
+                        .accessibilityLabel(activePanel == .stickers ? "Klavyeye dön" : "Sticker'larım")
+                        .accessibilityHint(activePanel == .stickers ? "" : "Sticker panelini klavyenin yerinde açar")
                     }
-                    .foregroundStyle(iconColor)
-                    .accessibilityLabel(activePanel == .stickers ? "Klavyeye dön" : "Sticker'larım")
-                    .accessibilityHint(activePanel == .stickers ? "" : "Sticker panelini klavyenin yerinde açar")
+
+                    if viewModel.editing == nil, isDraftEmpty {
+                        // Yazı yokken kamera; yazınca yerini gönder düğmesine bırakır.
+                        Button {
+                            Haptics.impact(.light)
+                            onCamera()
+                        } label: {
+                            Image(systemName: "camera")
+                                .font(.system(size: 21))
+                                .frame(width: 30, height: 38)
+                        }
+                        .foregroundStyle(iconColor)
+                        .accessibilityLabel("Kamera")
+                        .accessibilityHint("Fotoğraf çek ya da video kaydet")
+                    }
                 }
 
-                TextField("Mesaj", text: $viewModel.draft, axis: .vertical)
-                    .lineLimit(1...6)
-                    .focused(focused)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .foregroundStyle(look?.chromeText.color ?? Color.ftText)
-                    .background(look?.field.color ?? Color.ftCardElevated,
-                                in: RoundedRectangle(cornerRadius: look.map { $0.cornerRadius < 6 ? 3 : 20 } ?? 20, style: .continuous))
-                    .onChange(of: viewModel.draft) { _, _ in viewModel.draftChanged() }
-                    .accessibilityLabel("Mesaj yaz")
-
-                if viewModel.editing == nil, viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // WhatsApp gibi: yazı yokken kamera, yazınca gönder düğmesi.
-                    Button {
-                        Haptics.impact(.light)
-                        onCamera()
-                    } label: {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 22))
-                            .frame(width: 36, height: 40)
-                    }
-                    .foregroundStyle(iconColor)
-                    .accessibilityLabel("Kamera")
-                    .accessibilityHint("Fotoğraf çek ya da video kaydet")
-                }
-                }
-
-                if viewModel.editing == nil, viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let recorder {
-                    // Mikrofon düğmesi hep aynı yerde kalır: kayıt sürerken hareket kesilmesin.
+                if viewModel.editing == nil, isDraftEmpty, let recorder {
+                    // Yazı yokken mikrofon; hep aynı yerde kalır (kayıt sürerken hareket kesilmesin).
                     VoiceMicButton(recorder: recorder, onVoice: onVoice)
-                } else if viewModel.editing != nil || !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Button {
-                    viewModel.send()
-                    Haptics.impact(.light)
-                } label: {
-                    if let look {
-                        Image(systemName: viewModel.editing == nil ? "arrow.up" : "checkmark")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(look.sendText.color)
-                            .frame(width: 34, height: 34)
-                            .background(look.send.style, in: RoundedRectangle(cornerRadius: look.cornerRadius < 6 ? 3 : 17, style: .continuous))
-                            .opacity(viewModel.canSend ? 1 : 0.45)
-                    } else {
-                        Image(systemName: viewModel.editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
-                            .font(.system(size: 34))
-                            .foregroundStyle(viewModel.canSend ? Color.ftAccentLight : Color.ftTextSecondary)
+                } else {
+                    Button {
+                        viewModel.send()
+                        Haptics.impact(.light)
+                    } label: {
+                        ChatActionCircle(enabled: viewModel.canSend) {
+                            if viewModel.editing == nil {
+                                ChatSendGlyph().frame(width: 17, height: 17).offset(x: 1)
+                            } else {
+                                Image(systemName: "checkmark").font(.system(size: 16, weight: .bold))
+                            }
+                        }
+                        .padding(.bottom, 2)
                     }
-                }
-                .disabled(!viewModel.canSend)
-                .accessibilityLabel(viewModel.editing == nil ? "Gönder" : "Düzenlemeyi kaydet")
+                    .disabled(!viewModel.canSend)
+                    .accessibilityLabel(viewModel.editing == nil ? "Gönder" : "Düzenlemeyi kaydet")
                 }
             }
 
