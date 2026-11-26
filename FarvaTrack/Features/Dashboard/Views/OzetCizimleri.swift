@@ -137,37 +137,51 @@ struct SuzulenTuy: View {
         let x0 = 62.0, y0 = 86.0, cx = 96.0, cy = 56.0, x1 = 152.0, y1 = 40.0, w = 20.0
         let n = 34
         func nokta(_ t: Double) -> CGPoint {
-            CGPoint(x: (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1,
-                    y: (1 - t) * (1 - t) * y0 + 2 * (1 - t) * t * cy + t * t * y1)
+            let u: Double = 1 - t
+            let a: Double = u * u, b: Double = 2 * u * t, c: Double = t * t
+            let x: Double = a * x0 + b * cx + c * x1
+            let y: Double = a * y0 + b * cy + c * y1
+            return CGPoint(x: x, y: y)
         }
         func yon(_ t: Double) -> CGPoint {
-            let dx = 2 * (1 - t) * (cx - x0) + 2 * t * (x1 - cx)
-            let dy = 2 * (1 - t) * (cy - y0) + 2 * t * (y1 - cy)
-            let l = hypot(dx, dy)
+            let u: Double = 1 - t
+            let dx: Double = 2 * u * (cx - x0) + 2 * t * (x1 - cx)
+            let dy: Double = 2 * u * (cy - y0) + 2 * t * (y1 - cy)
+            let l: Double = hypot(dx, dy)
             return CGPoint(x: dx / l, y: dy / l)
         }
         var kil = Path()
         for i in 2..<n {
             let t = Double(i) / Double(n)
             let p = nokta(t), d = yon(t)
-            let nrm = CGPoint(x: -d.y, y: d.x)
-            let profil = pow(sin(.pi * min(1, t * 1.15)), 0.6) * (t > 0.92 ? (1 - t) * 10 : 1)
-            let yarik = (i == Int((Double(n) * 0.55).rounded()) || i == Int((Double(n) * 0.7).rounded())) ? 0.75 : 1
+            let px = Double(p.x), py = Double(p.y), dx = Double(d.x), dy = Double(d.y)
+            let nx: Double = -dy, ny: Double = dx
+            let egri: Double = pow(sin(Double.pi * min(1, t * 1.15)), 0.6)
+            let profil: Double = egri * (t > 0.92 ? (1 - t) * 10 : 1)
+            let yarikA: Int = Int((Double(n) * 0.55).rounded())
+            let yarikB: Int = Int((Double(n) * 0.7).rounded())
+            let yarik: Double = (i == yarikA || i == yarikB) ? 0.75 : 1
             for s in [1.0, -1.0] {
-                let L = w * profil * (s > 0 ? 1 : 0.8) * yarik
-                let uc = CGPoint(x: p.x + nrm.x * L * s + d.x * L * 0.5, y: p.y + nrm.y * L * s + d.y * L * 0.5)
-                let orta = CGPoint(x: p.x + nrm.x * L * s * 0.5 + d.x * L * 0.1, y: p.y + nrm.y * L * s * 0.5 + d.y * L * 0.1)
+                let L: Double = w * profil * (s > 0 ? 1 : 0.8) * yarik
+                let ux: Double = px + nx * L * s + dx * L * 0.5
+                let uy: Double = py + ny * L * s + dy * L * 0.5
+                let ox: Double = px + nx * L * s * 0.5 + dx * L * 0.1
+                let oy: Double = py + ny * L * s * 0.5 + dy * L * 0.1
                 kil.move(to: p)
-                kil.addQuadCurve(to: uc, control: orta)
+                kil.addQuadCurve(to: CGPoint(x: ux, y: uy), control: CGPoint(x: ox, y: oy))
             }
         }
         for i in 0..<5 {
-            let t = 0.04 + Double(i) * 0.025
-            let p = nokta(t), k = Double(i)
+            let t: Double = 0.04 + Double(i) * 0.025
+            let p = nokta(t)
+            let px = Double(p.x), py = Double(p.y)
+            let k: Double = Double(i)
             kil.move(to: p)
-            kil.addQuadCurve(to: CGPoint(x: p.x + 9 + k * 2, y: p.y + 3 - k), control: CGPoint(x: p.x + 6 + k, y: p.y - 2 - k))
+            kil.addQuadCurve(to: CGPoint(x: px + 9 + k * 2, y: py + 3 - k),
+                             control: CGPoint(x: px + 6 + k, y: py - 2 - k))
             kil.move(to: p)
-            kil.addQuadCurve(to: CGPoint(x: p.x - 8 - k * 2, y: p.y - 2 - k), control: CGPoint(x: p.x - 5 - k, y: p.y + 1 + k))
+            kil.addQuadCurve(to: CGPoint(x: px - 8 - k * 2, y: py - 2 - k),
+                             control: CGPoint(x: px - 5 - k, y: py + 1 + k))
         }
         var sap = Path()
         sap.move(to: CGPoint(x: x0, y: y0))

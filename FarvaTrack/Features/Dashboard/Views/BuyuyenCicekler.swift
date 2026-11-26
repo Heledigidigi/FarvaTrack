@@ -49,30 +49,8 @@ struct BuyuyenCicekler: View {
                  at: CGPoint(x: 340, y: hedefY), anchor: .trailing)
 
         // Toprak, çiçekler (gölgeli katman)
-        ctx.drawLayer { katman in
-            katman.addFilter(.shadow(color: OzetRenk.golge.opacity(0.42), radius: 0.9, x: 1.5, y: 2.5))
-            katman.addFilter(.shadow(color: OzetRenk.golge.opacity(0.46), radius: 5, x: 5, y: 10))
-            var toprak = Path()
-            toprak.move(to: CGPoint(x: 10, y: 176))
-            toprak.addCurve(to: CGPoint(x: 170, y: 173), control1: CGPoint(x: 60, y: 170), control2: CGPoint(x: 110, y: 178))
-            toprak.addCurve(to: CGPoint(x: 330, y: 172), control1: CGPoint(x: 230, y: 168), control2: CGPoint(x: 280, y: 177))
-            toprak.addLine(to: CGPoint(x: 330, y: 186))
-            toprak.addLine(to: CGPoint(x: 10, y: 186))
-            toprak.closeSubpath()
-            katman.drawLayer { t in
-                t.addFilter(.blur(radius: 1))
-                t.fill(toprak, with: .color(Color(hex: "#CDB88E")))
-            }
-            for (i, gun) in gunler.prefix(7).enumerated() {
-                let cx = 44 + Double(i) * 252 / 6
-                let aci = -1.4 + 1.5 * (1 + sin(2 * .pi * (zaman + Double(i) * 0.9) / 6 - .pi / 2))
-                katman.drawLayer { c in
-                    c.translateBy(x: cx, y: taban)
-                    c.rotate(by: .degrees(aci))
-                    c.translateBy(x: -cx, y: -taban)
-                    cicek(&c, i: i, cx: cx, deger: gun.value, sc: sc)
-                }
-            }
+        ctx.drawLayer { (katman: inout GraphicsContext) in
+            self.golgeliKatman(&katman, zaman: zaman, sc: sc)
         }
 
         // Çimen
@@ -99,6 +77,38 @@ struct BuyuyenCicekler: View {
                     .foregroundStyle(bugun ? OzetRenk.tumu : Color(hex: "#6E523C")),
                 at: CGPoint(x: cx, y: 200)
             )
+        }
+    }
+
+    private func golgeliKatman(_ katman: inout GraphicsContext, zaman: Double, sc: Double) {
+        let koyu: Color = OzetRenk.golge.opacity(0.42)
+        let yumusak: Color = OzetRenk.golge.opacity(0.46)
+        katman.addFilter(.shadow(color: koyu, radius: 0.9, x: 1.5, y: 2.5))
+        katman.addFilter(.shadow(color: yumusak, radius: 5, x: 5, y: 10))
+        var toprak = Path()
+        toprak.move(to: CGPoint(x: 10, y: 176))
+        toprak.addCurve(to: CGPoint(x: 170, y: 173), control1: CGPoint(x: 60, y: 170), control2: CGPoint(x: 110, y: 178))
+        toprak.addCurve(to: CGPoint(x: 330, y: 172), control1: CGPoint(x: 230, y: 168), control2: CGPoint(x: 280, y: 177))
+        toprak.addLine(to: CGPoint(x: 330, y: 186))
+        toprak.addLine(to: CGPoint(x: 10, y: 186))
+        toprak.closeSubpath()
+        let toprakRengi: Color = Color(hex: "#CDB88E")
+        katman.drawLayer { (t: inout GraphicsContext) in
+            t.addFilter(.blur(radius: 1))
+            t.fill(toprak, with: .color(toprakRengi))
+        }
+        let liste: [DailyValue] = Array(gunler.prefix(7))
+        for i in 0..<liste.count {
+            let cx: Double = 44 + Double(i) * 42
+            let evre: Double = 2 * Double.pi * (zaman + Double(i) * 0.9) / 6 - Double.pi / 2
+            let aci: Double = -1.4 + 1.5 * (1 + sin(evre))
+            let deger: Double = liste[i].value
+            katman.drawLayer { (c: inout GraphicsContext) in
+                c.translateBy(x: cx, y: self.taban)
+                c.rotate(by: .degrees(aci))
+                c.translateBy(x: -cx, y: -self.taban)
+                self.cicek(&c, i: i, cx: cx, deger: deger, sc: sc)
+            }
         }
     }
 
