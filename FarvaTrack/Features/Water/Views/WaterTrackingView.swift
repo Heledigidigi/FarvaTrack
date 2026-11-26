@@ -62,9 +62,13 @@ enum SuMaskotu {
 
     /// Ana ekrandaki ilk Damla widget'ının teması.
     static func widgetTemasi() async -> WaterThemeOption? {
-        guard let bilgiler = try? await WidgetCenter.shared.currentConfigurations() else { return nil }
-        return bilgiler.first { $0.kind == SharedStore.waterWidgetKind }?
-            .widgetConfigurationIntent(of: WaterWidgetConfig.self)?.theme
+        await withCheckedContinuation { devam in
+            WidgetCenter.shared.getCurrentConfigurations { sonuc in
+                let tema = (try? sonuc.get())?.first { $0.kind == SharedStore.waterWidgetKind }?
+                    .widgetConfigurationIntent(of: WaterWidgetConfig.self)?.theme
+                devam.resume(returning: tema)
+            }
+        }
     }
 
     static let adlar: [WaterThemeOption: String] = [

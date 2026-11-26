@@ -481,12 +481,21 @@ private struct KiloAyarSayfasi: View {
     @State private var boy = 170
     @State private var hatir = WeighInReminderSettings()
 
+    private static let haftaGunleri: [(Int, String)] = [(2, "Pazartesi"), (3, "Salı"), (4, "Çarşamba"), (5, "Perşembe"), (6, "Cuma"), (7, "Cumartesi"), (1, "Pazar")]
+    private static let saatler: [(Int, String)] = (0...16).map { (360 + $0 * 30, UykuBicim.saat(360 + $0 * 30)) }
+
+    private var saatBaglama: Binding<Int> {
+        Binding(get: { hatir.hour * 60 + hatir.minute }, set: { hatir.hour = $0 / 60; hatir.minute = $0 % 60 })
+    }
+
+    private var kaydedilebilir: Bool { !hedefVar || dogrulama.message == nil }
+
     private var dogrulama: WeightGoalValidation {
         viewModel.validateGoal(hedef, currentKg: viewModel.latestWeight() ?? auth.currentUser?.weightKg)
     }
 
     var body: some View {
-        KlasikAyarSayfasi(baslik: "Kilo Ayarları", kaydetEtkin: !hedefVar || dogrulama.message == nil, kaydet: kaydet) {
+        KlasikAyarSayfasi(baslik: "Kilo Ayarları", kaydetEtkin: kaydedilebilir, kaydet: kaydet) {
             if hedefVar {
                 HedefSatiri(baslik: "Hedef kilo", deger: KiloBicim.kg(hedef), birim: "kg",
                             azalt: { hedef = max(WeightAnalyzer.validRange.lowerBound, hedef - 0.5) },
@@ -514,11 +523,9 @@ private struct KiloAyarSayfasi: View {
                 Toggle("Tartı hatırlatıcısı", isOn: $hatir.isEnabled).labelsHidden().tint(KiloRenk.yesil)
             }
             Group {
-                AyarSecimSatiri(baslik: "Gün", secenekler: [(2, "Pazartesi"), (3, "Salı"), (4, "Çarşamba"), (5, "Perşembe"), (6, "Cuma"), (7, "Cumartesi"), (1, "Pazar")],
-                                secili: $hatir.weekday)
+                AyarSecimSatiri(baslik: "Gün", secenekler: Self.haftaGunleri, secili: $hatir.weekday)
                 FircaAyirici(tohum: 531)
-                AyarSecimSatiri(baslik: "Saat", secenekler: (0...16).map { (360 + $0 * 30, UykuBicim.saat(360 + $0 * 30)) },
-                                secili: Binding(get: { hatir.hour * 60 + hatir.minute }, set: { hatir.hour = $0 / 60; hatir.minute = $0 % 60 }))
+                AyarSecimSatiri(baslik: "Saat", secenekler: Self.saatler, secili: saatBaglama)
             }
             .opacity(hatir.isEnabled ? 1 : 0.45)
             .disabled(!hatir.isEnabled)

@@ -114,7 +114,7 @@ struct YildizSekli: Shape {
         for i in 0..<10 {
             let a = -Double.pi / 2 + Double(i) * .pi / 5
             let rr = i % 2 == 1 ? r * 0.45 : r
-            let n = CGPoint(x: c.x + cos(a) * rr, y: c.y + sin(a) * rr)
+            let n = CGPoint(x: c.x + CGFloat(cos(a)) * rr, y: c.y + CGFloat(sin(a)) * rr)
             if i == 0 { p.move(to: n) } else { p.addLine(to: n) }
         }
         p.closeSubpath()
@@ -231,7 +231,7 @@ struct UykuKadrani: View {
 
     private func nokta(_ c: CGFloat, _ r: CGFloat, _ m: Int) -> CGPoint {
         let a = (Double(m) / 1_440 * 360 - 90) * .pi / 180
-        return CGPoint(x: c + cos(a) * r, y: c + sin(a) * r)
+        return CGPoint(x: c + CGFloat(cos(a)) * r, y: c + CGFloat(sin(a)) * r)
     }
 
     private func yay(_ c: CGFloat, _ r: CGFloat, _ m1: Int, _ m2: Int, w: Double, tohum: Int) -> Path {
@@ -240,7 +240,7 @@ struct UykuKadrani: View {
         let n = max(20, Int(sp))
         let pts = (0...n).map { i -> CGPoint in
             let a = (a1 + sp * Double(i) / Double(n) - 90) * .pi / 180
-            return CGPoint(x: c + cos(a) * r, y: c + sin(a) * r)
+            return CGPoint(x: c + CGFloat(cos(a)) * r, y: c + CGFloat(sin(a)) * r)
         }
         return Firca.cizgi(pts, Firca.Ayar(w: w, tohum: tohum, giris: 0.06, cikis: 0.12, basinc: 0.22))
     }
