@@ -8,6 +8,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 - Linux ortamında Swift/Xcode derlenemez. Doğrulama **GitHub Actions** ile yapılır (`.github/workflows/build.yml`): her push'ta cihaz için Release derlemesi, simülatörde testler, ad-hoc imzalı IPA.
 - CI sonuçları her çalıştırmada **`ci-logs` branch'ine** yazılır: `STATUS.txt`, `build-errors.txt`, `test-summary.txt`, tam `build.log` / `test.log`. Okumak için: `git fetch --depth=1 origin ci-logs && git show FETCH_HEAD:STATUS.txt`.
 - Çalışma akışı: özellik branch'inde çalış → push → `ci-logs`'ta o commit'in sonucunu bekle → yeşilse `main`'e hızlı ileri birleştir.
+- `main`'e gelen commit bir dalda zaten başarıyla derlendiyse iş akışı (`check` işi, Linux, birkaç saniye) derlemeyi atlar; `ci-logs`'a yazmaz. IPA o dalın çalıştırmasındadır (Actions → en üstteki yeşil derleme, dal adı ne olursa olsun → Artifacts → `FarvaTrack-IPA`).
 
 ## Mimari kuralları
 

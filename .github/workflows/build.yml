@@ -7,13 +7,40 @@ on:
 
 permissions:
   contents: write   # derleme loglarını ci-logs branch'ine yazmak için
+  actions: read     # main'de: aynı commit bir dalda zaten geçti mi diye bakmak için
 
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Dalda derlenip testlerden geçen commit main'e hızlı ileri birleştirilince aynı kod yeniden derlenmesin.
+  # Bu kontrol ucuz Linux makinesinde birkaç saniye sürer; IPA o dalın çalıştırmasındadır.
+  # Hiç derlenmemiş bir commit main'e gelirse (ör. doğrudan push) tam derleme yapılır.
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.verified.outputs.skip }}
+    steps:
+      - name: Bu commit zaten dogrulandi mi
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          skip=false
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ]; then
+            n=$(gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=20" \
+                  --jq '[.workflow_runs[] | select(.head_branch != "main")] | length' || echo 0)
+            if [ "${n:-0}" -gt 0 ]; then
+              skip=true
+              echo "::notice::Bu commit bir dalda zaten derlenip testlerden geçti; tekrar derlenmiyor. IPA o dalın çalıştırmasında."
+            fi
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: check
+    if: needs.check.outputs.skip != 'true'
     runs-on: macos-15
     timeout-minutes: 60
 
