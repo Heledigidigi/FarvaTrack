@@ -39,7 +39,8 @@ struct LiveDashboardDataSource: DashboardDataSource {
         let sleep = try context.fetch(FetchDescriptor<SleepEntry>(
             predicate: #Predicate { $0.ownerID == owner && $0.day == today }
         ))
-        summary.sleepHours = sleep.first?.durationHours
+        // Gece uykusu + şekerlemeler
+        summary.sleepHours = sleep.isEmpty ? nil : sleep.reduce(0) { $0 + $1.durationHours }
 
         var weightDescriptor = FetchDescriptor<WeightEntry>(
             predicate: #Predicate { $0.ownerID == owner },

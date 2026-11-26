@@ -75,6 +75,7 @@ targets:
       - path: FarvaTrackWidget
       # Uygulamayla paylaşılan App Group deposu
       - path: FarvaTrack/Services/SharedStore.swift
+      - path: FarvaTrack/SharedArt
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.farvatrack.FarvaTrack.Widget

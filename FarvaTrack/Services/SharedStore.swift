@@ -108,6 +108,7 @@ enum SharedStore {
     private static let pendingWasteKey = "pendingWasteTaps"
     private static let pendingWasteUndoKey = "pendingWasteUndos"
     private static let stepsMetricKey = "stepsWidgetMetric"
+    private static let wasteSecretKey = "wasteWidgetSecret"
 
     /// Widget'ta "Geri al" düğmesinin görünür kaldığı süre (su ve Ritim).
     static let wasteUndoWindow: TimeInterval = 5 * 60
@@ -319,6 +320,15 @@ enum SharedStore {
     static func removePendingWasteUndos(ids: [UUID]) {
         let remaining = pendingWasteUndos().filter { !ids.contains($0) }
         defaults.set(try? JSONEncoder().encode(remaining), forKey: pendingWasteUndoKey)
+    }
+
+    /// Uygulamadaki Kaka ekranından açılan gizli mod: widget'ın kendi ayarına ek olarak kediyi gizler.
+    static var wasteSecret: Bool {
+        get { defaults.bool(forKey: wasteSecretKey) }
+        set {
+            defaults.set(newValue, forKey: wasteSecretKey)
+            WidgetCenter.shared.reloadTimelines(ofKind: wasteWidgetKind)
+        }
     }
 
     static func clearWaste() {

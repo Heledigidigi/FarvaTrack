@@ -1,54 +1,31 @@
 import SwiftUI
 
+/// Adım ekranı (klasik tasarım): fırça halkası, kalan cümlesi, üç simgeli sayı ve son 7 günün çiçekleri.
+/// Hedef, elle giriş ve Apple Sağlık bağlantısı sağ üstteki ayar sayfasında.
 struct StepsView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
 
     @State private var viewModel = StepsViewModel()
-    @State private var showGoalSheet = false
-    @State private var showManualSheet = false
-
-    private var periodBinding: Binding<StepPeriod> {
-        Binding(
-            get: { viewModel.period },
-            set: { newValue in
-                Haptics.selection()
-                withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                    viewModel.period = newValue
-                }
-            }
-        )
-    }
+    @State private var ayarAcik = false
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
     }
 
     var body: some View {
-        Group {
-            if viewModel.access == .loading {
-                ProgressView()
-            } else {
-                content
-            }
+        ScrollView {
+            icerik
+                .padding(.horizontal, Constants.Layout.screenPadding)
+                .padding(.bottom, 40)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ftScreenBackground()
-        .navigationTitle("Adımlar")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showManualSheet = true
-                } label: {
-                    Image(systemName: "square.and.pencil")
-                }
-                .accessibilityLabel("Adımı elle gir")
-            }
+        .scrollIndicators(.hidden)
+        .klasikEkran("Adımlar") {
+            AyarDugmesi(etiket: "Adım ayarları") { ayarAcik = true }
         }
-        .sheet(isPresented: $showManualSheet) {
-            ManualStepSheet(viewModel: viewModel)
+        .sheet(isPresented: $ayarAcik) {
+            AdimAyarSayfasi(viewModel: viewModel)
         }
         .task {
             if let user = auth.currentUser { viewModel.attach(context: modelContext, userID: user.id) }
@@ -67,13 +44,6 @@ struct StepsView: View {
         }
         .onDisappear { viewModel.stop() }
         .sensoryFeedback(.success, trigger: viewModel.isTodayGoalReached) { old, new in !old && new }
-        .sheet(isPresented: $showGoalSheet) {
-            StepGoalSheet(current: viewModel.dailyGoal) { newGoal in
-                guard var user = auth.currentUser else { return }
-                user.dailyStepGoal = newGoal
-                Task { await auth.updateUser(user) }
-            }
-        }
         .alert("Bir sorun oluştu", isPresented: errorBinding) {
             Button("Tamam", role: .cancel) {}
         } message: {
@@ -81,361 +51,230 @@ struct StepsView: View {
         }
     }
 
-    // MARK: - Sağlık durumu kartı
-    @ViewBuilder
-    private var healthBanner: some View {
-        switch viewModel.access {
-        case .needsPermission:
-            banner(
-                icon: "heart.text.square.fill",
-                title: "Adımlarını otomatik takip edelim",
-                text: "FarvaTrack; adım, yürüme mesafesi ve aktif enerji verilerini Apple Sağlık'tan okur. Veriler yalnızca cihazında gösterilir. İstersen adımlarını elle de girebilirsin."
-            ) {
-                Button("Sağlık'a Bağlan") { Task { await viewModel.requestAccess() } }
-                    .buttonStyle(PrimaryButtonStyle())
-            }
-        case .unavailable:
-            banner(icon: "heart.slash", title: "Apple Sağlık kullanılamıyor", text: "Bu cihazda Apple Sağlık desteklenmiyor. Adımlarını sağ üstteki kalem simgesiyle elle girebilirsin.") {
-                EmptyView()
-            }
-        case .ready, .loading:
-            if let issue = viewModel.healthIssue {
-                banner(icon: "exclamationmark.triangle.fill", title: "Sağlık verisi okunamadı", text: issue) {
-                    Button("Bugünün adımını gir") { showManualSheet = true }
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.ftAccentLight)
-                }
-            }
-        }
-    }
-
-    private func banner<Actions: View>(icon: String, title: String, text: String, @ViewBuilder actions: () -> Actions) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: icon)
-                .font(.headline)
-                .foregroundStyle(Color.ftAccentLight)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(Color.ftTextSecondary)
-            actions()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle(padding: 20)
-    }
-
-    // MARK: - Ana içerik
-    private var content: some View {
-        let stats = viewModel.stats(for: viewModel.period)
-
-        return ScrollView {
-            VStack(spacing: 20) {
-                Picker("Dönem", selection: periodBinding) {
-                    ForEach(StepPeriod.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-
-                healthBanner
-                hero(stats)
-                metrics(stats)
-                chartCard
-
-                if viewModel.showsNoDataHint { noDataHint }
-
-                goalCard
-
-                if let last = viewModel.lastUpdated {
-                    Text("Son güncelleme: \(last.formatted(date: .omitted, time: .shortened))")
-                        .font(.caption)
-                        .foregroundStyle(Color.ftTextSecondary)
-                }
-            }
-            .padding(Constants.Layout.screenPadding)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    private func hero(_ stats: StepPeriodStats) -> some View {
-        let reached = stats.progress >= 1
-
-        return VStack(spacing: 16) {
-            ProgressRing(progress: stats.progress, lineWidth: 18, color: Color.ftAccentLight) {
-                VStack(spacing: 4) {
-                    Image(systemName: reached ? "checkmark.seal.fill" : "figure.walk")
-                        .font(.title2)
-                        .foregroundStyle(reached ? Color.ftSuccess : Color.ftAccentLight)
-                    Text(stats.steps.formatted())
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+    private var icerik: some View {
+        let s = viewModel.stats(for: .day)
+        return VStack(spacing: 0) {
+            ZStack {
+                EnsoGosterge(ilerleme: viewModel.access == .loading ? 0 : s.progress)
+                    .animation(.easeOut(duration: 1.1), value: s.progress)
+                VStack(spacing: 2) {
+                    Text(s.steps.formatted())
+                        .font(.system(size: 40, weight: .bold))
                         .monospacedDigit()
                         .contentTransition(.numericText())
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                    Text("/ \(stats.goal.formatted()) adım")
-                        .font(.footnote)
+                        .foregroundStyle(Color.ftText)
+                    Text("/ \(s.goal.formatted()) adım")
+                        .font(.system(size: 13))
                         .foregroundStyle(Color.ftTextSecondary)
                 }
-                .padding(.horizontal, 28)
             }
-            .frame(width: 230, height: 230)
+            .padding(.top, 14)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Bugün \(s.steps) adım, hedef \(s.goal)")
+            .accessibilityValue("yüzde \(Int(min(s.progress, 9.99) * 100))")
 
-            Text(reached ? "Hedefe ulaştın, harika iş!" : "Hedefe \(stats.remaining.formatted()) adım kaldı")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(reached ? Color.ftSuccess : Color.ftTextSecondary)
+            kalanCumlesi(s)
+                .font(.system(size: 15))
+                .foregroundStyle(Color(hex: "#4A3324"))
+                .multilineTextAlignment(.center)
+                .padding(.top, 14)
 
-            if viewModel.period == .day && viewModel.isTodayManual {
-                Label("Elle girildi", systemImage: "square.and.pencil")
-                    .font(.caption)
+            if viewModel.isTodayManual {
+                Text("Bugünkü sayı elle girildi")
+                    .font(.system(size: 12))
                     .foregroundStyle(Color.ftTextSecondary)
+                    .padding(.top, 4)
             }
-        }
-        .frame(maxWidth: .infinity)
-        .cardStyle(padding: 24)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(viewModel.period.scopeTitle) adım: \(stats.steps), hedef \(stats.goal)")
-        .accessibilityValue("yüzde \(Int(min(stats.progress, 9.99) * 100))")
-    }
 
-    private func metrics(_ stats: StepPeriodStats) -> some View {
-        HStack(spacing: 12) {
-            MetricTile(
-                title: "Mesafe",
-                value: stats.distanceKm.formatted(.number.precision(.fractionLength(1))),
-                unit: "km",
-                systemImage: "map.fill",
-                tint: Color.ftWater
-            )
-            MetricTile(
-                title: "Kalori",
-                value: stats.calories.formatted(),
-                unit: stats.caloriesAreEstimated ? "kcal • tahmini" : "kcal",
-                systemImage: "flame.fill",
-                tint: Color.ftCalories
-            )
-            if viewModel.period == .day {
-                MetricTile(
-                    title: "Kalan",
-                    value: stats.remaining.formatted(),
-                    unit: "adım",
-                    systemImage: "flag.fill",
-                    tint: Color.ftSuccess
-                )
-            } else {
-                MetricTile(
-                    title: "Ortalama",
-                    value: stats.dailyAverage.formatted(),
-                    unit: "adım/gün",
-                    systemImage: "chart.bar.fill",
-                    tint: Color.ftSleep
-                )
-            }
+            UcluMetrik(ogeler: [
+                .init(deger: s.distanceKm.formatted(.number.precision(.fractionLength(1))), birim: "km", ad: "Mesafe",
+                      simge: AnyView(AdimSimgesi(tur: .harita))),
+                .init(deger: s.calories.formatted(), birim: "kcal", ad: s.caloriesAreEstimated ? "Kalori · tahmini" : "Kalori",
+                      simge: AnyView(AdimSimgesi(tur: .alev))),
+                .init(deger: s.remaining.formatted(), birim: "adım", ad: "Kalan",
+                      simge: AnyView(AdimSimgesi(tur: .zirve)))
+            ], boy: 19)
+            .padding(.top, 28)
+
+            BolumBasligi(metin: "Son 7 Gün")
+                .padding(.top, 28)
+            BuyuyenCicekler(gunler: viewModel.chartData(for: .day), hedef: Double(viewModel.dailyGoal))
+                .padding(.horizontal, -1)
+                .padding(.top, -6)
         }
     }
 
-    private var chartCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(viewModel.period.chartTitle)
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
-
-            ChartView(
-                data: viewModel.chartData(for: viewModel.period),
-                goal: Double(viewModel.dailyGoal),
-                tint: Color.ftAccentLight,
-                unit: "adım",
-                xAxisStyle: viewModel.period == .month ? .dayOfMonth : .weekday
-            )
-            .frame(height: 200)
+    private func kalanCumlesi(_ s: StepPeriodStats) -> Text {
+        if s.remaining <= 0 {
+            return Text("Hedefini ") + Text("tamamladın").bold() + Text(", bugünlük yeter")
         }
-        .cardStyle(padding: 20)
-    }
-
-    private var noDataHint: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label("Veri görünmüyor mu?", systemImage: "info.circle.fill")
-                .font(.headline)
-            Text("İzin verdiysen ve hâlâ sıfır görüyorsan Sağlık uygulamasında Paylaşım → Uygulamalar → FarvaTrack bölümünden adım iznini kontrol et. Telefonun yanında taşınmadığı günlerde de veri olmayabilir.")
-                .font(.footnote)
-                .foregroundStyle(Color.ftTextSecondary)
-            if let url = URL(string: "x-apple-health://") {
-                Link("Sağlık Uygulamasını Aç", destination: url)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.ftAccentLight)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle(padding: 20)
-    }
-
-    private var goalCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Hedeflerin").font(.headline)
-                Spacer()
-                Button("Düzenle") { showGoalSheet = true }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.ftAccentLight)
-            }
-            goalRow("Günlük", viewModel.goal(for: .day))
-            goalRow("Haftalık", viewModel.goal(for: .week))
-            goalRow("Aylık", viewModel.goal(for: .month))
-        }
-        .cardStyle(padding: 20)
-    }
-
-    private func goalRow(_ title: String, _ value: Int) -> some View {
-        HStack {
-            Text(title).foregroundStyle(Color.ftTextSecondary)
-            Spacer()
-            Text("\(value.formatted()) adım").font(.body.monospacedDigit())
-        }
-        .accessibilityElement(children: .combine)
+        return Text("Hedefini tamamlamana ") + Text(s.remaining.formatted()).bold() + Text(" adım kaldı")
     }
 }
 
-// MARK: - Küçük bileşenler
-private struct MetricTile: View {
-    let title: String
-    let value: String
-    let unit: String
-    let systemImage: String
-    let tint: Color
+// MARK: - Simgeler (harita, mum alevi, zirvedeki bayrak)
+
+struct AdimSimgesi: View {
+    enum Tur { case harita, alev, zirve }
+    let tur: Tur
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.subheadline)
-                .foregroundStyle(tint)
-            Text(value)
-                .font(.title3.bold().monospacedDigit())
-                .contentTransition(.numericText())
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(unit)
-                .font(.caption2)
-                .foregroundStyle(Color.ftTextSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(Color.ftTextSecondary)
+        Canvas { ctx, boyut in
+            let s = 0.8
+            ctx.translateBy(x: boyut.width / 2 - 17 * s, y: boyut.height / 2 - 17 * s)
+            ctx.scaleBy(x: s, y: s)
+            let cizgi = StrokeStyle(lineWidth: 1.3 / s, lineCap: .round, lineJoin: .round)
+            let renk = GraphicsContext.Shading.color(Color(hex: "#8A3E34"))
+            for (yol, kesik) in Self.yollar(tur) {
+                var st = cizgi
+                if kesik { st.dash = [1.2, 2.6] }
+                ctx.stroke(yol, with: renk, style: st)
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardStyle(padding: 14)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title): \(value) \(unit)")
+        .frame(width: 34, height: 28)
+        .murekkepGolgesi(hafif: true)
+        .accessibilityHidden(true)
+    }
+
+    private static func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x, y: y) }
+
+    static func yollar(_ tur: Tur) -> [(Path, Bool)] {
+        switch tur {
+        case .harita:
+            var a = Path()
+            a.move(to: p(4.5, 9)); a.addLine(to: p(12, 6)); a.addLine(to: p(22, 9)); a.addLine(to: p(29.5, 6))
+            a.addLine(to: p(29.5, 25)); a.addLine(to: p(22, 28)); a.addLine(to: p(12, 25)); a.addLine(to: p(4.5, 28)); a.closeSubpath()
+            var b = Path()
+            b.move(to: p(12, 6)); b.addLine(to: p(12, 25)); b.move(to: p(22, 9)); b.addLine(to: p(22, 28))
+            var c = Path()
+            c.move(to: p(7.5, 22))
+            c.addCurve(to: p(17.5, 15), control1: p(10.5, 16), control2: p(14.5, 20))
+            c.addCurve(to: p(26, 10.5), control1: p(19.5, 12), control2: p(23.5, 14))
+            return [(a, false), (b, false), (c, true)]
+        case .alev:
+            var a = Path()
+            a.move(to: p(17, 3.5))
+            a.addCurve(to: p(24, 15), control1: p(18.4, 8), control2: p(22.6, 10.4))
+            a.addCurve(to: p(17, 26.5), control1: p(25.6, 20.2), control2: p(22.4, 26.5))
+            a.addCurve(to: p(10.2, 16.4), control1: p(11.4, 26.5), control2: p(8.6, 21.4))
+            a.addCurve(to: p(14, 9.4), control1: p(11.2, 13.2), control2: p(13.4, 12.4))
+            a.addCurve(to: p(15.8, 14), control1: p(15.6, 10.8), control2: p(16, 12.4))
+            a.addCurve(to: p(17, 3.5), control1: p(17.4, 11.8), control2: p(17.6, 7.6))
+            a.closeSubpath()
+            var b = Path()
+            b.move(to: p(17, 16))
+            b.addCurve(to: p(19.6, 21.2), control1: p(18.6, 18), control2: p(19.6, 19.4))
+            b.addCurve(to: p(17, 23.8), control1: p(19.6, 22.64), control2: p(18.44, 23.8))
+            b.addCurve(to: p(14.4, 21.2), control1: p(15.56, 23.8), control2: p(14.4, 22.64))
+            b.addCurve(to: p(17, 16), control1: p(14.4, 19.6), control2: p(15.4, 18.2))
+            b.closeSubpath()
+            return [(a, false), (b, false)]
+        case .zirve:
+            var a = Path()
+            a.move(to: p(3.5, 29.5)); a.addLine(to: p(13.5, 14)); a.addLine(to: p(18.5, 21)); a.addLine(to: p(22.2, 16))
+            a.addLine(to: p(30.5, 29.5)); a.closeSubpath()
+            var b = Path()
+            b.move(to: p(13.5, 14)); b.addLine(to: p(13.5, 3.5))
+            var c = Path()
+            c.move(to: p(13.5, 4)); c.addLine(to: p(20.5, 4)); c.addLine(to: p(18.6, 6.5)); c.addLine(to: p(20.5, 9)); c.addLine(to: p(13.5, 9))
+            return [(a, false), (b, false), (c, false)]
+        }
     }
 }
 
-private struct StepGoalSheet: View {
-    let onSave: (Int) -> Void
+// MARK: - Ayar sayfası
 
-    @Environment(\.dismiss) private var dismiss
-    @State private var goal: Int
-
-    init(current: Int, onSave: @escaping (Int) -> Void) {
-        _goal = State(initialValue: current)
-        self.onSave = onSave
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Stepper(value: $goal, in: 1_000...50_000, step: 500) {
-                        Text("\(goal.formatted()) adım")
-                            .font(.title3.bold().monospacedDigit())
-                    }
-                } header: {
-                    Text("Günlük hedef")
-                } footer: {
-                    Text("Haftalık hedef: \((goal * 7).formatted()) adım. Aylık hedef, ayın gün sayısına göre hesaplanır.")
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .ftScreenBackground()
-            .navigationTitle("Adım Hedefi")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Vazgeç") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
-                        onSave(goal)
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-}
-
-// MARK: - Elle adım girişi
-private struct ManualStepSheet: View {
+private struct AdimAyarSayfasi: View {
     let viewModel: StepsViewModel
+    @Environment(AuthViewModel.self) private var auth
 
-    @Environment(\.dismiss) private var dismiss
-    @State private var day = Date.now
-    @State private var steps: Int?
-    @State private var error: String?
+    @State private var hedef = Constants.Defaults.stepGoal
+    @State private var gun = Calendar.current.startOfDay(for: .now)
+    @State private var elle: Int?
+    @State private var hata: String?
 
-    private var existing: Int? { viewModel.manualValue(for: day) }
+    private var gunler: [(Date, String)] {
+        let takvim = Calendar.current
+        let bugun = takvim.startOfDay(for: .now)
+        return (0..<7).compactMap { i -> (Date, String)? in
+            guard let d = takvim.date(byAdding: .day, value: -i, to: bugun) else { return nil }
+            let ad = i == 0 ? "Bugün" : i == 1 ? "Dün" : d.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "tr_TR"))).capitalized
+            return (d, ad)
+        }
+    }
+
+    private func gununDegeri(_ d: Date) -> Int? {
+        if let m = viewModel.manualValue(for: d) { return m }
+        return viewModel.days.first { Calendar.current.isDate($0.date, inSameDayAs: d) }?.steps
+    }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    DatePicker("Gün", selection: $day, in: ...Date.now, displayedComponents: .date)
-                    HStack {
-                        TextField("Adım sayısı", value: $steps, format: .number)
-                            .keyboardType(.numberPad)
-                            .font(.title2.bold().monospacedDigit())
-                            .accessibilityLabel("Adım sayısı")
-                        Text("adım").foregroundStyle(Color.ftTextSecondary)
-                    }
-                } footer: {
-                    Text("Telefonundaki Sağlık uygulamasında veya saatinde gördüğün sayıyı yazabilirsin. Elle girilen değer o günün Sağlık verisinin yerine geçer.")
-                }
+        KlasikAyarSayfasi(baslik: "Adım Ayarları", kaydet: kaydet) {
+            HedefSatiri(deger: hedef.formatted(), birim: "adım",
+                        azalt: { hedef = max(1_000, hedef - 500) },
+                        artir: { hedef = min(50_000, hedef + 500) })
 
-                if existing != nil {
-                    Section {
-                        Button("Elle girilen değeri sil", role: .destructive) {
-                            viewModel.deleteManual(for: day)
-                            dismiss()
-                        }
-                    }
+            AyarBolumu(metin: "Elle giriş")
+            AyarSecimSatiri(baslik: "Gün", secenekler: gunler, secili: $gun)
+            FircaAyirici(tohum: 221)
+            AyarSayiGirisi(baslik: "Adım sayısı", deger: $elle)
+            if viewModel.manualValue(for: gun) != nil {
+                Button("Elle girilen değeri sil", role: .destructive) {
+                    viewModel.deleteManual(for: gun)
+                    elle = gununDegeri(gun)
                 }
+                .font(.system(size: 14))
+                .padding(.top, 6)
             }
-            .scrollContentBackground(.hidden)
-            .ftScreenBackground()
-            .navigationTitle("Adımı Elle Gir")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Vazgeç") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
-                        do {
-                            try viewModel.saveManual(steps: steps ?? 0, for: day)
-                            dismiss()
-                        } catch {
-                            self.error = AppError.map(error).errorDescription
-                            Haptics.error()
-                        }
-                    }
-                    .disabled(steps == nil)
-                }
+
+            AyarBolumu(metin: "Apple Sağlık")
+            AyarSatiri(baslik: "Durum") {
+                Text(durum.0).foregroundStyle(durum.1)
             }
-            .alert("Kaydedilemedi", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("Tamam", role: .cancel) {}
-            } message: {
-                Text(error ?? "")
+            if viewModel.access == .needsPermission {
+                Button("Sağlık’a Bağlan") { Task { await viewModel.requestAccess() } }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(KlasikRenk.vurgu)
+                    .frame(minHeight: 44)
             }
-            .onAppear { steps = existing }
-            .onChange(of: day) { _, _ in steps = existing }
+            if let sorun = viewModel.healthIssue {
+                Text(sorun).font(.system(size: 13)).foregroundStyle(Color.ftTextSecondary).padding(.top, 4)
+            }
         }
-        .presentationDetents([.medium])
+        .onAppear {
+            hedef = viewModel.dailyGoal
+            elle = gununDegeri(gun)
+        }
+        .onChange(of: gun) { _, d in elle = gununDegeri(d) }
+        .alert("Kaydedilemedi", isPresented: Binding(get: { hata != nil }, set: { if !$0 { hata = nil } })) {
+            Button("Tamam", role: .cancel) {}
+        } message: {
+            Text(hata ?? "")
+        }
+    }
+
+    private var durum: (String, Color) {
+        switch viewModel.access {
+        case .ready: return viewModel.healthIssue == nil ? ("Bağlı", KlasikRenk.yesil) : ("Okunamıyor", KlasikRenk.vurgu)
+        case .needsPermission: return ("Bağlı değil", Color.ftTextSecondary)
+        case .unavailable: return ("Bu cihazda yok", Color.ftTextSecondary)
+        case .loading: return ("…", Color.ftTextSecondary)
+        }
+    }
+
+    private func kaydet() {
+        if hedef != viewModel.dailyGoal, var user = auth.currentUser {
+            user.dailyStepGoal = hedef
+            Task { await auth.updateUser(user) }
+        }
+        if let elle, elle != gununDegeri(gun) {
+            do {
+                try viewModel.saveManual(steps: elle, for: gun)
+                Haptics.success()
+            } catch {
+                hata = AppError.map(error).errorDescription
+                Haptics.error()
+            }
+        }
     }
 }

@@ -83,6 +83,8 @@ final class StatisticsViewModel {
     /// Aktif programın son haftalardaki uyumu (program yoksa boş).
     private(set) var adherence: [WeekAdherence] = []
     private(set) var programName: String?
+    /// Program uyumunun gün gün hâli (son 30 gün, eskiden yeniye); program yoksa boş.
+    private(set) var programGunleri: [ProgramGunu] = []
     private(set) var isLoading = false
 
     @ObservationIgnored private var samples = StatisticsSamples()
@@ -151,9 +153,11 @@ final class StatisticsViewModel {
             let sessions = workouts.map { CompletedSession(date: $0.date, templateID: $0.templateID.flatMap(UUID.init(uuidString:))) }
             adherence = AdherenceCalculator.weeks(program: program.snapshot, completed: sessions, count: 12, now: end, calendar: calendar)
             programName = program.name
+            programGunleri = ProgramGunu.son(30, program: program.snapshot, completed: sessions, now: end, calendar: calendar)
         } else {
             adherence = []
             programName = nil
+            programGunleri = []
         }
 
         var input = badgeInput(context: context, user: user, steps: data.steps)
@@ -233,5 +237,30 @@ final class StatisticsViewModel {
         let weights = (try? context.fetch(FetchDescriptor<WeightEntry>(predicate: #Predicate { $0.ownerID == owner }))) ?? []
         input.weighInDays = Set(weights.map { calendar.startOfDay(for: $0.date) })
         return input
+    }
+}
+
+/// Program uyumunun bir günü: planlı mıydı, antrenman yapıldı mı.
+struct ProgramGunu: Identifiable, Equatable {
+    let date: Date
+    let planli: Bool
+    let yapildi: Bool
+    var id: Date { date }
+
+    /// Son `gun` günün durumu (eskiden yeniye). Program etkinleşmeden önceki günler planlı sayılmaz.
+    static func son(_ gun: Int, program: ProgramSnapshot, completed: [CompletedSession], now: Date = .now, calendar: Calendar = .current) -> [ProgramGunu] {
+        let ids = program.templateIDs
+        let yapilan = Set(completed.compactMap { s -> Date? in
+            guard let id = s.templateID, ids.contains(id) else { return nil }
+            return calendar.startOfDay(for: s.date)
+        })
+        let planli = Set(program.plannedWeekdays)
+        let bugun = calendar.startOfDay(for: now)
+        let baslangic = calendar.startOfDay(for: program.activatedAt)
+        return (0..<max(gun, 1)).reversed().compactMap { i -> ProgramGunu? in
+            guard let d = calendar.date(byAdding: .day, value: -i, to: bugun) else { return nil }
+            let haftaGunu = (calendar.component(.weekday, from: d) + 5) % 7
+            return ProgramGunu(date: d, planli: d >= baslangic && planli.contains(haftaGunu), yapildi: yapilan.contains(d))
+        }
     }
 }

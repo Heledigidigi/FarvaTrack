@@ -78,7 +78,7 @@ final class SleepViewModel {
     // MARK: - Kaydet / sil
     /// Aynı uyanış gününe ait kayıt varsa günceller (günde tek kayıt).
     @discardableResult
-    func save(bedtime: Date, wakeTime: Date, quality: Int, editing: SleepEntry? = nil) throws -> SleepEntry {
+    func save(bedtime: Date, wakeTime: Date, quality: Int, editing: SleepEntry? = nil, nap: Bool = false) throws -> SleepEntry {
         guard let context, let userID else { throw AppError.notAuthenticated }
 
         let hours = wakeTime.timeIntervalSince(bedtime) / 3600
@@ -94,12 +94,12 @@ final class SleepViewModel {
         let target: SleepEntry
         if let editing {
             target = editing
-        } else if let existing = try? context.fetch(FetchDescriptor<SleepEntry>(
-            predicate: #Predicate { $0.ownerID == userID && $0.day == day }
+        } else if !nap, let existing = try? context.fetch(FetchDescriptor<SleepEntry>(
+            predicate: #Predicate { $0.ownerID == userID && $0.day == day && $0.isNap == false }
         )).first {
             target = existing
         } else {
-            target = SleepEntry(ownerID: userID, bedtime: bedtime, wakeTime: wakeTime, quality: clampedQuality, calendar: calendar)
+            target = SleepEntry(ownerID: userID, bedtime: bedtime, wakeTime: wakeTime, quality: clampedQuality, isNap: nap, calendar: calendar)
             context.insert(target)
         }
 

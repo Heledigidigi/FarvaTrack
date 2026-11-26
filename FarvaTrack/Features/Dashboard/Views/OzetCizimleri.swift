@@ -133,7 +133,7 @@ struct BulutluHilal: View {
 struct SuzulenTuy: View {
     @Environment(\.accessibilityReduceMotion) private var hareketiAzalt
 
-    private static let tuy: (sap: Path, kil: Path) = {
+    static let tuy: (sap: Path, kil: Path) = {
         let x0 = 62.0, y0 = 86.0, cx = 96.0, cy = 56.0, x1 = 152.0, y1 = 40.0, w = 20.0
         let n = 34
         func nokta(_ t: Double) -> CGPoint {

@@ -1,28 +1,16 @@
 import SwiftUI
 import SwiftData
 
-enum WeightRange: String, CaseIterable, Identifiable {
-    case month = "1A", quarter = "3A", year = "1Y"
-
-    var id: String { rawValue }
-
-    var days: Int {
-        switch self {
-        case .month: return 30
-        case .quarter: return 90
-        case .year: return 365
-        }
-    }
-}
-
+/// Kilo ekranı (klasik tasarım, "Tüyün yolu"): 7 günlük ortalamanın fırça çizgisi tüyün geçtiği yol,
+/// tüy bugünkü noktada; sağda hedef zemini ve oraya noktalı yol. Altında değişimler, son tartılar, vücut ölçüleri.
+/// Tartı eklemek sağ üstteki "+" ile (mezurayı kaydırarak), hedef/boy/hatırlatıcı ayar sayfasında.
 struct WeightView: View {
     @Environment(AuthViewModel.self) private var auth
     @Environment(\.modelContext) private var modelContext
 
     @State private var viewModel = BodyMetricsViewModel()
-    @State private var editor: WeightEditorTarget?
-    @State private var showGoal = false
-    @State private var showReminder = false
+    @State private var tarti: TartiDuzenleme?
+    @State private var ayarAcik = false
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { viewModel.hasError }, set: { viewModel.hasError = $0 })
@@ -31,51 +19,23 @@ struct WeightView: View {
     var body: some View {
         Group {
             if let user = auth.currentUser {
-                WeightContent(
-                    ownerID: user.id,
-                    viewModel: viewModel,
-                    onEdit: { editor = $0 },
-                    onGoal: { showGoal = true }
-                )
+                KiloIcerigi(ownerID: user.id, viewModel: viewModel, duzenle: { tarti = TartiDuzenleme(kayit: $0) })
             } else {
                 ProgressView()
             }
         }
-        .ftScreenBackground()
-        .navigationTitle("Kilo")
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button {
-                    showReminder = true
-                } label: {
-                    Image(systemName: viewModel.reminderSettings.isEnabled ? "bell.badge.fill" : "bell")
-                }
-                .accessibilityLabel("Tartı hatırlatıcısı")
-
-                Button {
-                    Haptics.impact(.light)
-                    editor = WeightEditorTarget(entry: nil)
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityLabel("Tartı ekle")
+        .klasikEkran("Kilo") {
+            EkleDugmesi(etiket: "Tartı ekle") {
+                Haptics.impact(.light)
+                tarti = TartiDuzenleme(kayit: nil)
             }
+            AyarDugmesi(etiket: "Kilo ayarları") { ayarAcik = true }
         }
-        .sheet(item: $editor) { target in
-            WeightEditorSheet(viewModel: viewModel, entry: target.entry, onSaved: syncProfileWeight)
+        .sheet(item: $tarti) { hedef in
+            TartiSayfasi(viewModel: viewModel, kayit: hedef.kayit, kaydedildi: syncProfileWeight)
         }
-        .sheet(isPresented: $showGoal) {
-            WeightGoalSheet(viewModel: viewModel, currentKg: viewModel.latestWeight() ?? auth.currentUser?.weightKg) { target in
-                guard var user = auth.currentUser else { return }
-                user.targetWeightKg = target
-                if user.startWeightKg == nil || target == nil {
-                    user.startWeightKg = target == nil ? nil : (viewModel.latestWeight() ?? user.weightKg)
-                }
-                Task { await auth.updateUser(user) }
-            }
-        }
-        .sheet(isPresented: $showReminder) {
-            WeighInReminderSheet(viewModel: viewModel)
+        .sheet(isPresented: $ayarAcik) {
+            KiloAyarSayfasi(viewModel: viewModel)
         }
         .alert("Bir sorun oluştu", isPresented: errorBinding) {
             Button("Tamam", role: .cancel) {}
@@ -101,459 +61,500 @@ struct WeightView: View {
     }
 }
 
-struct WeightEditorTarget: Identifiable {
-    let entry: WeightEntry?
+struct TartiDuzenleme: Identifiable {
+    let kayit: WeightEntry?
     let id = UUID()
 }
 
+enum KiloRenk {
+    static let yesil = Color(hex: "#4E6A4A")
+    static let koyu = Color(hex: "#3A5236")
+}
+
+enum KiloBicim {
+    static func kg(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(1)).locale(Locale(identifier: "tr_TR"))) }
+    static func isaretli(_ v: Double) -> String {
+        let m = kg(abs(v))
+        return abs(v) < 0.05 ? m : (v > 0 ? "+" : "−") + m
+    }
+    static func gunOnce(_ d: Date) -> String {
+        let t = Calendar.current
+        if t.isDateInToday(d) { return "Bugün" }
+        if t.isDateInYesterday(d) { return "Dün" }
+        let g = t.dateComponents([.day], from: t.startOfDay(for: d), to: t.startOfDay(for: .now)).day ?? 0
+        return "\(g) gün önce"
+    }
+}
+
 // MARK: - İçerik
-private struct WeightContent: View {
-    @Query private var entries: [WeightEntry]
+
+private struct KiloIcerigi: View {
+    @Query private var kayitlar: [WeightEntry]
+    @Query private var olculer: [MeasurementEntry]
     let viewModel: BodyMetricsViewModel
-    let onEdit: (WeightEditorTarget) -> Void
-    let onGoal: () -> Void
+    let duzenle: (WeightEntry) -> Void
 
-    @State private var range: WeightRange = .quarter
+    @State private var aralik = 90
 
-    init(ownerID: String, viewModel: BodyMetricsViewModel, onEdit: @escaping (WeightEditorTarget) -> Void, onGoal: @escaping () -> Void) {
-        _entries = Query(filter: #Predicate<WeightEntry> { $0.ownerID == ownerID }, sort: \.date, order: .reverse)
+    init(ownerID: String, viewModel: BodyMetricsViewModel, duzenle: @escaping (WeightEntry) -> Void) {
+        _kayitlar = Query(filter: #Predicate<WeightEntry> { $0.ownerID == ownerID }, sort: \.date, order: .reverse)
+        _olculer = Query(filter: #Predicate<MeasurementEntry> { $0.ownerID == ownerID }, sort: \.date, order: .reverse)
         self.viewModel = viewModel
-        self.onEdit = onEdit
-        self.onGoal = onGoal
+        self.duzenle = duzenle
     }
 
     var body: some View {
-        let points = entries.map(\.point)
-        let start = Date.now.addingTimeInterval(-Double(range.days) * 86_400)
-        let visible = points.filter { $0.date >= start }.sorted { $0.date < $1.date }
-        let latest = entries.first
+        let noktalar = kayitlar.map(\.point)
+        let son = kayitlar.first
 
-        List {
-            Section {
-                header(latest: latest, points: points)
-                    .listRowBackground(Color.ftCard)
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if let son {
+                    (Text(KiloBicim.kg(son.weightKg)).font(.system(size: 44, weight: .bold)).foregroundColor(Color.ftText)
+                     + Text(" kg").font(.system(size: 15)).foregroundColor(Color.ftTextSecondary))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    kalanSatiri(son.weightKg, noktalar: noktalar)
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color(hex: "#4A3324"))
+                        .padding(.top, 4)
+                } else {
+                    Text("Henüz tartı yok")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Color.ftText)
+                }
 
-            if visible.count >= 2 {
-                Section {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Picker("Aralık", selection: $range) {
-                            ForEach(WeightRange.allCases) { Text($0.rawValue).tag($0) }
+                TuyunYolu(noktalar: noktalar, gun: aralik, hedef: viewModel.targetWeightKg)
+                    .padding(.top, 6)
+
+                HStack {
+                    Spacer()
+                    KlasikSekmeler(secenekler: [(30, "1A"), (90, "3A"), (180, "6A"), (365, "1Y")], secili: $aralik)
+                }
+
+                UcluMetrik(ogeler: [
+                    .init(deger: WeightAnalyzer.change(noktalar, days: 7).map(KiloBicim.isaretli) ?? "—", birim: "kg", ad: "7 gün"),
+                    .init(deger: WeightAnalyzer.change(noktalar, days: 30).map(KiloBicim.isaretli) ?? "—", birim: "kg", ad: "30 gün"),
+                    .init(deger: son.flatMap { viewModel.bmi(for: $0.weightKg) }.map { $0.formatted(.number.precision(.fractionLength(1))) } ?? "—",
+                          ad: son.flatMap { viewModel.bmi(for: $0.weightKg) }.map { "BMI · \(BMICategory(bmi: $0).title.lowercased(with: Locale(identifier: "tr_TR")))" } ?? "BMI")
+                ])
+                .padding(.top, 16)
+
+                if !kayitlar.isEmpty {
+                    BolumBasligi(metin: "Son tartılar").padding(.top, 22).padding(.bottom, 4)
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 40), GridItem(.flexible())], spacing: 0) {
+                        ForEach(kayitlar.prefix(4)) { k in
+                            Button { duzenle(k) } label: {
+                                VStack(spacing: 0) {
+                                    HStack {
+                                        Text(KiloBicim.gunOnce(k.date)).foregroundStyle(Color.ftTextSecondary)
+                                        Spacer()
+                                        Text("\(KiloBicim.kg(k.weightKg)) kg").fontWeight(.bold).foregroundStyle(Color.ftText)
+                                    }
+                                    .font(.system(size: 15).monospacedDigit())
+                                    .frame(height: 44)
+                                    FircaAyirici(tohum: Int(k.weightKg * 10))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(KiloBicim.gunOnce(k.date)), \(KiloBicim.kg(k.weightKg)) kilogram")
+                            .accessibilityHint("Düzenle")
                         }
-                        .pickerStyle(.segmented)
-                        TrendChartView(points: visible, target: viewModel.targetWeightKg)
-                            .frame(height: 200)
-                        Text("Noktalar tartıları, çizgi 7 günlük ortalamayı gösterir.")
-                            .font(.caption2)
-                            .foregroundStyle(Color.ftTextSecondary)
                     }
-                    .padding(.vertical, 4)
-                    .listRowBackground(Color.ftCard)
                 }
-            }
 
-            Section {
-                goalCard(latest: latest?.weightKg, points: points)
-                    .listRowBackground(Color.ftCard)
-            }
-
-            if let latest, let bmi = viewModel.bmi(for: latest.weightKg) {
-                Section {
-                    BMIGaugeView(bmi: bmi)
-                        .padding(.vertical, 4)
-                        .listRowBackground(Color.ftCard)
-                }
-            } else if viewModel.heightCm == nil {
-                Section {
-                    Label("BMI için profiline boyunu ekle.", systemImage: "ruler")
-                        .foregroundStyle(Color.ftTextSecondary)
-                        .listRowBackground(Color.ftCard)
-                }
-            }
-
-            Section {
                 NavigationLink {
                     MeasurementsView(viewModel: viewModel)
                 } label: {
-                    Label("Vücut Ölçüleri", systemImage: "ruler.fill")
-                        .foregroundStyle(Color.ftWeight)
-                }
-                .listRowBackground(Color.ftCard)
-            }
-
-            Section("Tartılar") {
-                if entries.isEmpty {
-                    Text("Henüz tartı kaydın yok. Sağ üstteki + ile ekleyebilirsin.")
-                        .foregroundStyle(Color.ftTextSecondary)
-                        .listRowBackground(Color.ftCard)
-                }
-                ForEach(Array(entries.prefix(60).enumerated()), id: \.element.id) { index, entry in
-                    Button {
-                        onEdit(WeightEditorTarget(entry: entry))
-                    } label: {
-                        row(entry, previous: index + 1 < entries.count ? entries[index + 1] : nil)
+                    HStack(spacing: 10) {
+                        MezuraSimgesi().frame(width: 22, height: 22)
+                        Text("Vücut ölçüleri").font(.system(size: 16)).foregroundStyle(Color.ftText)
+                        Spacer()
+                        Text(olcuOzeti).font(.system(size: 13)).foregroundStyle(Color.ftTextSecondary)
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(KlasikRenk.soluk)
                     }
-                    .listRowBackground(Color.ftCard)
-                    .swipeActions {
-                        Button(role: .destructive) {
-                            viewModel.deleteWeight(entry)
-                        } label: {
-                            Label("Sil", systemImage: "trash")
-                        }
-                    }
+                    .frame(minHeight: 50)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .padding(.top, 14)
             }
+            .padding(.horizontal, Constants.Layout.screenPadding)
+            .padding(.bottom, 40)
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
     }
 
-    @ViewBuilder
-    private func header(latest: WeightEntry?, points: [WeightPoint]) -> some View {
-        if let latest {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Son tartı • \(latest.date.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "tr_TR"))))")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.ftTextSecondary)
-                Text(WeightAnalyzer.kgText(latest.weightKg))
-                    .font(.system(size: 44, weight: .bold, design: .rounded))
+    private var olcuOzeti: String {
+        var parca: [String] = []
+        for o in [BodyMeasure.waist, .arm] {
+            if let v = olculer.lazy.compactMap({ $0.value(for: o) }).first {
+                parca.append("\(o.title) \(v.formatted(.number.precision(.fractionLength(0...1))))")
+            }
+        }
+        return parca.joined(separator: " · ")
+    }
+
+    private func kalanSatiri(_ simdi: Double, noktalar: [WeightPoint]) -> Text {
+        guard let hedef = viewModel.targetWeightKg else {
+            return Text("Hedef kilo belirlenmedi").foregroundColor(Color.ftTextSecondary)
+        }
+        let kalan = abs(simdi - hedef)
+        if kalan < 0.1 { return Text("Hedefine ") + Text("ulaştın").bold() }
+        var t = Text("Hedefe ") + Text("\(KiloBicim.kg(kalan)) kg").bold() + Text(" kaldı")
+        if let h = WeightAnalyzer.weeksToGoal(current: simdi, target: hedef, weeklyRate: WeightAnalyzer.weeklyRate(noktalar)) {
+            t = t + Text(" · bu hızla ~\(h) hafta").foregroundColor(Color.ftTextSecondary)
+        }
+        return t
+    }
+}
+
+// MARK: - Tüyün yolu
+
+struct TuyunYolu: View {
+    let noktalar: [WeightPoint]
+    let gun: Int
+    let hedef: Double?
+
+    @Environment(\.accessibilityReduceMotion) private var hareketiAzalt
+
+    var body: some View {
+        let simdi = Date.now
+        let gorunen = noktalar.filter { $0.date >= simdi.addingTimeInterval(-Double(gun) * 86_400) }.sorted { $0.date < $1.date }
+        let ortalama = WeightAnalyzer.movingAverage(gorunen, windowDays: 7)
+
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: hareketiAzalt)) { zaman in
+            let t = hareketiAzalt ? 0 : zaman.date.timeIntervalSinceReferenceDate
+            Canvas { ctx, boyut in
+                ciz(&ctx, boyut: boyut, gorunen: gorunen, ortalama: ortalama, t: t, simdi: simdi)
+            }
+        }
+        .frame(height: 250)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(erisim(gorunen))
+    }
+
+    private func erisim(_ g: [WeightPoint]) -> String {
+        guard let ilk = g.first, let son = g.last else { return "Bu aralıkta tartı yok" }
+        return "Kilo grafiği: \(KiloBicim.kg(ilk.weightKg)) kilodan \(KiloBicim.kg(son.weightKg)) kiloya."
+    }
+
+    private func ciz(_ ctx: inout GraphicsContext, boyut: CGSize, gorunen: [WeightPoint], ortalama: [WeightPoint], t: Double, simdi: Date) {
+        guard gorunen.count >= 2 else {
+            ctx.draw(Text("Grafik için en az iki tartı gerekli").font(.system(size: 13)).foregroundStyle(Color.ftTextSecondary),
+                     at: CGPoint(x: boyut.width / 2, y: boyut.height / 2))
+            return
+        }
+        let W = boyut.width, H = boyut.height, ust: CGFloat = 80, alt: CGFloat = 34, sol: CGFloat = 10, sag: CGFloat = 120
+        let gunOnce: (Date) -> Double = { max(0, simdi.timeIntervalSince($0) / 86_400) }
+        var degerler = gorunen.map(\.weightKg)
+        if let hedef { degerler.append(hedef) }
+        let mn = (degerler.min() ?? 0) - 0.4, mx = (degerler.max() ?? 1) + 0.4
+        let gmax = max(gorunen.map { gunOnce($0.date) }.max() ?? 14, 14)
+        let x: (Date) -> CGFloat = { sol + CGFloat(1 - gunOnce($0) / gmax) * (W - sol - sag) }
+        let y: (Double) -> CGFloat = { ust + CGFloat((mx - $0) / (mx - mn)) * (H - ust - alt) }
+
+        let yol = Firca.ornekle(ortalama.map { CGPoint(x: x($0.date), y: y($0.weightKg)) }, 4)
+        guard let son = yol.last else { return }
+
+        // Hedef: zemin çizgisi ve küçük çimen
+        let hx = W - 20
+        if let hedef {
+            let hy = y(hedef)
+            ctx.fill(Firca.duz(CGPoint(x: W - 70, y: hy + 14), CGPoint(x: W - 4, y: hy + 14), Firca.Ayar(w: 1.2, tohum: 8)),
+                     with: .color(KlasikRenk.soluk.opacity(0.55)))
+            var cimen = Path()
+            for (dx, h) in [(58.0, 8.0), (48, 6), (30, 9), (18, 6)] {
+                cimen.move(to: CGPoint(x: W - dx, y: hy + 14))
+                cimen.addQuadCurve(to: CGPoint(x: W - dx + 1, y: hy + 14 - h), control: CGPoint(x: W - dx - 1.5, y: hy + 14 - h / 2))
+            }
+            ctx.stroke(cimen, with: .color(Color(hex: "#7C8B5E")), style: StrokeStyle(lineWidth: 0.8, lineCap: .round))
+            ctx.draw(Text("hedef \(KiloBicim.kg(hedef))").font(.system(size: 10)).foregroundStyle(Color(hex: "#6E523C")),
+                     at: CGPoint(x: W - 4, y: hy + 28), anchor: .trailing)
+            var gelecek = Path()
+            gelecek.move(to: son)
+            gelecek.addCurve(to: CGPoint(x: hx, y: hy + 6), control1: CGPoint(x: son.x + 18, y: son.y - 4), control2: CGPoint(x: hx - 30, y: hy - 4))
+            ctx.stroke(gelecek, with: .color(Color(hex: "#A89A88")), style: StrokeStyle(lineWidth: 0.9, lineCap: .round, dash: [1, 5]))
+        }
+
+        // Geçmiş yol: rüzgâr çizgisi
+        var golgeli = ctx
+        golgeli.addFilter(.shadow(color: OzetRenk.golge.opacity(0.36), radius: 3, x: 2, y: 5))
+        golgeli.fill(Firca.cizgi(yol, Firca.Ayar(w: 2.6, tohum: 64, giris: 0.1, cikis: 0.02, basinc: 0.3)), with: .color(KiloRenk.yesil.opacity(0.75)))
+        for p in gorunen {
+            ctx.fill(Path(ellipseIn: CGRect(x: x(p.date) - 1.4, y: y(p.weightKg) - 1.4, width: 2.8, height: 2.8)), with: .color(KlasikRenk.soluk.opacity(0.4)))
+        }
+        if let ilk = ortalama.first, let ilkTarti = gorunen.first {
+            let g = Int(gunOnce(ilkTarti.date).rounded())
+            ctx.draw(Text("\(g) gün önce · \(KiloBicim.kg(ilk.weightKg))").font(.system(size: 10)).foregroundStyle(Color(hex: "#6E523C")),
+                     at: CGPoint(x: 10, y: y(ilk.weightKg) - 10), anchor: .leading)
+        }
+
+        // Tüy bugünkü noktada; ucu (62, 86) yola oturur ve hafifçe salınır
+        let salinim = sin(t * 0.9) * 2.5
+        var tuy = ctx
+        tuy.addFilter(.shadow(color: OzetRenk.golge.opacity(0.42), radius: 1.5, x: 1.5, y: 2.5))
+        tuy.translateBy(x: son.x, y: son.y)
+        tuy.rotate(by: .degrees(salinim))
+        tuy.scaleBy(x: 0.95, y: 0.95)
+        tuy.translateBy(x: -62, y: -86)
+        tuy.stroke(SuzulenTuy.tuy.kil, with: .color(Color(hex: "#9A8C7C")), lineWidth: 0.55)
+        tuy.stroke(SuzulenTuy.tuy.sap, with: .color(Color(hex: "#6E5A48")), lineWidth: 1.1)
+    }
+}
+
+/// Küçük mezura simgesi (vücut ölçüleri satırı).
+struct MezuraSimgesi: View {
+    var body: some View {
+        Canvas { ctx, boyut in
+            let s = boyut.width / 34
+            ctx.scaleBy(x: s, y: s)
+            var p = Path()
+            p.addEllipse(in: CGRect(x: 4, y: 6, width: 18, height: 18))
+            p.addEllipse(in: CGRect(x: 10, y: 12, width: 6, height: 6))
+            p.move(to: CGPoint(x: 13, y: 24)); p.addLine(to: CGPoint(x: 31, y: 24)); p.addLine(to: CGPoint(x: 31, y: 18))
+            for (xx, h) in [(17.0, 3.0), (21, 2), (25, 3), (29, 2)] {
+                p.move(to: CGPoint(x: xx, y: 24)); p.addLine(to: CGPoint(x: xx, y: 24 - h))
+            }
+            ctx.stroke(p, with: .color(KiloRenk.koyu), style: StrokeStyle(lineWidth: 1.3 / s, lineCap: .round))
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Tartı ekle / düzenle (mezurayı kaydırarak)
+
+/// Yatay mezura: sürükledikçe değer 0,1 adımla değişir; ortadaki kırmızı iğne seçili değeri gösterir.
+struct MezuraCetveli: View {
+    @Binding var deger: Double
+    var aralik: ClosedRange<Double> = 30...200
+    var adim = 0.1
+    var nokta: CGFloat = 9
+    var yukseklik: CGFloat = 64
+
+    @State private var baslangic: Double?
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            Canvas { ctx, boyut in
+                let orta = w / 2
+                let gorunur = Double(w / nokta) * adim / 2 + adim
+                var v = ((deger - gorunur) / adim).rounded(.down) * adim
+                while v <= deger + gorunur {
+                    defer { v += adim }
+                    guard aralik.contains(v) else { continue }
+                    let i = Int((v / adim).rounded())
+                    let x = orta + CGFloat((v - deger) / adim) * nokta
+                    let tam = i % 10 == 0, yarim = i % 5 == 0
+                    var c = Path()
+                    c.move(to: CGPoint(x: x, y: 6))
+                    c.addLine(to: CGPoint(x: x, y: 6 + (tam ? 30 : yarim ? 20 : 12)))
+                    ctx.stroke(c, with: .color(Color(hex: "#5E4A2E")), lineWidth: tam ? 1.1 : 0.6)
+                    if tam {
+                        ctx.draw(Text("\(Int((v).rounded()))").font(.system(size: 12)).foregroundStyle(Color(hex: "#5E4A2E")),
+                                 at: CGPoint(x: x, y: 50))
+                    }
+                }
+                var igne = Path()
+                igne.move(to: CGPoint(x: orta, y: 0))
+                igne.addLine(to: CGPoint(x: orta, y: boyut.height))
+                ctx.stroke(igne, with: .color(KlasikRenk.vurgu), lineWidth: 2)
+                var uc = Path()
+                uc.move(to: CGPoint(x: orta - 6, y: -3)); uc.addLine(to: CGPoint(x: orta + 6, y: -3)); uc.addLine(to: CGPoint(x: orta, y: 5)); uc.closeSubpath()
+                ctx.fill(uc, with: .color(KlasikRenk.vurgu))
+            }
+            .background(
+                LinearGradient(colors: [Color(hex: "#EFDFB4"), Color(hex: "#E5D2A0")], startPoint: .top, endPoint: .bottom)
+                    .overlay(alignment: .top) { Rectangle().fill(Color(hex: "#B89A5E")).frame(height: 0.8) }
+                    .overlay(alignment: .bottom) { Rectangle().fill(Color(hex: "#B89A5E")).frame(height: 0.8) }
+                    .padding(.vertical, 2)
+            )
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { d in
+                        let bas = baslangic ?? deger
+                        if baslangic == nil { baslangic = deger }
+                        let yeni = min(aralik.upperBound, max(aralik.lowerBound, ((bas - Double(d.translation.width / nokta) * adim) / adim).rounded() * adim))
+                        if abs(yeni - deger) >= adim / 2 { Haptics.selection() }
+                        deger = yeni
+                    }
+                    .onEnded { _ in baslangic = nil }
+            )
+        }
+        .frame(height: yukseklik)
+        .accessibilityElement()
+        .accessibilityLabel("Değer")
+        .accessibilityValue(KiloBicim.kg(deger))
+        .accessibilityAdjustableAction { yon in
+            deger = min(aralik.upperBound, max(aralik.lowerBound, deger + (yon == .increment ? adim : -adim)))
+        }
+    }
+}
+
+private struct TartiSayfasi: View {
+    let viewModel: BodyMetricsViewModel
+    let kayit: WeightEntry?
+    let kaydedildi: () -> Void
+
+    @State private var deger = 70.0
+    @State private var gun = Calendar.current.startOfDay(for: .now)
+    @State private var oncekiSon: Double?
+    @Environment(\.dismiss) private var kapat
+
+    var body: some View {
+        KlasikAyarSayfasi(baslik: kayit == nil ? "Tartı Ekle" : "Tartıyı Düzenle", kaydet: kaydet) {
+            VStack(spacing: 4) {
+                (Text(KiloBicim.kg(deger)).font(.system(size: 52, weight: .bold)).foregroundColor(Color.ftText)
+                 + Text(" kg").font(.system(size: 15)).foregroundColor(Color.ftTextSecondary))
                     .monospacedDigit()
-                HStack(spacing: 16) {
-                    change("7 gün", WeightAnalyzer.change(points, days: 7))
-                    change("30 gün", WeightAnalyzer.change(points, days: 30))
+                    .contentTransition(.numericText())
+                Text(farkMetni).font(.system(size: 13)).foregroundStyle(Color.ftTextSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+
+            MezuraCetveli(deger: $deger)
+                .padding(.horizontal, -20)
+                .padding(.top, 18)
+
+            if kayit == nil {
+                AyarSecimSatiri(baslik: "Gün", secenekler: gunler, secili: $gun)
+                    .padding(.top, 18)
+            } else if let kayit {
+                AyarSatiri(baslik: "Gün") {
+                    Text(KiloBicim.gunOnce(kayit.date)).foregroundStyle(Color.ftText)
                 }
+                .padding(.top, 18)
+                Button("Tartıyı sil", role: .destructive) {
+                    viewModel.deleteWeight(kayit)
+                    kaydedildi()
+                    kapat()
+                }
+                .font(.system(size: 15))
+                .padding(.top, 8)
             }
-            .padding(.vertical, 6)
-            .accessibilityElement(children: .combine)
-        } else {
-            Button {
-                onEdit(WeightEditorTarget(entry: nil))
-            } label: {
-                Label("İlk tartını ekle", systemImage: "scalemass.fill")
-                    .font(.headline)
-                    .foregroundStyle(Color.ftWeight)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-            }
+        }
+        .onAppear {
+            oncekiSon = viewModel.latestWeight()
+            deger = kayit?.weightKg ?? oncekiSon ?? 70
         }
     }
 
-    private func change(_ title: String, _ value: Double?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value.map { WeightAnalyzer.kgText($0, signed: true) } ?? "—")
-                .font(.subheadline.bold().monospacedDigit())
-            Text(title).font(.caption2).foregroundStyle(Color.ftTextSecondary)
+    private var gunler: [(Date, String)] {
+        let t = Calendar.current, b = t.startOfDay(for: .now)
+        return (0..<7).compactMap { i in
+            t.date(byAdding: .day, value: -i, to: b).map { ($0, i == 0 ? "Bugün" : i == 1 ? "Dün" : "\(i) gün önce") }
         }
     }
 
-    @ViewBuilder
-    private func goalCard(latest: Double?, points: [WeightPoint]) -> some View {
-        if let target = viewModel.targetWeightKg, let latest {
-            let start = viewModel.startWeightKg ?? points.last?.weightKg ?? latest
-            let progress = WeightAnalyzer.goalProgress(start: start, current: latest, target: target)
-            let weeks = WeightAnalyzer.weeksToGoal(current: latest, target: target, weeklyRate: WeightAnalyzer.weeklyRate(points))
-
-            Button(action: onGoal) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("Hedef: \(WeightAnalyzer.kgText(target))").font(.headline).foregroundStyle(Color.ftText)
-                        Spacer()
-                        Text("%\(Int(progress * 100))").font(.headline.monospacedDigit()).foregroundStyle(Color.ftWeight)
-                    }
-                    ProgressView(value: progress).tint(Color.ftWeight)
-                    HStack {
-                        Text("Başlangıç \(WeightAnalyzer.kgText(start))")
-                        Spacer()
-                        Text(abs(target - latest) < 0.1 ? "Hedefe ulaştın 🎉" : "Kalan \(WeightAnalyzer.kgText(abs(target - latest)))")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(Color.ftTextSecondary)
-                    if let weeks {
-                        Text("Bu hızla yaklaşık \(weeks) hafta.")
-                            .font(.caption)
-                            .foregroundStyle(Color.ftTextSecondary)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityHint("Hedefi düzenle")
-        } else {
-            Button(action: onGoal) {
-                Label("Hedef kilo belirle", systemImage: "target")
-                    .foregroundStyle(Color.ftWeight)
-            }
-        }
+    private var farkMetni: String {
+        guard let s = kayit == nil ? oncekiSon : kayit?.weightKg else { return " " }
+        let f = deger - s
+        if abs(f) < 0.05 { return kayit == nil ? "son tartıyla aynı" : "değişmedi" }
+        return kayit == nil ? "son tartıdan \(KiloBicim.isaretli(f)) kg" : "önceki değerden \(KiloBicim.isaretli(f)) kg"
     }
 
-    private func row(_ entry: WeightEntry, previous: WeightEntry?) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "tr_TR"))))
-                    .font(.subheadline)
-                    .foregroundStyle(Color.ftText)
-                if let note = entry.note {
-                    Text(note).font(.caption).foregroundStyle(Color.ftTextSecondary).lineLimit(1)
-                }
-            }
-            Spacer()
-            if let previous {
-                let diff = entry.weightKg - previous.weightKg
-                Text(WeightAnalyzer.kgText(diff, signed: true))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(Color.ftTextSecondary)
-            }
-            Text(WeightAnalyzer.kgText(entry.weightKg))
-                .font(.body.monospacedDigit().weight(.semibold))
-                .foregroundStyle(Color.ftText)
+    private func kaydet() {
+        do {
+            let t = Calendar.current
+            let tarih: Date
+            if let kayit { tarih = kayit.date } else if t.isDateInToday(gun) { tarih = .now } else { tarih = t.date(byAdding: .hour, value: 9, to: gun) ?? gun }
+            _ = try viewModel.saveWeight((deger * 10).rounded() / 10, date: tarih, editing: kayit)
+            Haptics.success()
+            kaydedildi()
+        } catch {
+            viewModel.errorMessage = AppError.map(error).errorDescription
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
-// MARK: - Tartı ekle / düzenle
-private struct WeightEditorSheet: View {
-    @Environment(\.dismiss) private var dismiss
+// MARK: - Ayarlar
+
+private struct KiloAyarSayfasi: View {
     let viewModel: BodyMetricsViewModel
-    let entry: WeightEntry?
-    let onSaved: () -> Void
+    @Environment(AuthViewModel.self) private var auth
 
-    @State private var kg: Double
-    @State private var date: Date
-    @State private var note: String
-    @State private var saveError: String?
+    @State private var hedef: Double = 65
+    @State private var hedefVar = true
+    @State private var boy = 170
+    @State private var hatir = WeighInReminderSettings()
 
-    init(viewModel: BodyMetricsViewModel, entry: WeightEntry?, onSaved: @escaping () -> Void) {
-        self.viewModel = viewModel
-        self.entry = entry
-        self.onSaved = onSaved
-        _kg = State(initialValue: entry?.weightKg ?? viewModel.latestWeight() ?? Constants.Training.fallbackWeightKg)
-        _date = State(initialValue: entry?.date ?? .now)
-        _note = State(initialValue: entry?.note ?? "")
+    private var dogrulama: WeightGoalValidation {
+        viewModel.validateGoal(hedef, currentKg: viewModel.latestWeight() ?? auth.currentUser?.weightKg)
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    HStack {
-                        Button { adjust(-0.1) } label: { Image(systemName: "minus.circle.fill").font(.largeTitle) }
-                            .accessibilityLabel("100 gram azalt")
-                        Spacer()
-                        TextField("Kilo", value: $kg, format: .number.precision(.fractionLength(1)))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.center)
-                            .font(.system(size: 44, weight: .bold, design: .rounded))
-                            .monospacedDigit()
-                            .accessibilityLabel("Kilo, kilogram")
-                        Text("kg").foregroundStyle(Color.ftTextSecondary)
-                        Spacer()
-                        Button { adjust(0.1) } label: { Image(systemName: "plus.circle.fill").font(.largeTitle) }
-                            .accessibilityLabel("100 gram artır")
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Color.ftWeight)
+        KlasikAyarSayfasi(baslik: "Kilo Ayarları", kaydetEtkin: !hedefVar || dogrulama.message == nil, kaydet: kaydet) {
+            if hedefVar {
+                HedefSatiri(baslik: "Hedef kilo", deger: KiloBicim.kg(hedef), birim: "kg",
+                            azalt: { hedef = max(WeightAnalyzer.validRange.lowerBound, hedef - 0.5) },
+                            artir: { hedef = min(WeightAnalyzer.validRange.upperBound, hedef + 0.5) })
+                if let m = dogrulama.message {
+                    Text(m).font(.system(size: 12)).foregroundStyle(Color.ftWarning).padding(.bottom, 6)
                 }
-
-                Section {
-                    DatePicker("Tarih", selection: $date, in: ...Date.now)
-                    TextField("Not (isteğe bağlı)", text: $note)
-                }
-
-                if let entry {
-                    Section {
-                        Button("Tartıyı sil", role: .destructive) {
-                            viewModel.deleteWeight(entry)
-                            onSaved()
-                            dismiss()
-                        }
-                    }
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .ftScreenBackground()
-            .navigationTitle(entry == nil ? "Tartı Ekle" : "Tartıyı Düzenle")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Vazgeç") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
-                        do {
-                            try viewModel.saveWeight(kg, date: date, note: note, editing: entry)
-                            onSaved()
-                            dismiss()
-                        } catch {
-                            saveError = AppError.map(error).errorDescription
-                            Haptics.error()
-                        }
-                    }
-                }
-            }
-        }
-        .alert("Kaydedilemedi", isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
-            Button("Tamam", role: .cancel) {}
-        } message: {
-            Text(saveError ?? "")
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    private func adjust(_ delta: Double) {
-        Haptics.selection()
-        kg = min(max(((kg + delta) * 10).rounded() / 10, WeightAnalyzer.validRange.lowerBound), WeightAnalyzer.validRange.upperBound)
-    }
-}
-
-// MARK: - Hedef
-private struct WeightGoalSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let viewModel: BodyMetricsViewModel
-    let currentKg: Double?
-    let onSave: (Double?) -> Void
-
-    @State private var target: Double
-
-    init(viewModel: BodyMetricsViewModel, currentKg: Double?, onSave: @escaping (Double?) -> Void) {
-        self.viewModel = viewModel
-        self.currentKg = currentKg
-        self.onSave = onSave
-        _target = State(initialValue: viewModel.targetWeightKg ?? currentKg ?? Constants.Training.fallbackWeightKg)
-    }
-
-    private var validation: WeightGoalValidation {
-        viewModel.validateGoal(target, currentKg: currentKg)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Stepper(value: $target, in: WeightAnalyzer.validRange, step: 0.5) {
-                        HStack {
-                            Text("Hedef kilo")
-                            Spacer()
-                            Text(WeightAnalyzer.kgText(target)).monospacedDigit()
-                        }
-                    }
-                    if let height = viewModel.heightCm, let healthy = WeightAnalyzer.healthyRange(heightCm: height) {
-                        Text("Boyuna göre sağlıklı aralık: \(WeightAnalyzer.kgText(healthy.lowerBound)) – \(WeightAnalyzer.kgText(healthy.upperBound))")
-                            .font(.caption)
-                            .foregroundStyle(Color.ftTextSecondary)
-                    }
-                } footer: {
-                    if let message = validation.message {
-                        Text(message).foregroundStyle(Color.ftWarning)
-                    } else {
-                        Text("Haftada 0,25–1 kg arası değişim çoğu kişi için sürdürülebilir kabul edilir.")
-                    }
-                }
-
-                if viewModel.targetWeightKg != nil {
-                    Section {
-                        Button("Hedefi kaldır", role: .destructive) {
-                            onSave(nil)
-                            dismiss()
-                        }
-                    }
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .ftScreenBackground()
-            .navigationTitle("Kilo Hedefi")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Vazgeç") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") {
-                        Haptics.success()
-                        onSave(target)
-                        dismiss()
-                    }
-                    .disabled(validation != .ok)
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-}
-
-// MARK: - Tartı hatırlatıcısı
-private struct WeighInReminderSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    let viewModel: BodyMetricsViewModel
-
-    @State private var draft: WeighInReminderSettings
-    @State private var time: Date
-    @State private var permissionDenied = false
-
-    init(viewModel: BodyMetricsViewModel) {
-        self.viewModel = viewModel
-        let settings = viewModel.reminderSettings
-        _draft = State(initialValue: settings)
-        _time = State(initialValue: Calendar.current.date(
-            bySettingHour: settings.hour, minute: settings.minute, second: 0, of: .now
-        ) ?? .now)
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    Toggle("Haftalık tartı hatırlatıcısı", isOn: $draft.isEnabled)
-                    if draft.isEnabled {
-                        Picker("Gün", selection: $draft.weekday) {
-                            ForEach(Self.weekdays, id: \.value) { day in
-                                Text(day.name).tag(day.value)
-                            }
-                        }
-                        DatePicker("Saat", selection: $time, displayedComponents: .hourAndMinute)
-                    }
-                } footer: {
-                    if permissionDenied {
-                        Text("Bildirim izni kapalı. Ayarlar > FarvaTrack > Bildirimler'den açabilirsin.")
-                            .foregroundStyle(Color.ftWarning)
-                    } else {
-                        Text("Sabah, kahvaltıdan önce tartılmak daha tutarlı sonuç verir.")
-                    }
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .ftScreenBackground()
-            .navigationTitle("Hatırlatıcı")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Vazgeç") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Kaydet") { save() }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-
-    private static let weekdays: [(name: String, value: Int)] = [
-        ("Pazartesi", 2), ("Salı", 3), ("Çarşamba", 4), ("Perşembe", 5),
-        ("Cuma", 6), ("Cumartesi", 7), ("Pazar", 1)
-    ]
-
-    private func save() {
-        var settings = draft
-        let components = Calendar.current.dateComponents([.hour, .minute], from: time)
-        settings.hour = components.hour ?? 8
-        settings.minute = components.minute ?? 0
-        Task {
-            if await viewModel.applyReminder(settings) {
-                Haptics.success()
-                dismiss()
             } else {
-                draft.isEnabled = false
-                permissionDenied = true
+                AyarSatiri(baslik: "Hedef kilo") {
+                    Button("Belirle") { hedefVar = true }.fontWeight(.semibold)
+                }
+            }
+            FircaAyirici(tohum: 511)
+            HedefSatiri(baslik: "Boy", deger: "\(boy)", birim: "cm",
+                        azalt: { boy = max(120, boy - 1) }, artir: { boy = min(230, boy + 1) })
+            if hedefVar && viewModel.targetWeightKg != nil {
+                Button("Hedefi kaldır", role: .destructive) { hedefVar = false }
+                    .font(.system(size: 14))
+                    .padding(.top, 4)
+            }
+
+            HStack {
+                AyarBolumu(metin: "Tartı hatırlatıcısı")
+                Spacer()
+                Toggle("Tartı hatırlatıcısı", isOn: $hatir.isEnabled).labelsHidden().tint(KiloRenk.yesil)
+            }
+            Group {
+                AyarSecimSatiri(baslik: "Gün", secenekler: [(2, "Pazartesi"), (3, "Salı"), (4, "Çarşamba"), (5, "Perşembe"), (6, "Cuma"), (7, "Cumartesi"), (1, "Pazar")],
+                                secili: $hatir.weekday)
+                FircaAyirici(tohum: 531)
+                AyarSecimSatiri(baslik: "Saat", secenekler: (0...16).map { (360 + $0 * 30, UykuBicim.saat(360 + $0 * 30)) },
+                                secili: Binding(get: { hatir.hour * 60 + hatir.minute }, set: { hatir.hour = $0 / 60; hatir.minute = $0 % 60 }))
+            }
+            .opacity(hatir.isEnabled ? 1 : 0.45)
+            .disabled(!hatir.isEnabled)
+        }
+        .onAppear {
+            hedefVar = viewModel.targetWeightKg != nil
+            hedef = viewModel.targetWeightKg ?? viewModel.latestWeight() ?? auth.currentUser?.weightKg ?? 65
+            boy = Int((viewModel.heightCm ?? auth.currentUser?.heightCm ?? 170).rounded())
+            hatir = viewModel.reminderSettings
+            hatir.minute = hatir.minute < 30 ? 0 : 30
+            hatir.hour = min(14, max(6, hatir.hour))
+        }
+    }
+
+    private func kaydet() {
+        if var user = auth.currentUser {
+            let yeniHedef: Double? = hedefVar ? hedef : nil
+            var degisti = false
+            if yeniHedef != viewModel.targetWeightKg {
+                user.targetWeightKg = yeniHedef
+                if user.startWeightKg == nil || yeniHedef == nil {
+                    user.startWeightKg = yeniHedef == nil ? nil : (viewModel.latestWeight() ?? user.weightKg)
+                }
+                degisti = true
+            }
+            if Double(boy) != (user.heightCm ?? 0) {
+                user.heightCm = Double(boy)
+                degisti = true
+            }
+            if degisti { Task { await auth.updateUser(user) } }
+        }
+        if hatir != viewModel.reminderSettings {
+            let yeni = hatir
+            Task {
+                let ok = await viewModel.applyReminder(yeni)
+                if !ok && yeni.isEnabled { viewModel.errorMessage = "Bildirim izni kapalı. Ayarlar > FarvaTrack > Bildirimler'den açabilirsin." }
             }
         }
     }
