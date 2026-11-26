@@ -172,8 +172,11 @@ struct DashboardTrainingRow: View {
         self.onOpen = onOpen
     }
 
-    private var status: (icon: String, title: String, detail: String)? {
-        if isLive { return ("figure.strengthtraining.traditional", "Devam eden antrenman", "Kaldığın yerden devam et") }
+    /// Satırda gösterilecek durum: simge, düz metin ve (varsa) kalın yazılacak antrenman adı.
+    private var status: (icon: String, text: Text, label: String)? {
+        if isLive {
+            return ("figure.strengthtraining.traditional", Text("Devam eden antrenmanın seni bekliyor"), "Devam eden antrenman")
+        }
         let names = Dictionary(templates.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
         let plan = ProgramPlanner.plan(
             for: programs.first?.snapshot,
@@ -185,40 +188,38 @@ struct DashboardTrainingRow: View {
         case .none:
             return nil
         case .rest:
-            return ("bed.double.fill", "Bugün dinlenme günü", programs.first?.name ?? "")
+            return ("bed.double", Text("Bugün dinlenme günü"), "Bugün dinlenme günü")
         case .workout(let id, let isDone):
-            return (isDone ? "checkmark.seal.fill" : "dumbbell.fill",
-                    isDone ? "Bugünkü antrenman tamam" : "Bugün: \(names[id] ?? "")",
-                    programs.first?.name ?? "")
+            let name = names[id] ?? ""
+            if isDone {
+                return ("checkmark.seal", Text("Bugünkü antrenman tamam"), "Bugünkü antrenman tamam")
+            }
+            return ("dumbbell", Text("Bugün ") + Text(name).bold() + Text(" seni bekliyor"), "Bugün \(name) seni bekliyor")
         }
     }
 
     var body: some View {
         if let status {
-            Button(action: onOpen) {
-                HStack(spacing: 12) {
+            Button {
+                Haptics.impact(.light)
+                onOpen()
+            } label: {
+                HStack(spacing: 6) {
                     Image(systemName: status.icon)
-                        .font(.subheadline)
-                        .foregroundStyle(Color.ftExercise)
-                        .frame(width: 32, height: 32)
-                        .background(Color.ftExercise.opacity(0.18), in: Circle())
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(status.title).font(.subheadline.weight(.medium))
-                        if !status.detail.isEmpty {
-                            Text(status.detail).font(.caption).foregroundStyle(Color.ftTextSecondary)
-                        }
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Color.ftTextSecondary.opacity(0.6))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(hex: "#8E3A2E"))
+                    status.text
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.ftText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.ftCard, in: RoundedRectangle(cornerRadius: Constants.Layout.cornerRadius, style: .continuous))
-                .accessibilityElement(children: .combine)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(status.label)
+            .accessibilityHint("Egzersiz sekmesini açar")
         }
     }
 }
