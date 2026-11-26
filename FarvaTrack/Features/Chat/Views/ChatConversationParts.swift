@@ -245,6 +245,7 @@ struct ChatMessageInfoSheet: View {
 
 /// Altta açılan arama çubuğu: yazdıkça sohbette taranır, sağdaki oklarla eşleşen baloncuklar arasında gezilir.
 struct ChatFindBar: View {
+    @Environment(\.chatTint) private var tint
     @Bindable var viewModel: ChatViewModel
     var focused: FocusState<Bool>.Binding
     let onOlder: () -> Void
@@ -257,7 +258,7 @@ struct ChatFindBar: View {
         HStack(spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Color.ftTextSecondary)
+                    .foregroundStyle(tint.secondary)
                     .accessibilityHidden(true)
                 TextField("Sohbette ara", text: $viewModel.findQuery)
                     .focused(focused)
@@ -269,10 +270,10 @@ struct ChatFindBar: View {
                 if hasQuery {
                     Text(viewModel.find.count == 0 ? "Yok" : viewModel.find.positionText)
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(Color.ftTextSecondary)
+                        .foregroundStyle(tint.secondary)
                         .accessibilityLabel(viewModel.find.count == 0 ? "Sonuç yok" : "\(viewModel.find.count) sonuçtan \(viewModel.find.positionText.split(separator: "/").first ?? "")")
                     Button { viewModel.findQuery = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(Color.ftTextSecondary)
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(tint.secondary)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Aramayı temizle")
@@ -280,7 +281,7 @@ struct ChatFindBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(tint.field, in: RoundedRectangle(cornerRadius: tint.corner, style: .continuous))
 
             Button(action: onOlder) {
                 Image(systemName: "chevron.up").font(.body.weight(.semibold)).frame(width: 30, height: 36)
@@ -297,9 +298,11 @@ struct ChatFindBar: View {
             Button("Bitti", action: onDone)
                 .font(.subheadline.weight(.semibold))
         }
-        .tint(Color.ftAccentLight)
+        .tint(tint.icon)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.ftCard.ignoresSafeArea(edges: .bottom))
+        .foregroundStyle(tint.text)
+        .background(ChatChromeBackground().ignoresSafeArea(edges: .bottom))
+        .chatTintScheme()
     }
 }

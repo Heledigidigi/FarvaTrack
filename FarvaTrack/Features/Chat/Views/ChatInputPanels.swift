@@ -247,6 +247,7 @@ struct ChatKeyboardTracker: UIViewRepresentable {
 /// Klavye yüksekliğinde açılan son fotoğraf/videolar ızgarası (WhatsApp gibi). Üstteki tutamaçtan yukarı
 /// çekilince büyür, aşağı çekilince kapanır. Seçilenlerin orijinal dosyası gönderilir.
 struct ChatGalleryPanel: View {
+    @Environment(\.chatTint) private var tint
     /// Kapalı (klavye) yüksekliği ve tam ekrana yakın yüksekliği.
     let collapsedHeight: CGFloat
     let expandedHeight: CGFloat
@@ -278,7 +279,9 @@ struct ChatGalleryPanel: View {
         }
         .frame(height: height, alignment: .top)
         .frame(maxWidth: .infinity)
-        .background(Color.ftChrome)
+        .background(tint.panel)
+        .foregroundStyle(tint.text)
+        .chatTintScheme()
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: isExpanded || dragHeight != nil ? 16 : 0,
                                           topTrailingRadius: isExpanded || dragHeight != nil ? 16 : 0,
                                           style: .continuous))
@@ -306,7 +309,7 @@ struct ChatGalleryPanel: View {
     private var header: some View {
         VStack(spacing: 6) {
             Capsule()
-                .fill(Color.ftSubtle(0.35))
+                .fill(tint.subtle)
                 .frame(width: 38, height: 5)
                 .padding(.top, 6)
             HStack {
@@ -317,7 +320,7 @@ struct ChatGalleryPanel: View {
                     Label("Albümler", systemImage: "rectangle.stack")
                         .font(.subheadline.weight(.semibold))
                 }
-                .foregroundStyle(Color.ftAccentLight)
+                .foregroundStyle(tint.icon)
                 .accessibilityHint("Sistemin fotoğraf seçicisini açar")
                 Spacer()
                 Text(isExpanded ? "Galeri" : "Son öğeler")
@@ -333,9 +336,9 @@ struct ChatGalleryPanel: View {
                     Image(systemName: isExpanded ? "chevron.down" : "xmark")
                         .font(.subheadline.weight(.semibold))
                         .frame(width: 30, height: 30)
-                        .background(Color.ftCardElevated, in: Circle())
+                        .background(tint.field, in: Circle())
                 }
-                .foregroundStyle(Color.ftText)
+                .foregroundStyle(tint.text)
                 .accessibilityLabel(isExpanded ? "Galeriyi küçült" : "Galeriyi kapat")
             }
             .padding(.horizontal, 14)
@@ -384,16 +387,16 @@ struct ChatGalleryPanel: View {
     private var content: some View {
         switch library.access {
         case .unknown:
-            ProgressView().tint(Color.ftAccentLight).frame(maxWidth: .infinity, maxHeight: .infinity)
+            ProgressView().tint(tint.icon).frame(maxWidth: .infinity, maxHeight: .infinity)
         case .denied:
             VStack(spacing: 10) {
                 Image(systemName: "photo.on.rectangle.angled")
                     .font(.largeTitle)
-                    .foregroundStyle(Color.ftTextSecondary)
+                    .foregroundStyle(tint.secondary)
                     .accessibilityHidden(true)
                 Text("Galerini burada göstermek için Fotoğraflar erişimi gerekiyor.")
                     .font(.footnote)
-                    .foregroundStyle(Color.ftTextSecondary)
+                    .foregroundStyle(tint.secondary)
                     .multilineTextAlignment(.center)
                 HStack(spacing: 10) {
                     Button("Ayarları aç") {
@@ -403,7 +406,7 @@ struct ChatGalleryPanel: View {
                     Button("Fotoğraf seç", action: onSystemPicker)
                         .buttonStyle(.borderedProminent)
                 }
-                .tint(Color.ftAccentLight)
+                .tint(tint.icon)
                 .font(.footnote.weight(.semibold))
             }
             .padding(24)
@@ -427,7 +430,7 @@ struct ChatGalleryPanel: View {
                 if library.access == .limited {
                     Text("Yalnızca izin verdiğin fotoğraflar gösteriliyor. Diğerleri için Albümler'i kullan.")
                         .font(.caption)
-                        .foregroundStyle(Color.ftTextSecondary)
+                        .foregroundStyle(tint.secondary)
                         .multilineTextAlignment(.center)
                         .padding(12)
                 }
@@ -443,7 +446,7 @@ struct ChatGalleryPanel: View {
             cameraPreview.stop()
             onCamera()
         } label: {
-            Color.ftCardElevated
+            tint.field
                 .aspectRatio(1, contentMode: .fill)
                 .overlay {
                     if cameraPreview.isRunning {
@@ -455,7 +458,7 @@ struct ChatGalleryPanel: View {
                 .overlay {
                     Image(systemName: "camera.fill")
                         .font(.title2)
-                        .foregroundStyle(cameraPreview.isRunning ? Color.white : Color.ftAccentLight)
+                        .foregroundStyle(cameraPreview.isRunning ? Color.white : tint.icon)
                         .shadow(color: .black.opacity(cameraPreview.isRunning ? 0.4 : 0), radius: 3)
                 }
         }
@@ -479,24 +482,24 @@ struct ChatGalleryPanel: View {
             } label: {
                 Text("Temizle").font(.subheadline.weight(.semibold))
             }
-            .foregroundStyle(Color.ftTextSecondary)
+            .foregroundStyle(tint.secondary)
             Spacer()
             Button {
                 send()
             } label: {
                 HStack(spacing: 8) {
                     if isExporting {
-                        ProgressView().tint(.white).controlSize(.small)
+                        ProgressView().tint(tint.onAccent).controlSize(.small)
                     } else {
                         Image(systemName: "paperplane.fill")
                     }
                     Text("Gönder (\(selection.count))")
                 }
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(tint.onAccent)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
-                .background(Color.ftAccent, in: Capsule())
+                .background(tint.accent, in: Capsule())
             }
             .disabled(isExporting)
             .accessibilityLabel("\(selection.count) öğeyi gönder")
@@ -504,7 +507,7 @@ struct ChatGalleryPanel: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, max(10, bottomInset))
-        .background(Color.ftChrome.opacity(0.97))
+        .background(tint.panel)
     }
 
     private func toggle(_ asset: PHAsset) {
@@ -532,6 +535,7 @@ struct ChatGalleryPanel: View {
 
 /// Izgaradaki tek öğe: küçük resim, video süresi ve seçim sırası.
 private struct ChatGalleryCell: View {
+    @Environment(\.chatTint) private var tint
     let asset: PHAsset
     let library: ChatGalleryLibrary
     let selectionIndex: Int?
@@ -539,7 +543,7 @@ private struct ChatGalleryCell: View {
     @State private var requestID: PHImageRequestID?
 
     var body: some View {
-        Color.ftCardElevated
+        tint.field
             .aspectRatio(1, contentMode: .fill)
             .overlay {
                 if let image {
@@ -560,9 +564,9 @@ private struct ChatGalleryCell: View {
                 ZStack {
                     Circle()
                         .strokeBorder(.white, lineWidth: 1.5)
-                        .background(Circle().fill(selectionIndex == nil ? Color.black.opacity(0.2) : Color.ftAccent))
+                        .background(Circle().fill(selectionIndex == nil ? Color.black.opacity(0.2) : tint.accent))
                     if let selectionIndex {
-                        Text("\(selectionIndex)").font(.caption2.bold()).foregroundStyle(.white)
+                        Text("\(selectionIndex)").font(.caption2.bold()).foregroundStyle(tint.onAccent)
                     }
                 }
                 .frame(width: 22, height: 22)

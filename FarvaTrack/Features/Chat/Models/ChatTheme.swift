@@ -191,19 +191,19 @@ struct ChatThemeLook: Equatable {
     // Önizlemede onaylanan değerler.
     static let rainbow = ChatThemeLook(
         colorScheme: .light,
-        chrome: .rgb(255, 240, 248, 0.84), chromeText: ThemeRGBA(hex: "#5B2C55"), secondaryText: ThemeRGBA(hex: "#A0569A"),
+        chrome: .rgb(255, 240, 248, 0.66), chromeText: ThemeRGBA(hex: "#5B2C55"), secondaryText: ThemeRGBA(hex: "#A0569A"),
         icon: ThemeRGBA(hex: "#C2569A"),
         separator: .gradient(["#FFADC9", "#FFD2A6", "#FFF3A8", "#BFF0C0", "#A6E6FF", "#C4B5FF", "#FFBDF2"].map { ThemeRGBA(hex: $0) }, width: 1.5),
-        dayBackground: .rgb(255, 255, 255, 0.72), dayText: ThemeRGBA(hex: "#8A3F7C"),
+        dayBackground: .rgb(255, 255, 255, 0.55), dayText: ThemeRGBA(hex: "#8A3F7C"),
         field: .rgb(255, 255, 255, 0.8), fieldText: ThemeRGBA(hex: "#B0809F"),
         send: .gradient([ThemeRGBA(hex: "#FF8FC6"), ThemeRGBA(hex: "#A98CFF")]), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#FF8FC6"), ThemeRGBA(hex: "#C58CFF"), ThemeRGBA(hex: "#8FB6FF")]), outgoingText: .rgb(255, 255, 255),
-        incoming: .solid(.rgb(255, 255, 255, 0.88)), incomingText: ThemeRGBA(hex: "#4D2448")
+        incoming: .solid(.rgb(255, 255, 255, 0.8)), incomingText: ThemeRGBA(hex: "#4D2448")
     )
 
     static let pixelDay = ChatThemeLook(
         colorScheme: .light,
-        chrome: .rgb(246, 240, 224, 0.86), chromeText: ThemeRGBA(hex: "#2F2A1E"), secondaryText: ThemeRGBA(hex: "#4D7A2A"),
+        chrome: .rgb(246, 240, 224, 0.82), chromeText: ThemeRGBA(hex: "#2F2A1E"), secondaryText: ThemeRGBA(hex: "#4D7A2A"),
         icon: ThemeRGBA(hex: "#4D7A2A"),
         separator: .color(ThemeRGBA(hex: "#6B4A2B"), width: 2),
         dayBackground: ThemeRGBA(hex: "#7A5636"), dayText: ThemeRGBA(hex: "#FFF6DF"),
@@ -216,7 +216,7 @@ struct ChatThemeLook: Equatable {
 
     static let pixelNight = ChatThemeLook(
         colorScheme: .dark,
-        chrome: .rgb(18, 24, 48, 0.86), chromeText: ThemeRGBA(hex: "#E6EAFF"), secondaryText: ThemeRGBA(hex: "#9FB4FF"),
+        chrome: .rgb(18, 24, 48, 0.82), chromeText: ThemeRGBA(hex: "#E6EAFF"), secondaryText: ThemeRGBA(hex: "#9FB4FF"),
         icon: ThemeRGBA(hex: "#9FB4FF"),
         separator: .color(ThemeRGBA(hex: "#2C3566"), width: 2),
         dayBackground: ThemeRGBA(hex: "#2C3566"), dayText: ThemeRGBA(hex: "#DFE5FF"),
@@ -229,10 +229,10 @@ struct ChatThemeLook: Equatable {
 
     static let hillGolden = ChatThemeLook(
         colorScheme: .light,
-        chrome: .rgb(255, 240, 222, 0.86), chromeText: ThemeRGBA(hex: "#3E2A24"), secondaryText: ThemeRGBA(hex: "#9A6A52"),
+        chrome: .rgb(255, 240, 222, 0.62), chromeText: ThemeRGBA(hex: "#3E2A24"), secondaryText: ThemeRGBA(hex: "#9A6A52"),
         icon: ThemeRGBA(hex: "#B8642E"),
         separator: .color(.rgb(255, 255, 255, 0.45), width: 1),
-        dayBackground: .rgb(255, 236, 214, 0.78), dayText: ThemeRGBA(hex: "#7A4A33"),
+        dayBackground: .rgb(255, 236, 214, 0.6), dayText: ThemeRGBA(hex: "#7A4A33"),
         field: .rgb(255, 250, 244, 0.85), fieldText: ThemeRGBA(hex: "#B0907E"),
         send: .solid(ThemeRGBA(hex: "#C9683F")), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#E5935A"), ThemeRGBA(hex: "#C9683F")]), outgoingText: .rgb(255, 255, 255),
@@ -242,10 +242,10 @@ struct ChatThemeLook: Equatable {
 
     static let hillRose = ChatThemeLook(
         colorScheme: .dark,
-        chrome: .rgb(52, 40, 86, 0.86), chromeText: ThemeRGBA(hex: "#FBEAF3"), secondaryText: ThemeRGBA(hex: "#E8B6D6"),
+        chrome: .rgb(52, 40, 86, 0.55), chromeText: ThemeRGBA(hex: "#FBEAF3"), secondaryText: ThemeRGBA(hex: "#E8B6D6"),
         icon: ThemeRGBA(hex: "#FFB8D0"),
         separator: .color(.rgb(255, 255, 255, 0.14), width: 1),
-        dayBackground: .rgb(60, 46, 96, 0.78), dayText: ThemeRGBA(hex: "#F6D9EA"),
+        dayBackground: .rgb(60, 46, 96, 0.55), dayText: ThemeRGBA(hex: "#F6D9EA"),
         field: .rgb(40, 30, 70, 0.6), fieldText: ThemeRGBA(hex: "#BBA6CF"),
         send: .gradient([ThemeRGBA(hex: "#F29AB9"), ThemeRGBA(hex: "#B178E0")]), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#E889AD"), ThemeRGBA(hex: "#A56AD0")]), outgoingText: .rgb(255, 255, 255),
@@ -255,10 +255,10 @@ struct ChatThemeLook: Equatable {
 
     static let hillFire = ChatThemeLook(
         colorScheme: .dark,
-        chrome: .rgb(66, 30, 40, 0.86), chromeText: ThemeRGBA(hex: "#FFF0E2"), secondaryText: ThemeRGBA(hex: "#F6C3A0"),
+        chrome: .rgb(66, 30, 40, 0.52), chromeText: ThemeRGBA(hex: "#FFF0E2"), secondaryText: ThemeRGBA(hex: "#F6C3A0"),
         icon: ThemeRGBA(hex: "#FFB47A"),
         separator: .color(.rgb(255, 200, 160, 0.18), width: 1),
-        dayBackground: .rgb(80, 34, 44, 0.78), dayText: ThemeRGBA(hex: "#FFE1C8"),
+        dayBackground: .rgb(80, 34, 44, 0.55), dayText: ThemeRGBA(hex: "#FFE1C8"),
         field: .rgb(56, 24, 34, 0.6), fieldText: ThemeRGBA(hex: "#D6A68C"),
         send: .gradient([ThemeRGBA(hex: "#FFA75A"), ThemeRGBA(hex: "#E0503A")]), sendText: .rgb(255, 255, 255),
         outgoing: .gradient([ThemeRGBA(hex: "#FF9A4D"), ThemeRGBA(hex: "#D9443A")]), outgoingText: .rgb(255, 255, 255),
@@ -283,11 +283,11 @@ struct ChatThemeSunPalette: Equatable {
     static let rose = ChatThemeSunPalette(
         outgoingNear: [ThemeRGBA(hex: "#F8ACC6"), ThemeRGBA(hex: "#DC90D2")],
         outgoingFar: [ThemeRGBA(hex: "#C46A9C"), ThemeRGBA(hex: "#875ABD")],
-        incomingNear: .rgb(98, 78, 138, 0.86), incomingFar: .rgb(42, 32, 78, 0.9))
+        incomingNear: .rgb(98, 78, 138, 0.72), incomingFar: .rgb(42, 32, 78, 0.8))
     static let fire = ChatThemeSunPalette(
         outgoingNear: [ThemeRGBA(hex: "#FFBE6A"), ThemeRGBA(hex: "#F4814A")],
         outgoingFar: [ThemeRGBA(hex: "#DC5C3C"), ThemeRGBA(hex: "#A12F39")],
-        incomingNear: .rgb(118, 56, 60, 0.86), incomingFar: .rgb(56, 22, 34, 0.9))
+        incomingNear: .rgb(118, 56, 60, 0.72), incomingFar: .rgb(56, 22, 34, 0.82))
 
     func outgoing(_ t: Double) -> [ThemeRGBA] {
         zip(outgoingNear, outgoingFar).map { $0.mixed(with: $1, t) }
@@ -485,5 +485,63 @@ extension EnvironmentValues {
     var chatThemeSun: ChatThemeSunInfo? {
         get { self[ChatThemeSunKey.self] }
         set { self[ChatThemeSunKey.self] = newValue }
+    }
+}
+
+// MARK: - Küçük parçalar için renk takımı
+
+/// Sohbetin bütün küçük parçaları (paneller, ses kaydı, yanıt/bul çubukları, sesli mesaj…) bu renkleri kullanır;
+/// tema yoksa uygulamanın renkleri. Yeni bir parça eklerken `Color.ft*` yerine `@Environment(\.chatTint)` kullan.
+struct ChatTint {
+    /// Panel zemini (sticker / galeri): çubuk rengi, neredeyse opak.
+    var panel: Color
+    var chrome: Color
+    /// Vurgu (seçim, ilerleme, kayıt çubuğu dalga formu).
+    var accent: Color
+    /// Simgeler ve vurgulu yazılar.
+    var icon: Color
+    /// Kart / alan zemini (yazma alanı, kayıt çubuğu, küçük düğme zemini).
+    var field: Color
+    var text: Color
+    var secondary: Color
+    /// Silik dolgu (tutamaç, boş hücre).
+    var subtle: Color
+    /// Vurgu üstündeki yazı (seçim numarası, düğme).
+    var onAccent: Color
+    var colorScheme: ColorScheme?
+    /// Alan köşesi (Piksel Çayır'da köşeli).
+    var corner: CGFloat = 19
+
+    static let app = ChatTint(panel: .ftChrome, chrome: .ftChrome, accent: .ftAccent, icon: .ftAccentLight,
+                              field: .ftCardElevated, text: .ftText, secondary: .ftTextSecondary,
+                              subtle: .ftSubtle(0.35), onAccent: .white, colorScheme: nil)
+
+    init(panel: Color, chrome: Color, accent: Color, icon: Color, field: Color, text: Color, secondary: Color,
+         subtle: Color, onAccent: Color, colorScheme: ColorScheme?) {
+        self.panel = panel; self.chrome = chrome; self.accent = accent; self.icon = icon; self.field = field
+        self.text = text; self.secondary = secondary; self.subtle = subtle; self.onAccent = onAccent; self.colorScheme = colorScheme
+    }
+
+    init(look: ChatThemeLook) {
+        var panel = look.chrome
+        panel.a = max(panel.a, 0.96)
+        let accent: ThemeRGBA
+        switch look.send {
+        case .solid(let color): accent = color
+        case .gradient(let colors): accent = colors.first ?? look.icon
+        }
+        self.init(panel: panel.color, chrome: look.chrome.color, accent: accent.color, icon: look.icon.color,
+                  field: look.field.color, text: look.chromeText.color, secondary: look.secondaryText.color,
+                  subtle: look.secondaryText.color.opacity(0.3), onAccent: look.sendText.color, colorScheme: look.colorScheme)
+        corner = look.cornerRadius < 6 ? 3 : 19
+    }
+}
+
+private struct ChatTintKey: EnvironmentKey { static let defaultValue = ChatTint.app }
+
+extension EnvironmentValues {
+    var chatTint: ChatTint {
+        get { self[ChatTintKey.self] }
+        set { self[ChatTintKey.self] = newValue }
     }
 }

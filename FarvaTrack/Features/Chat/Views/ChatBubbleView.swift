@@ -536,8 +536,8 @@ struct ChatComposer: View {
                 contextBar(icon: "pencil", title: "Mesajı düzenle", text: editing.message.text)
             }
 
-            // Önizlemede tasarlanan düzen: [+ galeri] [yazı] [sticker] [kamera] [mikrofon ↔ gönder].
-            HStack(alignment: .bottom, spacing: 6) {
+            // Düzen: [+ galeri] [yazı alanı (içinde sticker)] [kamera] [mikrofon ↔ gönder].
+            HStack(alignment: .bottom, spacing: 5) {
                 if let recorder, recorder.isActive {
                     // Kayıt sürerken yazı alanının yerinde süre ve canlı dalga formu.
                     VoiceRecordingBar(recorder: recorder)
@@ -553,27 +553,30 @@ struct ChatComposer: View {
                         .accessibilityHint(activePanel == .gallery ? "" : "Son fotoğraf ve videoları klavyenin yerinde gösterir")
                     }
 
-                    TextField("Mesaj", text: $viewModel.draft, axis: .vertical)
-                        .lineLimit(1...6)
-                        .focused(focused)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 9)
-                        .foregroundStyle(look?.chromeText.color ?? Color.ftText)
-                        .background(look?.field.color ?? Color.ftCardElevated,
-                                    in: RoundedRectangle(cornerRadius: look.map { $0.cornerRadius < 6 ? 3 : 19 } ?? 19, style: .continuous))
-                        .onChange(of: viewModel.draft) { _, _ in viewModel.draftChanged() }
-                        .accessibilityLabel("Mesaj yaz")
-
-                    if viewModel.editing == nil {
-                        Button(action: onStickers) {
-                            Image(systemName: activePanel == .stickers ? "keyboard" : "face.smiling")
-                                .font(.system(size: 22))
-                                .frame(width: 30, height: 38)
+                    // WhatsApp gibi: sticker düğmesi mesaj alanının içinde, sağda; alan daha geniş.
+                    HStack(alignment: .bottom, spacing: 4) {
+                        TextField("Mesaj", text: $viewModel.draft, axis: .vertical)
+                            .lineLimit(1...6)
+                            .focused(focused)
+                            .padding(.vertical, 9)
+                            .foregroundStyle(look?.chromeText.color ?? Color.ftText)
+                            .onChange(of: viewModel.draft) { _, _ in viewModel.draftChanged() }
+                            .accessibilityLabel("Mesaj yaz")
+                        if viewModel.editing == nil {
+                            Button(action: onStickers) {
+                                Image(systemName: activePanel == .stickers ? "keyboard" : "face.smiling")
+                                    .font(.system(size: 21))
+                                    .frame(width: 30, height: 36)
+                            }
+                            .foregroundStyle(iconColor)
+                            .accessibilityLabel(activePanel == .stickers ? "Klavyeye dön" : "Sticker'larım")
+                            .accessibilityHint(activePanel == .stickers ? "" : "Sticker panelini klavyenin yerinde açar")
                         }
-                        .foregroundStyle(iconColor)
-                        .accessibilityLabel(activePanel == .stickers ? "Klavyeye dön" : "Sticker'larım")
-                        .accessibilityHint(activePanel == .stickers ? "" : "Sticker panelini klavyenin yerinde açar")
                     }
+                    .padding(.leading, 14)
+                    .padding(.trailing, viewModel.editing == nil ? 4 : 14)
+                    .background(look?.field.color ?? Color.ftCardElevated,
+                                in: RoundedRectangle(cornerRadius: look.map { $0.cornerRadius < 6 ? 3 : 19 } ?? 19, style: .continuous))
 
                     if viewModel.editing == nil, isDraftEmpty {
                         // Yazı yokken kamera; yazınca yerini gönder düğmesine bırakır.
@@ -620,7 +623,7 @@ struct ChatComposer: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 8)
         // Çubuk ekranın altına yakın: duvar kâğıdına daha çok yer kalır.
         .padding(.top, 5)
         .padding(.bottom, 4)
@@ -632,16 +635,16 @@ struct ChatComposer: View {
     private func contextBar(icon: String, title: String, text: String, thumbnail: URL? = nil, isVideo: Bool = false) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .foregroundStyle(Color.ftAccentLight)
+                .foregroundStyle(iconColor)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.ftAccentLight)
+                    .foregroundStyle(iconColor)
                 if !text.isEmpty {
                     Text(text)
                         .font(.caption)
-                        .foregroundStyle(Color.ftTextSecondary)
+                        .foregroundStyle((look?.secondaryText.color ?? Color.ftTextSecondary))
                         .lineLimit(1)
                 }
             }
@@ -661,12 +664,13 @@ struct ChatComposer: View {
                 viewModel.cancelComposerContext()
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(Color.ftTextSecondary)
+                    .foregroundStyle((look?.secondaryText.color ?? Color.ftTextSecondary))
             }
             .accessibilityLabel("Vazgeç")
         }
         .padding(8)
-        .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(look?.field.color ?? Color.ftCardElevated,
+                    in: RoundedRectangle(cornerRadius: look.map { $0.cornerRadius < 6 ? 3 : 12 } ?? 12, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 }

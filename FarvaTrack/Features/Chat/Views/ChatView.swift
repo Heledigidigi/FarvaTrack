@@ -214,6 +214,7 @@ struct ChatRoomContent: View {
         // Tema: sohbet duvar kâğıdının önünde; ince ayırıcı çizgi üst çubuğun hemen altında.
         .safeAreaInset(edge: .top, spacing: 0) { look?.separatorLine }
         .environment(\.chatThemeLook, look)
+        .environment(\.chatTint, look.map(ChatTint.init(look:)) ?? .app)
         .environment(\.chatThemeSun, sunInfo)
         .background {
             if let theme {

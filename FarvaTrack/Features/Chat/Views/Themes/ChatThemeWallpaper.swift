@@ -1,5 +1,5 @@
 import SwiftUI
-import MetalKit
+import AVFoundation
 
 // MARK: - Duvar kâğıdı
 
@@ -506,12 +506,12 @@ private struct HillCatWallpaper: View {
     var body: some View {
         let preset = HillSkyPreset.preset(sky)
         ImageSpace(size: ChatThemeSun.imageSize) {
-            Group {
-                if HillSkyRenderer.isSupported {
-                    HillSkyView(preset: preset, paused: reduceMotion)
-                } else {
-                    LinearGradient(colors: [preset.top.color, preset.mid.color, preset.low.color, preset.horizon.color],
-                                   startPoint: .top, endPoint: .bottom)
+            ZStack {
+                // Video yüklenene kadar (ve bulunamazsa) aynı renklerde düz geçiş.
+                LinearGradient(colors: [preset.top.color, preset.mid.color, preset.low.color, preset.horizon.color],
+                               startPoint: .top, endPoint: .bottom)
+                if let url = HillSkyVideo.url(for: sky) {
+                    LoopingVideoView(url: url, paused: reduceMotion)
                 }
             }
             .frame(width: 736, height: 1472)
@@ -538,106 +538,74 @@ private struct HillCatWallpaper: View {
     }
 }
 
-// MARK: Metal gökyüzü
+// MARK: Gökyüzü videosu
 
-/// Shader'a giden değerler (`HillSky.metal` içindeki `HillSkyUniforms` ile aynı düzen).
-struct HillSkyUniforms {
-    var top: SIMD4<Float>, mid: SIMD4<Float>, low: SIMD4<Float>, hor: SIMD4<Float>
-    var sunColor: SIMD4<Float>, lit: SIMD4<Float>, shade: SIMD4<Float>
-    var resolution: SIMD2<Float>
-    var sun: SIMD2<Float>
-    var time: Float, cover: Float, glow: Float, stars: Float, cirrus: Float, puff: Float, stretch: Float, pad: Float
-
-    init(preset p: HillSkyPreset, resolution: SIMD2<Float>, time: Float) {
-        top = p.top.simd; mid = p.mid.simd; low = p.low.simd; hor = p.horizon.simd
-        sunColor = p.sun.simd; lit = p.lit.simd; shade = p.shade.simd
-        self.resolution = resolution
-        sun = SIMD2(Float(ChatThemeSun.sunInImage.x / ChatThemeSun.imageSize.width * 0.5),
-                    Float(ChatThemeSun.sunInImage.y / ChatThemeSun.imageSize.height))
-        self.time = time
-        cover = p.cover; glow = p.glow; stars = p.stars; cirrus = p.cirrus; puff = p.puff; stretch = p.stretch; pad = 0
+/// Gökyüzü canlı hesaplanmaz: önizlemedeki shader'la önceden çizilmiş, başı sonuna dikişsiz bağlanan
+/// 24 sn'lik döngü (720 × 1440, HEVC). Telefon yalnızca oynatır (donanım çözücü); kasma olmaz.
+enum HillSkyVideo {
+    static func url(for sky: ChatHillSky) -> URL? {
+        Bundle.main.url(forResource: "gokyuzu_\(sky.rawValue)", withExtension: "mp4")
     }
 }
 
-final class HillSkyRenderer: NSObject, MTKViewDelegate {
-    static let isSupported: Bool = {
-        guard let device = MTLCreateSystemDefaultDevice(), let library = device.makeDefaultLibrary() else { return false }
-        return library.makeFunction(name: "hillSkyFragment") != nil
-    }()
-
-    var preset: HillSkyPreset
-    private let queue: MTLCommandQueue
-    private let pipeline: MTLRenderPipelineState
-    private let start = CACurrentMediaTime()
-
-    init?(device: MTLDevice, preset: HillSkyPreset, format: MTLPixelFormat) {
-        guard let queue = device.makeCommandQueue(),
-              let library = device.makeDefaultLibrary(),
-              let vertex = library.makeFunction(name: "hillSkyVertex"),
-              let fragment = library.makeFunction(name: "hillSkyFragment") else { return nil }
-        let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = vertex
-        descriptor.fragmentFunction = fragment
-        descriptor.colorAttachments[0].pixelFormat = format
-        guard let pipeline = try? device.makeRenderPipelineState(descriptor: descriptor) else { return nil }
-        self.queue = queue
-        self.pipeline = pipeline
-        self.preset = preset
-    }
-
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
-
-    func draw(in view: MTKView) {
-        guard let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
-              let buffer = queue.makeCommandBuffer(),
-              let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
-        let size = view.drawableSize
-        var uniforms = HillSkyUniforms(preset: preset, resolution: SIMD2(Float(size.width), Float(size.height)),
-                                       time: Float(CACurrentMediaTime() - start))
-        encoder.setRenderPipelineState(pipeline)
-        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<HillSkyUniforms>.stride, index: 0)
-        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-        encoder.endEncoding()
-        buffer.present(drawable)
-        buffer.commit()
-    }
-}
-
-/// Gökyüzü düşük çözünürlükte (görsel noktası başına 0,4 piksel), saniyede 20 kare çizilir; bulutlar yumuşak olduğundan
-/// fark edilmez, telefon kasmaz.
-private struct HillSkyView: UIViewRepresentable {
-    let preset: HillSkyPreset
+/// Sessiz, sonsuz döngülü video. Ses oturumuna dokunmaz (müzik ve sesli mesajlar kesilmez).
+private struct LoopingVideoView: UIViewRepresentable {
+    let url: URL
     let paused: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    final class PlayerView: UIView {
+        override class var layerClass: AnyClass { AVPlayerLayer.self }
+        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+        let player = AVQueuePlayer()
+        private var looper: AVPlayerLooper?
+        private(set) var url: URL?
+        private var observers: [NSObjectProtocol] = []
 
-    final class Coordinator { var renderer: HillSkyRenderer? }
-
-    func makeUIView(context: Context) -> MTKView {
-        let view = MTKView()
-        view.device = MTLCreateSystemDefaultDevice()
-        view.colorPixelFormat = .bgra8Unorm
-        view.framebufferOnly = true
-        view.isOpaque = true
-        view.contentScaleFactor = 0.4
-        view.preferredFramesPerSecond = 20
-        view.isUserInteractionEnabled = false
-        if let device = view.device {
-            context.coordinator.renderer = HillSkyRenderer(device: device, preset: preset, format: view.colorPixelFormat)
+        func load(_ url: URL) {
+            guard url != self.url else { return }
+            self.url = url
+            player.isMuted = true
+            player.preventsDisplaySleepDuringVideoPlayback = false
+            player.automaticallyWaitsToMinimizeStalling = false
+            playerLayer.player = player
+            playerLayer.videoGravity = .resize
+            looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: url))
+            if observers.isEmpty {
+                // Uygulama öne gelince kaldığı yerden sürer.
+                observers.append(NotificationCenter.default.addObserver(
+                    forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                        guard let self, !self.isPaused else { return }
+                        self.player.play()
+                    })
+            }
         }
-        view.delegate = context.coordinator.renderer
-        apply(paused: paused, to: view)
+
+        var isPaused = false {
+            didSet { isPaused ? player.pause() : player.play() }
+        }
+
+        deinit {
+            observers.forEach(NotificationCenter.default.removeObserver)
+            player.pause()
+        }
+    }
+
+    func makeUIView(context: Context) -> PlayerView {
+        let view = PlayerView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.load(url)
+        view.isPaused = paused
         return view
     }
 
-    func updateUIView(_ view: MTKView, context: Context) {
-        context.coordinator.renderer?.preset = preset
-        apply(paused: paused, to: view)
-        if paused { view.setNeedsDisplay() }
+    func updateUIView(_ view: PlayerView, context: Context) {
+        view.load(url)
+        if view.isPaused != paused { view.isPaused = paused }
     }
 
-    private func apply(paused: Bool, to view: MTKView) {
-        view.isPaused = paused
-        view.enableSetNeedsDisplay = paused
+    static func dismantleUIView(_ view: PlayerView, coordinator: Coordinator) {
+        view.player.pause()
+        view.player.removeAllItems()
     }
 }

@@ -48,6 +48,7 @@ final class ChatScrollMetrics {
 // MARK: - Sticker paneli
 
 struct ChatStickerPanel: View {
+    @Environment(\.chatTint) private var tint
     enum Tab: String, CaseIterable, Identifiable {
         case recent, library
         var id: Self { self }
@@ -73,10 +74,11 @@ struct ChatStickerPanel: View {
                     ForEach(Tab.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .tint(tint.accent)
                 Button(action: onCreate) {
                     Image(systemName: "plus.circle.fill").font(.title3)
                 }
-                .foregroundStyle(Color.ftAccentLight)
+                .foregroundStyle(tint.icon)
                 .accessibilityLabel("Yeni sticker oluştur")
             }
 
@@ -84,15 +86,15 @@ struct ChatStickerPanel: View {
                 VStack(spacing: 8) {
                     Text(tab == .recent ? "Gönderdiğin sticker'lar burada görünür." : "Kütüphanen boş.")
                         .font(.footnote)
-                        .foregroundStyle(Color.ftTextSecondary)
+                        .foregroundStyle(tint.secondary)
                     if tab == .library || library.stickers.isEmpty {
                         Button("Fotoğraftan sticker oluştur", action: onCreate)
                             .font(.footnote.weight(.semibold))
-                            .tint(Color.ftAccentLight)
+                            .tint(tint.icon)
                     } else {
                         Button("Kütüphaneme bak") { tab = .library }
                             .font(.footnote.weight(.semibold))
-                            .tint(Color.ftAccentLight)
+                            .tint(tint.icon)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -127,7 +129,8 @@ struct ChatStickerPanel: View {
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.ftCard)
+        .background(tint.panel)
+        .chatTintScheme()
         .onAppear { if recents.isEmpty { tab = .library } }
     }
 }

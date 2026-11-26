@@ -30,6 +30,7 @@ struct VoiceWaveformView: View {
 
 /// Basılı tut = kaydet, sola kaydır = iptal, yukarı kaydır = kilitle; kilitliyken gönder düğmesine dönüşür.
 struct VoiceMicButton: View {
+    @Environment(\.chatTint) private var tint
     let recorder: ChatVoiceRecorderModel
     let onVoice: (RecordedVoice) -> Void
     @State private var pressing = false
@@ -113,10 +114,10 @@ struct VoiceMicButton: View {
                 .font(.caption2.weight(.bold))
         }
         .font(.subheadline)
-        .foregroundStyle(.white)
+        .foregroundStyle(tint.text)
         .padding(.vertical, 10)
         .padding(.horizontal, 8)
-        .background(Color.ftCardElevated, in: Capsule())
+        .background(tint.field, in: Capsule())
         .accessibilityHidden(true)
     }
 }
@@ -124,6 +125,7 @@ struct VoiceMicButton: View {
 // MARK: - Kayıt çubuğu (yazı alanının yerine)
 
 struct VoiceRecordingBar: View {
+    @Environment(\.chatTint) private var tint
     let recorder: ChatVoiceRecorderModel
     @State private var pulse = false
 
@@ -152,14 +154,14 @@ struct VoiceRecordingBar: View {
 
             Text(VoiceFormat.time(recorder.elapsed))
                 .font(.subheadline.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(tint.text)
                 .accessibilityLabel("Kayıt süresi \(VoiceFormat.time(recorder.elapsed))")
 
             if recorder.phase == .locked {
-                VoiceWaveformView(levels: VoiceWaveform.recent(recorder.levels, count: 40), progress: 1, activeColor: Color.ftAccentLight)
+                VoiceWaveformView(levels: VoiceWaveform.recent(recorder.levels, count: 40), progress: 1, activeColor: tint.icon, inactiveColor: tint.secondary.opacity(0.4))
                     .frame(height: 26)
             } else {
-                VoiceWaveformView(levels: VoiceWaveform.recent(recorder.levels, count: 18), progress: 1, activeColor: Color.ftAccentLight)
+                VoiceWaveformView(levels: VoiceWaveform.recent(recorder.levels, count: 18), progress: 1, activeColor: tint.icon, inactiveColor: tint.secondary.opacity(0.4))
                     .frame(width: 70, height: 24)
                 Spacer(minLength: 0)
                 HStack(spacing: 2) {
@@ -167,7 +169,7 @@ struct VoiceRecordingBar: View {
                     Text("İptal için kaydır")
                 }
                 .font(.footnote)
-                .foregroundStyle(Color.ftTextSecondary)
+                .foregroundStyle(tint.secondary)
                 .opacity(1 - recorder.cancelProgress * 0.8)
                 .offset(x: -CGFloat(recorder.cancelProgress) * 30)
                 .accessibilityHidden(true)
@@ -175,7 +177,7 @@ struct VoiceRecordingBar: View {
         }
         .padding(.horizontal, 12)
         .frame(minHeight: 44)
-        .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(tint.field, in: RoundedRectangle(cornerRadius: tint.corner, style: .continuous))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(recorder.phase == .locked ? "Kilitli kayıt sürüyor" : "Kayıt sürüyor")
     }
@@ -196,8 +198,13 @@ struct ChatVoiceBubbleContent: View {
     private var isCurrent: Bool { player.isCurrent(item.id) }
     private var isPlaying: Bool { isCurrent && player.isPlaying }
     private var levels: [Float] { audio.waveform.map { Float($0) / 255 } }
-    /// Baloncuk içindeki yazı/ikon rengi: giden (vurgu zemin) beyaz, gelen tema yazı rengi.
-    private var ink: Color { item.isMine ? .white : Color.ftText }
+    @Environment(\.chatThemeLook) private var look
+    @Environment(\.chatTint) private var tint
+    /// Baloncuk içindeki yazı/ikon rengi: giden (vurgu zemin) beyaz, gelen tema yazı rengi; sohbet teması varsa temanın.
+    private var ink: Color {
+        if let look { return (item.isMine ? look.outgoingText : look.incomingText).color }
+        return item.isMine ? .white : Color.ftText
+    }
     private var progress: Double { isCurrent ? player.progress : 0 }
 
     var body: some View {
@@ -209,7 +216,7 @@ struct ChatVoiceBubbleContent: View {
                     VoiceWaveformView(
                         levels: levels,
                         progress: progress,
-                        activeColor: item.isMine ? .white : Color.ftAccentLight,
+                        activeColor: item.isMine ? ink : tint.icon,
                         inactiveColor: ink.opacity(0.35)
                     )
                     .contentShape(Rectangle())

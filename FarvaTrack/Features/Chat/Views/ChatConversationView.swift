@@ -892,6 +892,7 @@ struct ChatDayHeader: View {
 // MARK: - Yazıyor…
 
 struct ChatTypingIndicator: View {
+    @Environment(\.chatThemeLook) private var themeLook
     let name: String
     @State private var phase = 0.0
 
@@ -900,14 +901,20 @@ struct ChatTypingIndicator: View {
             HStack(spacing: 4) {
                 ForEach(0..<3) { index in
                     Circle()
-                        .fill(Color.ftTextSecondary)
+                        .fill(themeLook?.incomingText.color.opacity(0.6) ?? Color.ftTextSecondary)
                         .frame(width: 7, height: 7)
                         .opacity(0.35 + 0.65 * abs(sin(phase + Double(index) * 0.8)))
                 }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background {
+                if let themeLook {
+                    ChatThemeBubbleBackground(look: themeLook, isMine: false)
+                } else {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.ftCardElevated)
+                }
+            }
             Spacer(minLength: 48)
         }
         .padding(.top, 4)

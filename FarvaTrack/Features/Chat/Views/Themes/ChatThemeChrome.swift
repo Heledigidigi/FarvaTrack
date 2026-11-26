@@ -110,3 +110,19 @@ struct ChatActionCircle<Glyph: View>: View {
             .opacity(enabled ? 1 : 0.45)
     }
 }
+
+// MARK: - Temanın açık/koyu hâli
+
+/// Tema koyuysa (ör. Gül alacakaranlık) sistem denetimleri (bölümlü seçici, imleç, yer tutucu) koyu çizilir.
+private struct ChatTintScheme: ViewModifier {
+    @Environment(\.chatTint) private var tint
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content.environment(\.colorScheme, tint.colorScheme ?? scheme)
+    }
+}
+
+extension View {
+    func chatTintScheme() -> some View { modifier(ChatTintScheme()) }
+}
