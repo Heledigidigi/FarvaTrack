@@ -122,12 +122,9 @@ private final class RainbowScene {
     private var last: Double?
 
     init() {
-        func quad(_ a: CGPoint, _ c: CGPoint, _ b: CGPoint) -> (Double) -> CGPoint {
-            { t in CGPoint(x: (1 - t) * (1 - t) * a.x + 2 * (1 - t) * t * c.x + t * t * b.x,
-                           y: (1 - t) * (1 - t) * a.y + 2 * (1 - t) * t * c.y + t * t * b.y) }
-        }
+        let quad = Self.quad
         arcs = [
-            Arc(point: { t in let a = Double.pi * (1.03 - t * 0.8); return CGPoint(x: 330 + 318 * cos(a), y: 415 - 342 * sin(a)) },
+            Arc(point: Self.mainArc,
                 weight: 5, band: 22, highlights: [Highlight(s: 0, speed: 0.09), Highlight(s: 0.45, speed: 0.06), Highlight(s: 0.8, speed: 0.12)]),
             Arc(point: quad(CGPoint(x: 572, y: 452), CGPoint(x: 612, y: 380), CGPoint(x: 676, y: 366)), weight: 1.4, band: 14, highlights: [Highlight(s: 0.2, speed: 0.16)]),
             Arc(point: quad(CGPoint(x: 0, y: 548), CGPoint(x: 118, y: 488), CGPoint(x: 206, y: 612)), weight: 1.6, band: 16, highlights: [Highlight(s: 0.6, speed: 0.13)]),
@@ -139,6 +136,25 @@ private final class RainbowScene {
                               v: .random(in: 3...6) * (Bool.random() ? -1 : 1), phase: .random(in: 0...6), a: .random(in: 0.08...0.15)))
         }
         for _ in 0..<34 { motes.append(makeMote(initial: true)) }
+    }
+
+    /// Ana gökkuşağı yayı (soldan sağa).
+    private static func mainArc(_ t: Double) -> CGPoint {
+        let a: Double = Double.pi * (1.03 - t * 0.8)
+        let x: Double = 330 + 318 * cos(a)
+        let y: Double = 415 - 342 * sin(a)
+        return CGPoint(x: x, y: y)
+    }
+
+    /// İkinci dereceden Bézier eğrisi.
+    private static func quad(_ a: CGPoint, _ c: CGPoint, _ b: CGPoint) -> (Double) -> CGPoint {
+        { t in
+            let u: CGFloat = 1 - t
+            let w0: CGFloat = u * u, w1: CGFloat = 2 * u * t, w2: CGFloat = t * t
+            let x: CGFloat = w0 * a.x + w1 * c.x + w2 * b.x
+            let y: CGFloat = w0 * a.y + w1 * c.y + w2 * b.y
+            return CGPoint(x: x, y: y)
+        }
     }
 
     private func makeMote(initial: Bool) -> Mote {
