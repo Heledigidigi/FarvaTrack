@@ -1,0 +1,190 @@
+TAP version 13
+# Subtest: geçerli belirteç uid döndürür, bozuklar reddedilir
+ok 1 - geçerli belirteç uid döndürür, bozuklar reddedilir
+  ---
+  duration_ms: 149.040791
+  type: 'test'
+  ...
+# Subtest: APNs: ES256 sağlayıcı belirteci doğrulanır ve önbelleğe alınır
+ok 2 - APNs: ES256 sağlayıcı belirteci doğrulanır ve önbelleğe alınır
+  ---
+  duration_ms: 24.603709
+  type: 'test'
+  ...
+# Subtest: APNs: VoIP üretimde tanınmazsa geliştirme sunucusu denenir
+ok 3 - APNs: VoIP üretimde tanınmazsa geliştirme sunucusu denenir
+  ---
+  duration_ms: 41.475209
+  type: 'test'
+  ...
+# Subtest: TURN: Cloudflare anahtarı, sabit yapılandırma ya da yalnızca STUN
+ok 4 - TURN: Cloudflare anahtarı, sabit yapılandırma ya da yalnızca STUN
+  ---
+  duration_ms: 1.794875
+  type: 'test'
+  ...
+# Subtest: çaldırma: VoIP belirteci olana VoIP, olmayana bildirim
+ok 5 - çaldırma: VoIP belirteci olana VoIP, olmayana bildirim
+  ---
+  duration_ms: 6.301917
+  type: 'test'
+  ...
+# Subtest: çaldırma: yalnızca arayan, yalnızca çalarken
+ok 6 - çaldırma: yalnızca arayan, yalnızca çalarken
+  ---
+  duration_ms: 1.110791
+  type: 'test'
+  ...
+# Subtest: TURN uç noktası oturum ister
+ok 7 - TURN uç noktası oturum ister
+  ---
+  duration_ms: 0.414125
+  type: 'test'
+  ...
+# Subtest: servis hesabı: imzalı JWT ile belirteç alınır ve önbelleğe konur
+ok 8 - servis hesabı: imzalı JWT ile belirteç alınır ve önbelleğe konur
+  ---
+  duration_ms: 54.944084
+  type: 'test'
+  ...
+# Subtest: servis hesabı secret biçimleri ve Firestore değerleri
+ok 9 - servis hesabı secret biçimleri ve Firestore değerleri
+  ---
+  duration_ms: 0.924208
+  type: 'test'
+  ...
+# Subtest: bildirim metni türe göre
+ok 10 - bildirim metni türe göre
+  ---
+  duration_ms: 1.007667
+  type: 'test'
+  ...
+# Subtest: okunmamış sayısı: karşı tarafın son okunmuş mesajına kadar
+ok 11 - okunmamış sayısı: karşı tarafın son okunmuş mesajına kadar
+  ---
+  duration_ms: 0.092833
+  type: 'test'
+  ...
+# Subtest: FCM yükü
+ok 12 - FCM yükü
+  ---
+  duration_ms: 1.027833
+  type: 'test'
+  ...
+# Subtest: yollar çözülür, tehlikeliler reddedilir
+ok 13 - yollar çözülür, tehlikeliler reddedilir
+  ---
+  duration_ms: 2.129209
+  type: 'test'
+  ...
+# Subtest: izinler eski Storage kurallarıyla aynı
+ok 14 - izinler eski Storage kurallarıyla aynı
+  ---
+  duration_ms: 0.317667
+  type: 'test'
+  ...
+# Subtest: yükleme sınırları
+ok 15 - yükleme sınırları
+  ---
+  duration_ms: 0.245291
+  type: 'test'
+  ...
+# Subtest: temizlik: 60 günden eski alınmış orijaller, sonra sınır
+ok 16 - temizlik: 60 günden eski alınmış orijaller, sonra sınır
+  ---
+  duration_ms: 0.275667
+  type: 'test'
+  ...
+# Subtest: diyet fotoğrafı yolu ve izinleri
+ok 17 - diyet fotoğrafı yolu ve izinleri
+  ---
+  duration_ms: 0.358667
+  type: 'test'
+  ...
+# Subtest: oturumsuz istek reddedilir
+ok 18 - oturumsuz istek reddedilir
+  ---
+  duration_ms: 32.608166
+  type: 'test'
+  ...
+# Subtest: üye yükler ve indirir, yabancı erişemez; Range çalışır
+ok 19 - üye yükler ve indirir, yabancı erişemez; Range çalışır
+  ---
+  duration_ms: 3.578083
+  type: 'test'
+  ...
+# Subtest: tür, boyut ve başkasının dosyasının üzerine yazma engellenir
+ok 20 - tür, boyut ve başkasının dosyasının üzerine yazma engellenir
+  ---
+  duration_ms: 2.967459
+  type: 'test'
+  ...
+# Subtest: çok parçalı yükleme
+ok 21 - çok parçalı yükleme
+  ---
+  duration_ms: 1.84875
+  type: 'test'
+  ...
+# Subtest: baloncuk dosyasını sohbet arkadaşı okur, yabancı okuyamaz
+ok 22 - baloncuk dosyasını sohbet arkadaşı okur, yabancı okuyamaz
+  ---
+  duration_ms: 0.749958
+  type: 'test'
+  ...
+# Subtest: alındı işareti yalnızca alıcıdan; temizlik 60 günü ve alındıyı gözetir
+ok 23 - alındı işareti yalnızca alıcıdan; temizlik 60 günü ve alındıyı gözetir
+  ---
+  duration_ms: 1.772583
+  type: 'test'
+  ...
+# Subtest: klasör silme: sahibi ya da sohbet üyesi
+ok 24 - klasör silme: sahibi ya da sohbet üyesi
+  ---
+  duration_ms: 0.97
+  type: 'test'
+  ...
+# Subtest: profil fotoğrafı: tek dosya, herkese açık okuma
+ok 25 - profil fotoğrafı: tek dosya, herkese açık okuma
+  ---
+  duration_ms: 1.242542
+  type: 'test'
+  ...
+# Subtest: not sohbetinde gönderen kendi orijalini işaretleyebilir
+ok 26 - not sohbetinde gönderen kendi orijalini işaretleyebilir
+  ---
+  duration_ms: 1.161625
+  type: 'test'
+  ...
+# Subtest: bildirim: gönderenin mesajı karşı tarafın cihazlarına gider
+ok 27 - bildirim: gönderenin mesajı karşı tarafın cihazlarına gider
+  ---
+  duration_ms: 1.431583
+  type: 'test'
+  ...
+# Subtest: bildirim: başkasının mesajı, yabancı oda ve not sohbeti
+ok 28 - bildirim: başkasının mesajı, yabancı oda ve not sohbeti
+  ---
+  duration_ms: 0.540375
+  type: 'test'
+  ...
+# Subtest: bildirim: geçersiz belirteç silinir; servis hesabı yoksa sessizce atlanır
+ok 29 - bildirim: geçersiz belirteç silinir; servis hesabı yoksa sessizce atlanır
+  ---
+  duration_ms: 1.786125
+  type: 'test'
+  ...
+# Subtest: diyet fotoğrafı: sahibi yükler, izinli kişi indirir, yabancı erişemez
+ok 30 - diyet fotoğrafı: sahibi yükler, izinli kişi indirir, yabancı erişemez
+  ---
+  duration_ms: 0.855542
+  type: 'test'
+  ...
+1..30
+# tests 30
+# suites 0
+# pass 30
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 549.463542

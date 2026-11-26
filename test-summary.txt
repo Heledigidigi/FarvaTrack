@@ -1,0 +1,122 @@
+10148:2026-11-26 22:51:48.771 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10149:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10150:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10151:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10152:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10153:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10154:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10155:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10156:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10157:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10158:2026-11-26 22:51:48.772 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10159:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10160:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10161:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10162:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10163:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10164:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10165:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10166:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10167:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10168:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10169:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10170:2026-11-26 22:51:48.773 appintentsnltrainingprocessor[22764:66892] error: Unable to parse extract.actionsdata
+10333:	 Executed 5 tests, with 0 failures (0 unexpected) in 1.321 (2.481) seconds
+10342:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.415 (0.416) seconds
+10357:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.006 (0.490) seconds
+10368:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.172 (0.173) seconds
+10387:	 Executed 8 tests, with 0 failures (0 unexpected) in 0.021 (0.582) seconds
+10400:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.623 (0.625) seconds
+10407:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.243 (0.244) seconds
+10428:	 Executed 9 tests, with 0 failures (0 unexpected) in 0.915 (18.451) seconds
+10439:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.069 (0.989) seconds
+10452:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.955 (0.956) seconds
+10465:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.162 (0.271) seconds
+10481:2026-11-26 22:55:47.188480+0000 FarvaTrack[24208:72709] [FarvaTrack] createImageAtIndex:2185: *** ERROR: createImageAtIndex[0] - 'n/a ' - failed to create image [-62]
+10482:2026-11-26 22:55:47.188583+0000 FarvaTrack[24208:72709] [FarvaTrack] CGImageSourceCreateImageAtIndex:5179: *** ERROR: CGImageSourceCreateImageAtIndex[0] - 'n/a ' - failed to create image [-62]
+10487:	 Executed 8 tests, with 0 failures (0 unexpected) in 37.225 (37.232) seconds
+10510:	 Executed 10 tests, with 0 failures (0 unexpected) in 3.394 (3.500) seconds
+10525:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.022 (0.068) seconds
+10552:	 Executed 12 tests, with 0 failures (0 unexpected) in 0.192 (0.262) seconds
+10573:	 Executed 9 tests, with 0 failures (0 unexpected) in 0.024 (2.039) seconds
+10596:	 Executed 10 tests, with 0 failures (0 unexpected) in 0.524 (0.528) seconds
+10601:	 Executed 1 test, with 0 failures (0 unexpected) in 0.638 (0.639) seconds
+10608:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.597 (0.598) seconds
+10623:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.052 (0.056) seconds
+10640:	 Executed 7 tests, with 0 failures (0 unexpected) in 0.013 (0.384) seconds
+10645:	 Executed 1 test, with 0 failures (0 unexpected) in 0.324 (0.325) seconds
+10658:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.029 (1.794) seconds
+10668:2026-11-26 22:55:58.600726+0000 FarvaTrack[24208:74069] [FarvaTrack] CGImageSourceCreateThumbnailAtIndex:5277: *** ERROR: CGImageSourceCreateThumbnailAtIndex[0] - 'n/a ' - failed to create thumbnail [-50] {alw:1, abs: -1 tra:1 max:2048}
+10671:	 Executed 4 tests, with 0 failures (0 unexpected) in 1.022 (1.022) seconds
+10698:	 Executed 12 tests, with 0 failures (0 unexpected) in 8.478 (8.724) seconds
+10705:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+10732:	 Executed 12 tests, with 0 failures (0 unexpected) in 0.027 (0.029) seconds
+10749:	 Executed 7 tests, with 0 failures (0 unexpected) in 1.630 (1.639) seconds
+10754:	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+10771:	 Executed 7 tests, with 0 failures (0 unexpected) in 3.095 (3.097) seconds
+10786:	 Executed 6 tests, with 0 failures (0 unexpected) in 1.730 (1.735) seconds
+10795:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.025 (0.030) seconds
+10802:	 Executed 2 tests, with 0 failures (0 unexpected) in 1.126 (1.127) seconds
+10809:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.011 (0.012) seconds
+10816:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.013 (0.016) seconds
+10825:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.066 (0.067) seconds
+10850:	 Executed 11 tests, with 0 failures (0 unexpected) in 5.715 (5.721) seconds
+10855:	 Executed 1 test, with 0 failures (0 unexpected) in 0.017 (0.018) seconds
+10878:	 Executed 10 tests, with 0 failures (0 unexpected) in 0.046 (0.050) seconds
+10887:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.850 (0.851) seconds
+10896:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.006 (0.008) seconds
+10962:	 Executed 29 tests, with 0 failures (0 unexpected) in 6.630 (6.644) seconds
+10990:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.791 (0.814) seconds
+11009:	 Executed 8 tests, with 0 failures (0 unexpected) in 0.114 (0.117) seconds
+11025:	 Executed 6 tests, with 0 failures (0 unexpected) in 3.118 (3.121) seconds
+11040:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.019 (0.027) seconds
+11051:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.045 (0.057) seconds
+11060:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.008 (0.013) seconds
+11077:	 Executed 7 tests, with 0 failures (0 unexpected) in 0.149 (0.209) seconds
+11094:	 Executed 7 tests, with 0 failures (0 unexpected) in 0.097 (0.100) seconds
+11109:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.822 (0.824) seconds
+11116:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.020 (0.021) seconds
+11146:	 Executed 13 tests, with 0 failures (0 unexpected) in 2.028 (2.035) seconds
+11155:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+11166:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.813 (0.816) seconds
+11175:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.281 (0.283) seconds
+11190:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.520 (0.522) seconds
+11199:	 Executed 3 tests, with 0 failures (0 unexpected) in 0.321 (0.323) seconds
+11206:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.013 (0.013) seconds
+11225:	 Executed 8 tests, with 0 failures (0 unexpected) in 0.100 (0.115) seconds
+11230:	 Executed 1 test, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+11241:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.019 (0.025) seconds
+11266:	 Executed 11 tests, with 0 failures (0 unexpected) in 0.969 (0.973) seconds
+11281:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.028 (0.029) seconds
+11288:	 Executed 2 tests, with 0 failures (0 unexpected) in 0.012 (0.012) seconds
+11307:	 Executed 8 tests, with 0 failures (0 unexpected) in 0.059 (0.068) seconds
+11318:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+11339:	 Executed 9 tests, with 0 failures (0 unexpected) in 0.018 (0.155) seconds
+11352:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.011 (0.060) seconds
+11369:	 Executed 7 tests, with 0 failures (0 unexpected) in 0.043 (0.080) seconds
+11382:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.184 (0.186) seconds
+11403:	 Executed 9 tests, with 0 failures (0 unexpected) in 0.017 (0.026) seconds
+11420:	 Executed 7 tests, with 0 failures (0 unexpected) in 0.668 (0.672) seconds
+11433:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.014 (0.022) seconds
+11438:	 Executed 1 test, with 0 failures (0 unexpected) in 0.013 (0.013) seconds
+11443:	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+11474:	 Executed 14 tests, with 0 failures (0 unexpected) in 2.156 (2.162) seconds
+11477:2026-11-26 22:56:42.322110+0000 FarvaTrack[24208:72709] [FarvaTrack] CGImageSourceCreateThumbnailAtIndex:5277: *** ERROR: CGImageSourceCreateThumbnailAtIndex[0] - 'n/a ' - failed to create thumbnail [-50] {alw:1, abs: -1 tra:1 max:1024}
+11498:	 Executed 10 tests, with 0 failures (0 unexpected) in 1.242 (1.302) seconds
+11511:	 Executed 5 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+11522:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.340 (0.342) seconds
+11541:	 Executed 8 tests, with 0 failures (0 unexpected) in 0.053 (0.055) seconds
+11556:2026-11-26 22:56:45.748664+0000 FarvaTrack[24208:72709] [FarvaTrack] CGImageSourceCreateThumbnailAtIndex:5277: *** ERROR: CGImageSourceCreateThumbnailAtIndex[0] - 'n/a ' - failed to create thumbnail [-50] {alw:1, abs: -1 tra:1 max:1024}
+11559:	 Executed 7 tests, with 0 failures (0 unexpected) in 1.702 (1.706) seconds
+11564:	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+11583:	 Executed 8 tests, with 0 failures (0 unexpected) in 0.743 (0.745) seconds
+11598:	 Executed 6 tests, with 0 failures (0 unexpected) in 0.013 (0.014) seconds
+11603:	 Executed 1 test, with 0 failures (0 unexpected) in 0.052 (0.065) seconds
+11614:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.006 (0.007) seconds
+11635:	 Executed 9 tests, with 0 failures (0 unexpected) in 0.979 (0.984) seconds
+11660:	 Executed 11 tests, with 0 failures (0 unexpected) in 0.991 (0.994) seconds
+11681:	 Executed 9 tests, with 0 failures (0 unexpected) in 0.024 (0.030) seconds
+11692:	 Executed 4 tests, with 0 failures (0 unexpected) in 0.291 (0.293) seconds
+11694:	 Executed 535 tests, with 0 failures (0 unexpected) in 98.365 (127.076) seconds
+11696:	 Executed 535 tests, with 0 failures (0 unexpected) in 98.365 (127.083) seconds
+11704:** TEST SUCCEEDED **
