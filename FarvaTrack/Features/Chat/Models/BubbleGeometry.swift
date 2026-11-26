@@ -208,7 +208,18 @@ enum BubblePresets {
                fill: BubbleFill(kind: .solid, colors: ["#2C2C38"], angle: 0)),
         preset("kutuKedi", "Kutu Kedi",
                shape: BubbleShapeStyle(cornerRadius: 18, tail: .none),
-               fill: BubbleFill(kind: .solid, colors: ["#F3E6D0"], angle: 0), text: "#3A2A22", art: .catBox)
+               fill: BubbleFill(kind: .solid, colors: ["#F3E6D0"], angle: 0), text: "#3A2A22", art: .catBox),
+        // Sohbet temalarının baloncukları (Aşama 10): her sohbette, her temayla seçilebilir.
+        preset("gokkusagi", "Gökkuşağı",
+               shape: BubbleShapeStyle(cornerRadius: 18, tail: .none),
+               fill: BubbleFill(kind: .linear, colors: ["#FF8FC6", "#C58CFF", "#8FB6FF"], angle: 45),
+               effect: BubbleEffect(kind: .shimmer, colorHex: "#FFFFFF", intensity: 0.35)),
+        preset("piksel", "Piksel Çimen",
+               shape: BubbleShapeStyle(cornerRadius: 4, tail: .none),
+               fill: BubbleFill(kind: .linear, colors: ["#6BA83F", "#4E8A2C"], angle: 90)),
+        preset("gunBatimi", "Gün Batımı",
+               shape: BubbleShapeStyle(cornerRadius: 18, tail: .none),
+               fill: BubbleFill(kind: .linear, colors: ["#F7BB80", "#E8955A", "#C9683F"], angle: 135))
     ]
 
     static func style(id: String) -> BubbleStyle? { all.first { $0.id == id } }

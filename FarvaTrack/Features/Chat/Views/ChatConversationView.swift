@@ -290,7 +290,7 @@ struct ChatConversationView: View {
                     // Klavyenin / panelin / ev çubuğunun yeri. Panel bunun üstüne (ekranın altından) çizilir.
                     // Alt kenarı pencerenin altına oturmuyorsa (devralınan güvenli alan payı) aradaki pay ölçülüp
                     // düşülür; yoksa klavye ile yazma alanı arasında boşluk kalır.
-                    Color.ftChrome.frame(height: lift)
+                    ChatChromeBackground().frame(height: lift)
                         .background(GeometryReader { spacer in
                             Color.clear
                                 .onAppear { updateBottomGap(rootMaxY: spacer.frame(in: .global).maxY) }
@@ -860,6 +860,7 @@ struct ChatConversationView: View {
 
 struct ChatDayHeader: View {
     let date: Date
+    @Environment(\.chatThemeLook) private var look
 
     private var title: String {
         let calendar = Calendar.current
@@ -871,10 +872,18 @@ struct ChatDayHeader: View {
     var body: some View {
         Text(title)
             .font(.caption.weight(.semibold))
-            .foregroundStyle(Color.ftTextSecondary)
+            .foregroundStyle(look?.dayText.color ?? Color.ftTextSecondary)
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
-            .background(Color.ftCard, in: Capsule())
+            .background {
+                if let look {
+                    RoundedRectangle(cornerRadius: look.cornerRadius < 6 ? 2 : 12, style: .continuous)
+                        .fill(look.dayBackground.color)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: look.cornerRadius < 6 ? 2 : 12, style: .continuous))
+                } else {
+                    Capsule().fill(Color.ftCard)
+                }
+            }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .accessibilityAddTraits(.isHeader)

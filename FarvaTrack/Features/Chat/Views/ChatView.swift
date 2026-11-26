@@ -175,6 +175,24 @@ struct ChatRoomContent: View {
     @Environment(ChatViewModel.self) private var viewModel
     @Binding var showBubbles: Bool
     @State private var showProfile = false
+    /// Piksel Çayır'da çubuk renkleri gece/gündüz değişir; dakikada bir yenilenir.
+    @State private var themeClock = Date.now
+    /// Ekranda güneşin yeri (Tepedeki Kedi: baloncuk rengi güneşe uzaklığa göre).
+    @State private var screenFrame: CGRect = .zero
+
+    /// Odanın teması (iki tarafta aynı). Konuşma hazır değilken tema uygulanmaz.
+    private var theme: ChatThemeChoice? {
+        guard viewModel.phase == .ready, let theme = viewModel.theme, theme.id != .plain else { return nil }
+        return theme
+    }
+
+    private var look: ChatThemeLook? { ChatThemeLook.look(for: theme, date: themeClock) }
+
+    private var sunInfo: ChatThemeSunInfo? {
+        guard theme?.id == .hillCat, screenFrame.width > 0 else { return nil }
+        let sun = ChatThemeSun.sunPoint(in: screenFrame.size)
+        return ChatThemeSunInfo(sun: CGPoint(x: screenFrame.minX + sun.x, y: screenFrame.minY + sun.y), screen: screenFrame.size)
+    }
 
     var body: some View {
         @Bindable var viewModel = viewModel
@@ -193,14 +211,38 @@ struct ChatRoomContent: View {
                 ChatConversationView()
             }
         }
-        .ftScreenBackground()
+        // Tema: sohbet duvar kâğıdının önünde; ince ayırıcı çizgi üst çubuğun hemen altında.
+        .safeAreaInset(edge: .top, spacing: 0) { look?.separatorLine }
+        .environment(\.chatThemeLook, look)
+        .environment(\.chatThemeSun, sunInfo)
+        .background {
+            if let theme {
+                ChatThemeWallpaper(choice: theme)
+                    .ignoresSafeArea()
+                    .background(GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { screenFrame = proxy.frame(in: .global) }
+                            .onChange(of: proxy.frame(in: .global)) { _, frame in screenFrame = frame }
+                    }.ignoresSafeArea())
+            }
+        }
+        .modifier(ThemeOrAppBackground(isThemed: theme != nil))
+        .task(id: theme?.id) {
+            guard theme?.id == .pixelMeadow else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                themeClock = .now
+            }
+        }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         // Geri düğmesinde yalnızca ok: "Sohbetler" yazısı gösterilmez (kaydırarak geri dönme korunur).
         .toolbarRole(.editor)
-        // Üst çubuk (kişi adı ve geri oku) yazma alanıyla aynı zeminde.
-        .toolbarBackground(Color.ftChrome, for: .navigationBar)
+        // Üst çubuk (kişi adı ve geri oku) yazma alanıyla aynı zeminde; temada yarı saydam, duvar kâğıdı arkasından görünür.
+        .toolbarBackground(look?.chrome.color ?? Color.ftChrome, for: .navigationBar)
         .toolbarBackground(viewModel.phase == .ready ? .visible : .automatic, for: .navigationBar)
+        .toolbarColorScheme(look?.colorScheme, for: .navigationBar)
+        .tint(look?.icon.color)
         // Açık konuşmada (ve sticker panelinde) alttaki sekmeler gizlenir; geri dönünce görünür.
         .toolbar(viewModel.phase == .ready ? .hidden : .visible, for: .tabBar)
         .toolbar {
@@ -233,7 +275,7 @@ struct ChatRoomContent: View {
                                 ChatPresenceSubtitle(viewModel: viewModel)
                             }
                         }
-                        .foregroundStyle(Color.ftText)
+                        .foregroundStyle(look?.chromeText.color ?? Color.ftText)
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .ignore)
@@ -279,6 +321,15 @@ struct ChatRoomContent: View {
     }
 }
 
+
+/// Tema yoksa uygulamanın zemini (Klasik / Koyu).
+private struct ThemeOrAppBackground: ViewModifier {
+    let isThemed: Bool
+
+    func body(content: Content) -> some View {
+        if isThemed { content } else { content.ftScreenBackground() }
+    }
+}
 
 // MARK: - Sohbet listesi
 

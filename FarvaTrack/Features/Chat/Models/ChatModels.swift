@@ -175,6 +175,8 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
     var photos: [String: String]
     /// uid → çevrimiçi bilgisi (her üye yalnızca kendininkini yazar).
     var presence: [String: ChatPresence]
+    /// Sohbet teması (Aşama 10): iki tarafta da aynı görünür. Eski odalarda yok → `nil` (varsayılan).
+    var theme: ChatThemeChoice?
 
     init(
         id: String,
@@ -184,7 +186,8 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
         lastMessage: ChatLastMessage? = nil,
         typing: [String: Date] = [:],
         photos: [String: String] = [:],
-        presence: [String: ChatPresence] = [:]
+        presence: [String: ChatPresence] = [:],
+        theme: ChatThemeChoice? = nil
     ) {
         self.id = id
         self.members = members
@@ -194,10 +197,11 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
         self.typing = typing
         self.photos = photos
         self.presence = presence
+        self.theme = theme
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, members, names, createdAt, lastMessage, typing, photos, presence
+        case id, members, names, createdAt, lastMessage, typing, photos, presence, theme
     }
 
     /// Eski sürümün önbelleğe yazdığı odalarda `photos` / `presence` yoktur.
@@ -211,6 +215,7 @@ struct ChatRoomDTO: Codable, Equatable, Identifiable {
         typing = try container.decodeIfPresent([String: Date].self, forKey: .typing) ?? [:]
         photos = try container.decodeIfPresent([String: String].self, forKey: .photos) ?? [:]
         presence = try container.decodeIfPresent([String: ChatPresence].self, forKey: .presence) ?? [:]
+        theme = try? container.decodeIfPresent(ChatThemeChoice.self, forKey: .theme)
     }
 
     /// Üyenin profil fotoğrafı (boşsa `nil`).

@@ -149,6 +149,12 @@ final class MockChatSync: ChatSyncing {
         mockLock.withLock { photoUpdates.append(photoURL) }
     }
 
+    private(set) var themeUpdates: [ChatThemeChoice] = []
+    func updateTheme(_ theme: ChatThemeChoice, chatID: String) async throws {
+        if isOffline { throw AppError.network }
+        mockLock.withLock { themeUpdates.append(theme) }
+    }
+
     private(set) var presences: [ChatPresence] = []
     func setPresence(_ presence: ChatPresence, chatID: String, userID: String) async throws {
         if isOffline { throw AppError.network }

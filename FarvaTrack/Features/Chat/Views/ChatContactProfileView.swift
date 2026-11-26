@@ -69,6 +69,19 @@ struct ChatContactProfileView: View {
                 }
                 .foregroundStyle(Color.ftText)
                 .accessibilityHint("Mesaj baloncuğunun görünümünü değiştir ya da kendi baloncuğunu tasarla")
+
+                NavigationLink {
+                    ChatThemePickerView(viewModel: viewModel)
+                } label: {
+                    HStack {
+                        Label("Sohbet teması", systemImage: "photo.artframe")
+                        Spacer()
+                        Text(viewModel.theme?.id.title ?? ChatThemeID.plain.title)
+                            .foregroundStyle(Color.ftTextSecondary)
+                    }
+                }
+                .foregroundStyle(Color.ftText)
+                .accessibilityHint("Bu sohbetin duvar kâğıdını, çubuklarını ve varsayılan baloncuğunu değiştirir; iki tarafta da görünür")
             }
             .listRowBackground(Color.ftCard)
         }

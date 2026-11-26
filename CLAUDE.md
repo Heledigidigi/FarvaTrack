@@ -36,6 +36,7 @@ iOS 17+ fitness ve sağlık takip uygulaması. Swift 5 dil modu, SwiftUI, MVVM, 
 | 7 | Antrenman hatırlatıcısı, program uyumu istatistiği ve rozetleri, egzersiz form ipuçları (metin + SF Symbols; telifi belirsiz fotoğraf kullanılmaz), ölçülerde bilek/ön kol ve karşılaştırmalı grafik | Tamam |
 | 8 | Sohbet: arkadaşlarla özel sohbetler (alt aşamalar 8A–8H aşağıda) | 8A–8H + düzeltmeler + arkadaş sistemi tamam |
 | 9 | Diyet programı takibi: program/sürüm, Excel, Bugün ekranı, fotoğraf ve notlar, analiz, kontrol raporu, sohbette paylaşım ve inceleme, alışveriş listesi | Tamam |
+| 10 | Sohbet temaları: animasyonlu duvar kâğıtları (Gökkuşağı Cenneti, Piksel Çayır, Tepedeki Kedi), temalı çubuklar/düğmeler/varsayılan baloncuk, oda başına ortak tema, tema baloncukları | Tamam |
 
 
 ### Aşama 8: Sohbet (plan)
@@ -210,5 +211,19 @@ Modül `Features/Diet`. Önizleme tuvali: https://claude.ai/artifact/XCNNz2n9aDo
 - **Paylaşım ve inceleme:** `DietStore.share` → `dietOffers` + sohbet mesajı `type: diet` (`ChatDietInfo`, `ChatDietFields`; kart `DietChatCard`, kabul `DietOfferSheet`: başlangıç, bitince, "takibimi görebilsin" izni). İnceleyen: Beslenme → menü → Takip ettiklerim → `DietReviewView` (Günlük/Analiz/Kilo ve ölçü, yorum + tepki, değişiklik öner, rapor). Kilo/ölçüler programa `metrics` olarak yazılır (yalnızca izin verildiyse). İzin Program → ayarlar'dan kapatılır.
 - **Alışveriş:** saf `DietShopping.items` (aralıktaki günlerin malzemeleri, birim çevirisiyle gram/adet, reyon `DietShoppingCategory`), `DietShoppingStore` (alındı / evde var; "yeni alışveriş" alınanları sıfırlar).
 - Hesap silme: `DietSyncService.purge`; yerel `LocalDataCleaner` DietRecord, fotoğraflar, alışveriş işaretleri; dışa aktarma `dietPrograms/dietLogs/dietNotes`.
+
+## Aşama 10: Sohbet temaları (2026-11-26)
+
+Önizleme tuvali: https://claude.ai/artifact/HVKA9C7gCzFcySJi4GaZF4 (onaylanan hâl).
+
+- **Model** `Features/Chat/Models/ChatTheme.swift`: `ChatThemeID` (`varsayilan`/`gokkusagi`/`cayir`/`kedi`), `ChatHillSky` (altin/gul/ates), oda alanı `chats/{id}.theme = {id, variant?, by, at}` (`ChatThemeChoice`; iki tarafta aynı, herhangi bir üye değiştirir, kural `by == uid`). `ChatViewModel.theme` (yerel seçim `pendingTheme` sunucudan dönene kadar öncelikli), `setTheme(_:sky:)`; `ChatSyncing.updateTheme`.
+- **Görünüm** `ChatThemeLook` (çubuk rengi + buzlu cam, yazı/simge, ayırıcı çizgi (Gökkuşağı'nda pastel gökkuşağı geçişi), gün etiketi, yazma alanı, gönder düğmesi, giden/gelen varsayılan baloncuk; Piksel'de köşe 3 + blok gölgesi). Ortam değerleri `\.chatThemeLook`, `\.chatThemeSun`. Tema yalnızca varsayılan baloncuğu boyar; özel baloncuk seçen kişininki korunur. Yazma alanı boşlukları küçüldü (üst 5, alt 4).
+- **Duvar kâğıtları** `Views/Themes/ChatThemeWallpaper.swift` (görsel uzayında çizilip ekranı doldurur, `AspectFill`; "Hareketi azalt" → durur):
+  - Gökkuşağı Cenneti (`TemaGokkusagi`): Canvas + `RainbowScene` (gökkuşağında kayan ışıklar ve parıltılar, dönen güneş ışınları, merdivenden yükselen ışık, pembe sis, yükselen ışık tanecikleri, boynuz ışıltıları, kale parıltıları, güvercin tüyleri, yolda akan ışık dalgaları).
+  - Piksel Çayır: katmanlar `TemaCayirGokyuzu` (gün batımı gökyüzü), `TemaCayirBulut`, `TemaCayirZemin`; gökyüzü/güneş/ay Canvas. `PixelMeadowClock`: doğuş-batış mevsime göre (enlem 41°, İstanbul boylamı 29°), gerçek saat "sanal saate" eşlenir (doğuş 6,5, batış 19); `PixelMeadowSky` anahtar kareleri; gece uzak tepeler pusla siluet, çayıra ay ışığı. Çubuklar gece/gündüz değişir (dakikada bir).
+  - Tepedeki Kedi: gökyüzü Metal (`HillSky.metal`, `HillSkyRenderer`, MTKView 0,75 ölçek, 30 fps): radyal gökyüzü, iki katman hacimli bulut, ışık huzmeleri, sağ üst köşede güneş; ön plan `TemaKediOnPlan` (krem hale temizlenmiş) varyasyona göre renklenir. Baloncuk rengi ekrandaki yerin güneşe uzaklığına göre (`ChatThemeSun.distanceFactor`, `ChatThemeSunPalette`).
+- **Seçim** Kişi bilgisi → Görünüm → Sohbet teması (`ChatThemePickerView`; kedi için gökyüzü seçimi).
+- **Hazır baloncuklar**: Gökkuşağı, Piksel Çimen, Gün Batımı (`BubblePresets`).
+- Görseller kullanıcının gönderdiği görsellerdir (sahipleri belirsiz; App Store'a çıkılırsa değiştirilmeli). Yapılmayan: "temayı değiştirdi" sistem satırı, tüm sohbetler için varsayılan tema.
 
 Yeni modül eklerken: `AppRoute` (Özet'ten açılan sayfa) veya `AppTab`, SwiftData şeması (`FarvaTrackApp`), `LiveDashboardDataSource`, Firestore kuralları, `Constants.Collection.userSubcollections` (hesap silme), `LocalDataCleaner` ve `DataExporter` güncellenir.

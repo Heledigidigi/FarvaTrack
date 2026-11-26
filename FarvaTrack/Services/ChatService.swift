@@ -76,6 +76,8 @@ protocol ChatSyncing: AnyObject {
     func updateMemberPhoto(_ photoURL: String?, chatID: String, userID: String) async throws
     /// Çevrimiçi / son görülme bilgisi.
     func setPresence(_ presence: ChatPresence, chatID: String, userID: String) async throws
+    /// Sohbet teması (iki tarafta da görünür).
+    func updateTheme(_ theme: ChatThemeChoice, chatID: String) async throws
     func setTyping(_ isTyping: Bool, chatID: String, userID: String, at: Date) async throws
 
     /// Hesap silinirken: kullanıcının sohbetleri, mesajları ve davetleri.
@@ -99,6 +101,10 @@ enum ChatField {
     static let deliveredAt = "deliveredAt"
     static let photos = "photos"
     static let presence = "presence"
+    static let theme = "theme"
+    static let themeID = "id"
+    static let themeVariant = "variant"
+    static let themeBy = "by"
     static let online = "online"
     static let at = "at"
     static let replyTo = "replyTo"
@@ -393,6 +399,14 @@ final class ChatService: ChatSyncing {
         }
     }
 
+    func updateTheme(_ theme: ChatThemeChoice, chatID: String) async throws {
+        do {
+            try await chats().document(chatID).updateData([ChatField.theme: ChatFirestoreMapper.encode(theme)])
+        } catch {
+            throw AppError.map(error)
+        }
+    }
+
     func setPresence(_ presence: ChatPresence, chatID: String, userID: String) async throws {
         do {
             try await chats().document(chatID).updateData([
@@ -621,6 +635,23 @@ enum ChatFirestoreMapper {
         ]
     }
 
+    static func encode(_ theme: ChatThemeChoice) -> [String: Any] {
+        var map: [String: Any] = [
+            ChatField.themeID: theme.id.rawValue,
+            ChatField.themeBy: theme.by,
+            ChatField.at: Timestamp(date: theme.at)
+        ]
+        if let variant = theme.variant { map[ChatField.themeVariant] = variant }
+        return map
+    }
+
+    static func theme(_ value: Any?) -> ChatThemeChoice? {
+        guard let map = value as? [String: Any],
+              let raw = map[ChatField.themeID] as? String, let id = ChatThemeID(rawValue: raw) else { return nil }
+        return ChatThemeChoice(id: id, variant: map[ChatField.themeVariant] as? String,
+                               by: map[ChatField.themeBy] as? String ?? "", at: date(map[ChatField.at]) ?? .distantPast)
+    }
+
     static func room(id: String, data: [String: Any]) -> ChatRoomDTO? {
         guard let members = data[ChatField.members] as? [String], members.count == 2 else { return nil }
         var last: ChatLastMessage?
@@ -648,7 +679,8 @@ enum ChatFirestoreMapper {
             lastMessage: last,
             typing: typing,
             photos: (data[ChatField.photos] as? [String: Any])?.compactMapValues { $0 as? String } ?? [:],
-            presence: presence
+            presence: presence,
+            theme: theme(data[ChatField.theme])
         )
     }
 

@@ -62,6 +62,8 @@ final class ChatViewModel {
     // MARK: Durum
     private(set) var phase: Phase = .idle
     private(set) var room: ChatRoomDTO?
+    /// Seçilip henüz sunucudan dönmemiş tema (anında görünsün diye).
+    private(set) var pendingTheme: ChatThemeChoice?
     private(set) var messages: [ChatMessageItem] = []
     private(set) var invite: ChatInvite?
     private(set) var replyingTo: ChatMessageItem?
@@ -300,6 +302,7 @@ final class ChatViewModel {
         context = nil
         userID = nil
         room = nil
+        pendingTheme = nil
         messages = []
         invite = nil
         replyingTo = nil
@@ -359,6 +362,7 @@ final class ChatViewModel {
             guard ChatRoomKind.of(newRoom, userID: userID) == kind else { return }
             if let pinnedChatID, newRoom.id != pinnedChatID { return }
             let changed = room?.id != newRoom.id
+            if let pending = pendingTheme, !isFromCache, pending.sameLook(as: newRoom.theme) { pendingTheme = nil }
             room = newRoom
             roomCache.save(newRoom, userID: userID)
             invite = nil
@@ -494,6 +498,33 @@ final class ChatViewModel {
             } catch {
                 // Bir sonraki dinleyici güncellemesinde yeniden denenir.
                 self?.deliveryRequested.subtract(ids)
+            }
+        }
+    }
+
+    // MARK: Sohbet teması (Aşama 10)
+
+    /// Odada seçili tema: iki tarafta da aynı. Yerel seçim sunucudan dönene kadar öncelikli.
+    var theme: ChatThemeChoice? { pendingTheme ?? room?.theme }
+
+    /// Temayı değiştirir (Tepedeki Kedi için gökyüzü seçeneğiyle). Aynı görünüm yeniden yazılmaz.
+    func setTheme(_ id: ChatThemeID, sky: ChatHillSky? = nil) {
+        guard let userID, let chatID = room?.id else { return }
+        let choice = ChatThemeChoice(id: id, variant: id == .hillCat ? (sky ?? .golden).rawValue : nil, by: userID, at: clock())
+        if let current = theme {
+            guard !choice.sameLook(as: current) else { return }
+        } else if id == .plain {
+            return
+        }
+        pendingTheme = choice
+        let sync = sync
+        Task { [weak self] in
+            do {
+                try await sync.updateTheme(choice, chatID: chatID)
+            } catch {
+                guard let self else { return }
+                if self.pendingTheme == choice { self.pendingTheme = nil }
+                self.errorMessage = (error as? AppError)?.errorDescription ?? "Tema kaydedilemedi."
             }
         }
     }

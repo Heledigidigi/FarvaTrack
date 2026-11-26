@@ -36,6 +36,15 @@ struct ChatBubbleView: View {
     var quoteThumbnail: URL?
 
     private var message: ChatMessageDTO { item.message }
+    /// Sohbet teması (Aşama 10): varsayılan baloncuğu, yazı ve düğme renklerini boyar.
+    @Environment(\.chatThemeLook) private var themeLook
+    @Environment(\.chatThemeSun) private var themeSun
+
+    /// Temalı varsayılan baloncuk: kişi özel baloncuk seçmemişse, silinmemiş metin/ses/arama mesajında.
+    private var themedLook: ChatThemeLook? {
+        guard let themeLook, appliedStyle == nil, !message.deleted, !isSticker, !isBorderlessMedia else { return nil }
+        return themeLook
+    }
 
     /// Stil yalnızca metin ve sesli mesajlarda uygulanır (fotoğraf, video, sticker kendi görünümünü korur).
     private var appliedStyle: BubbleStyle? {
@@ -59,6 +68,8 @@ struct ChatBubbleView: View {
     private var bubbleBackground: some View {
         if let style = appliedStyle {
             BubbleBackgroundView(style: style, assets: bubbleAssets, mirrored: !item.isMine, cacheOwner: bubbleCacheOwner)
+        } else if let look = themedLook {
+            ChatThemeBubbleBackground(look: look, isMine: item.isMine, sun: themeSun)
         } else {
             RoundedRectangle(cornerRadius: 18, style: .continuous).fill(bubbleColor)
         }
@@ -118,8 +129,14 @@ struct ChatBubbleView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(item.isMine ? Color.ftAccent : Color.ftCardElevated,
-                                in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .background {
+                        if let themeLook {
+                            ChatThemeBubbleBackground(look: themeLook, isMine: item.isMine, sun: themeSun)
+                        } else {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(item.isMine ? Color.ftAccent : Color.ftCardElevated)
+                        }
+                    }
                     .frame(width: 250)
                 }
             } else if let sticker = message.sticker, !message.deleted {
@@ -226,7 +243,11 @@ struct ChatBubbleView: View {
 
     /// Varsayılan baloncukta yazı rengi: giden (vurgu zemin) beyaz, gelen ve silinen tema yazı rengi.
     private var defaultInk: Color {
-        item.isMine && !message.deleted ? .white : Color.ftText
+        if let themeLook {
+            if message.deleted { return themeLook.chromeText.color }
+            return (item.isMine ? themeLook.outgoingText : themeLook.incomingText).color
+        }
+        return item.isMine && !message.deleted ? .white : Color.ftText
     }
 
     /// Açık zeminli çizimli baloncuk: alıntı ve okundu işareti koyu/bordo çizilir.
@@ -491,6 +512,11 @@ struct ChatComposer: View {
     var onStickers: () -> Void = {}
     var recorder: ChatVoiceRecorderModel?
     var onVoice: (RecordedVoice) -> Void = { _ in }
+    @Environment(\.chatThemeLook) private var look
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Düğme rengi: tema varsa temanın simge rengi.
+    private var iconColor: Color { look?.icon.color ?? Color.ftAccentLight }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -519,7 +545,7 @@ struct ChatComposer: View {
                             .font(.system(size: 22))
                             .frame(width: 36, height: 40)
                     }
-                    .foregroundStyle(Color.ftAccentLight)
+                    .foregroundStyle(iconColor)
                     .accessibilityLabel(activePanel == .gallery ? "Klavyeye dön" : "Galeri")
                     .accessibilityHint(activePanel == .gallery ? "" : "Son fotoğraf ve videoları klavyenin yerinde gösterir")
 
@@ -528,7 +554,7 @@ struct ChatComposer: View {
                             .font(.system(size: 22))
                             .frame(width: 32, height: 40)
                     }
-                    .foregroundStyle(Color.ftAccentLight)
+                    .foregroundStyle(iconColor)
                     .accessibilityLabel(activePanel == .stickers ? "Klavyeye dön" : "Sticker'larım")
                     .accessibilityHint(activePanel == .stickers ? "" : "Sticker panelini klavyenin yerinde açar")
                 }
@@ -538,7 +564,9 @@ struct ChatComposer: View {
                     .focused(focused)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(Color.ftCardElevated, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .foregroundStyle(look?.chromeText.color ?? Color.ftText)
+                    .background(look?.field.color ?? Color.ftCardElevated,
+                                in: RoundedRectangle(cornerRadius: look.map { $0.cornerRadius < 6 ? 3 : 20 } ?? 20, style: .continuous))
                     .onChange(of: viewModel.draft) { _, _ in viewModel.draftChanged() }
                     .accessibilityLabel("Mesaj yaz")
 
@@ -552,7 +580,7 @@ struct ChatComposer: View {
                             .font(.system(size: 22))
                             .frame(width: 36, height: 40)
                     }
-                    .foregroundStyle(Color.ftAccentLight)
+                    .foregroundStyle(iconColor)
                     .accessibilityLabel("Kamera")
                     .accessibilityHint("Fotoğraf çek ya da video kaydet")
                 }
@@ -566,9 +594,18 @@ struct ChatComposer: View {
                     viewModel.send()
                     Haptics.impact(.light)
                 } label: {
-                    Image(systemName: viewModel.editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
-                        .font(.system(size: 34))
-                        .foregroundStyle(viewModel.canSend ? Color.ftAccentLight : Color.ftTextSecondary)
+                    if let look {
+                        Image(systemName: viewModel.editing == nil ? "arrow.up" : "checkmark")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(look.sendText.color)
+                            .frame(width: 34, height: 34)
+                            .background(look.send.style, in: RoundedRectangle(cornerRadius: look.cornerRadius < 6 ? 3 : 17, style: .continuous))
+                            .opacity(viewModel.canSend ? 1 : 0.45)
+                    } else {
+                        Image(systemName: viewModel.editing == nil ? "arrow.up.circle.fill" : "checkmark.circle.fill")
+                            .font(.system(size: 34))
+                            .foregroundStyle(viewModel.canSend ? Color.ftAccentLight : Color.ftTextSecondary)
+                    }
                 }
                 .disabled(!viewModel.canSend)
                 .accessibilityLabel(viewModel.editing == nil ? "Gönder" : "Düzenlemeyi kaydet")
@@ -583,8 +620,12 @@ struct ChatComposer: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.ftChrome.ignoresSafeArea(edges: .bottom))
+        // Çubuk ekranın altına yakın: duvar kâğıdına daha çok yer kalır.
+        .padding(.top, 5)
+        .padding(.bottom, 4)
+        .background(ChatChromeBackground().ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { look?.separatorLine }
+        .environment(\.colorScheme, look?.colorScheme ?? colorScheme)
     }
 
     private func contextBar(icon: String, title: String, text: String, thumbnail: URL? = nil, isVideo: Bool = false) -> some View {
